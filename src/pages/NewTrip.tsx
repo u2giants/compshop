@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -8,13 +8,46 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, MapPin, Loader2 } from "lucide-react";
 
 export default function NewTrip() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [submitting, setSubmitting] = useState(false);
+  const [location, setLocation] = useState("");
+  const [locatingDevice, setLocatingDevice] = useState(false);
+
+  useEffect(() => {
+    detectLocation();
+  }, []);
+
+  const detectLocation = () => {
+    if (!navigator.geolocation) return;
+    setLocatingDevice(true);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const { latitude, longitude } = position.coords;
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`
+          );
+          const data = await res.json();
+          const city = data.address?.city || data.address?.town || data.address?.village || "";
+          const state = data.address?.state || "";
+          const country = data.address?.country || "";
+          const parts = [city, state, country].filter(Boolean);
+          setLocation(parts.join(", "));
+        } catch {
+          // silently fail, user can type manually
+        } finally {
+          setLocatingDevice(false);
+        }
+      },
+      () => setLocatingDevice(false),
+      { timeout: 10000 }
+    );
+  };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -22,22 +55,19 @@ export default function NewTrip() {
     setSubmitting(true);
 
     const form = new FormData(e.currentTarget);
-    const name = form.get("name") as string;
     const store = form.get("store") as string;
     const date = form.get("date") as string;
-    const location = form.get("location") as string;
     const notes = form.get("notes") as string;
 
     try {
       const { data: trip, error } = await supabase
         .from("shopping_trips")
-        .insert({ name, store, date, location: location || null, notes: notes || null, created_by: user.id })
+        .insert({ name: store, store, date, location: location || null, notes: notes || null, created_by: user.id })
         .select()
         .single();
 
       if (error) throw error;
 
-      // Auto-add creator as trip member
       await supabase.from("trip_members").insert({ trip_id: trip.id, user_id: user.id });
 
       toast({ title: "Trip created!" });
@@ -61,10 +91,6 @@ export default function NewTrip() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="name">Trip Name</Label>
-              <Input id="name" name="name" placeholder="e.g. West Elm Spring Collection" required />
-            </div>
-            <div className="space-y-2">
               <Label htmlFor="store">Store</Label>
               <Input id="store" name="store" placeholder="e.g. West Elm" required />
             </div>
@@ -75,7 +101,24 @@ export default function NewTrip() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="location">Location</Label>
-                <Input id="location" name="location" placeholder="City or address" />
+                <div className="relative">
+                  <Input
+                    id="location"
+                    value={location}
+                    onChange={(e) => setLocation(e.target.value)}
+                    placeholder="City or address"
+                    className="pr-9"
+                  />
+                  <button
+                    type="button"
+                    onClick={detectLocation}
+                    disabled={locatingDevice}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    title="Detect location"
+                  >
+                    {locatingDevice ? <Loader2 className="h-4 w-4 animate-spin" /> : <MapPin className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
             </div>
             <div className="space-y-2">
