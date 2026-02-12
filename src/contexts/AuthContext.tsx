@@ -28,11 +28,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
-        setSession(session);
         setUser(session?.user ?? null);
         if (session?.user) {
-          const admin = await checkAdmin(session.user.id);
-          setIsAdminUser(admin);
+          try {
+            const admin = await checkAdmin(session.user.id);
+            setIsAdminUser(admin);
+          } catch {
+            setIsAdminUser(false);
+          }
         } else {
           setIsAdminUser(false);
         }
@@ -44,7 +47,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        checkAdmin(session.user.id).then(setIsAdminUser);
+        checkAdmin(session.user.id).then(setIsAdminUser).catch(() => setIsAdminUser(false));
       }
       setLoading(false);
     });
