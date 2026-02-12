@@ -26,30 +26,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // 1. Set up listener FIRST (keep synchronous - no async/await)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          try {
-            const admin = await checkAdmin(session.user.id);
-            setIsAdminUser(admin);
-          } catch {
-            setIsAdminUser(false);
-          }
+      (_event, newSession) => {
+        setSession(newSession);
+        setUser(newSession?.user ?? null);
+        setLoading(false);
+
+        // Check admin role in background (non-blocking)
+        if (newSession?.user) {
+          checkAdmin(newSession.user.id)
+            .then(setIsAdminUser)
+            .catch(() => setIsAdminUser(false));
         } else {
           setIsAdminUser(false);
         }
-        setLoading(false);
       }
     );
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        checkAdmin(session.user.id).then(setIsAdminUser).catch(() => setIsAdminUser(false));
-      }
+    // 2. Then get initial session
+    supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
+      setSession(initialSession);
+      setUser(initialSession?.user ?? null);
       setLoading(false);
+
+      if (initialSession?.user) {
+        checkAdmin(initialSession.user.id)
+          .then(setIsAdminUser)
+          .catch(() => setIsAdminUser(false));
+      }
     });
 
     return () => subscription.unsubscribe();
