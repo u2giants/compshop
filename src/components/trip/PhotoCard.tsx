@@ -1,11 +1,16 @@
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { PRODUCT_CATEGORIES } from "@/lib/supabase-helpers";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DollarSign, MapPin, Ruler, Layers, Tag, MessageSquare, Trash2 } from "lucide-react";
+import { DollarSign, MapPin, Ruler, Layers, Tag, MessageSquare, Trash2, Pencil } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import PhotoComments from "./PhotoComments";
 
@@ -35,8 +40,63 @@ export default function PhotoCard({ photo, onUpdated }: Props) {
   const { toast } = useToast();
   const [showDetail, setShowDetail] = useState(false);
   const [showComments, setShowComments] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  const canDelete = isAdmin || photo.user_id === user?.id;
+  const [editData, setEditData] = useState({
+    product_name: photo.product_name || "",
+    category: photo.category || "",
+    price: photo.price != null ? String(photo.price) : "",
+    brand: photo.brand || "",
+    dimensions: photo.dimensions || "",
+    country_of_origin: photo.country_of_origin || "",
+    material: photo.material || "",
+    notes: photo.notes || "",
+  });
+
+  const canEdit = isAdmin || photo.user_id === user?.id;
+  const canDelete = canEdit;
+
+  function startEditing() {
+    setEditData({
+      product_name: photo.product_name || "",
+      category: photo.category || "",
+      price: photo.price != null ? String(photo.price) : "",
+      brand: photo.brand || "",
+      dimensions: photo.dimensions || "",
+      country_of_origin: photo.country_of_origin || "",
+      material: photo.material || "",
+      notes: photo.notes || "",
+    });
+    setEditing(true);
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from("photos")
+        .update({
+          product_name: editData.product_name || null,
+          category: editData.category || null,
+          price: editData.price ? Number(editData.price) : null,
+          brand: editData.brand || null,
+          dimensions: editData.dimensions || null,
+          country_of_origin: editData.country_of_origin || null,
+          material: editData.material || null,
+          notes: editData.notes || null,
+        })
+        .eq("id", photo.id);
+      if (error) throw error;
+      toast({ title: "Photo updated!" });
+      setEditing(false);
+      onUpdated();
+    } catch (err: any) {
+      toast({ title: "Update failed", description: err.message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function handleDelete() {
     if (!confirm("Delete this photo?")) return;
@@ -98,6 +158,11 @@ export default function PhotoCard({ photo, onUpdated }: Props) {
             <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={() => setShowComments(true)}>
               <MessageSquare className="h-3 w-3" /> Comment
             </Button>
+            {canEdit && (
+              <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={() => { setShowDetail(true); startEditing(); }}>
+                <Pencil className="h-3 w-3" /> Edit
+              </Button>
+            )}
             {canDelete && (
               <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive" onClick={handleDelete}>
                 <Trash2 className="h-3 w-3" />
@@ -107,28 +172,90 @@ export default function PhotoCard({ photo, onUpdated }: Props) {
         </CardContent>
       </Card>
 
-      {/* Full detail dialog */}
-      <Dialog open={showDetail} onOpenChange={setShowDetail}>
+      {/* Full detail / edit dialog */}
+      <Dialog open={showDetail} onOpenChange={(open) => { setShowDetail(open); if (!open) setEditing(false); }}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle className="font-serif">{photo.product_name || "Photo Details"}</DialogTitle>
+            <div className="flex items-center justify-between">
+              <DialogTitle className="font-serif">{photo.product_name || "Photo Details"}</DialogTitle>
+              {canEdit && !editing && (
+                <Button variant="outline" size="sm" className="gap-1" onClick={startEditing}>
+                  <Pencil className="h-3.5 w-3.5" /> Edit
+                </Button>
+              )}
+            </div>
           </DialogHeader>
           {photo.signed_url && (
             <img src={photo.signed_url} alt={photo.product_name || "Photo"} className="w-full rounded-lg" />
           )}
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            {photo.category && <div><span className="text-muted-foreground">Category:</span> {photo.category}</div>}
-            {photo.price != null && <div><span className="text-muted-foreground">Price:</span> ${photo.price}</div>}
-            {photo.brand && <div><span className="text-muted-foreground">Brand:</span> {photo.brand}</div>}
-            {photo.dimensions && <div><span className="text-muted-foreground">Dimensions:</span> {photo.dimensions}</div>}
-            {photo.country_of_origin && <div><span className="text-muted-foreground">Made In:</span> {photo.country_of_origin}</div>}
-            {photo.material && <div><span className="text-muted-foreground">Material:</span> {photo.material}</div>}
-          </div>
-          {photo.notes && (
-            <div className="text-sm">
-              <span className="text-muted-foreground">Notes:</span>
-              <p className="mt-1">{photo.notes}</p>
+
+          {editing ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2 space-y-2">
+                  <Label>Product Name</Label>
+                  <Input value={editData.product_name} onChange={(e) => setEditData((d) => ({ ...d, product_name: e.target.value }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Category</Label>
+                  <Select value={editData.category} onValueChange={(v) => setEditData((d) => ({ ...d, category: v }))}>
+                    <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
+                    <SelectContent>
+                      {PRODUCT_CATEGORIES.map((c) => (
+                        <SelectItem key={c} value={c}>{c}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Price</Label>
+                  <Input type="number" step="0.01" value={editData.price} onChange={(e) => setEditData((d) => ({ ...d, price: e.target.value }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Brand</Label>
+                  <Input value={editData.brand} onChange={(e) => setEditData((d) => ({ ...d, brand: e.target.value }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Size/Dimensions</Label>
+                  <Input value={editData.dimensions} onChange={(e) => setEditData((d) => ({ ...d, dimensions: e.target.value }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Made In</Label>
+                  <Input value={editData.country_of_origin} onChange={(e) => setEditData((d) => ({ ...d, country_of_origin: e.target.value }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Material</Label>
+                  <Input value={editData.material} onChange={(e) => setEditData((d) => ({ ...d, material: e.target.value }))} />
+                </div>
+                <div className="col-span-2 space-y-2">
+                  <Label>Notes</Label>
+                  <Textarea rows={2} value={editData.notes} onChange={(e) => setEditData((d) => ({ ...d, notes: e.target.value }))} />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button onClick={handleSave} disabled={saving} className="flex-1">
+                  {saving ? "Saving..." : "Save Changes"}
+                </Button>
+                <Button variant="outline" onClick={() => setEditing(false)}>Cancel</Button>
+              </div>
             </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                {photo.category && <div><span className="text-muted-foreground">Category:</span> {photo.category}</div>}
+                {photo.price != null && <div><span className="text-muted-foreground">Price:</span> ${photo.price}</div>}
+                {photo.brand && <div><span className="text-muted-foreground">Brand:</span> {photo.brand}</div>}
+                {photo.dimensions && <div><span className="text-muted-foreground">Dimensions:</span> {photo.dimensions}</div>}
+                {photo.country_of_origin && <div><span className="text-muted-foreground">Made In:</span> {photo.country_of_origin}</div>}
+                {photo.material && <div><span className="text-muted-foreground">Material:</span> {photo.material}</div>}
+              </div>
+              {photo.notes && (
+                <div className="text-sm">
+                  <span className="text-muted-foreground">Notes:</span>
+                  <p className="mt-1">{photo.notes}</p>
+                </div>
+              )}
+            </>
           )}
           <PhotoComments photoId={photo.id} />
         </DialogContent>
