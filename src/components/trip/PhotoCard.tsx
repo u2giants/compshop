@@ -148,7 +148,7 @@ export default function PhotoCard({ photo, onUpdated }: Props) {
           {metaItems.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
               {metaItems.slice(0, 3).map((item, i) => (
-                <span key={i} className="flex items-center gap-1">
+                <span key={i} className="flex items-center gap-0.5">
                   <item.icon className="h-3 w-3" /> {item.text}
                 </span>
               ))}
