@@ -3,6 +3,20 @@ import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { uploadPhoto, getSignedPhotoUrl, PRODUCT_CATEGORIES } from "@/lib/supabase-helpers";
+import {
+  getCachedTrip,
+  cacheTrips,
+  getCachedPhotos,
+  cachePhotos,
+  cacheImageBlob,
+  getCachedImageBlob,
+  addPendingUpload,
+  getPendingUploadsByTrip,
+  type CachedPhoto,
+  type PendingUpload,
+} from "@/lib/offline-db";
+import { runSync } from "@/lib/sync-service";
+import { useOnlineStatus } from "@/hooks/use-online-status";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,9 +24,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Camera, Plus, Calendar, MapPin, Store, MessageSquare, Users } from "lucide-react";
+import { ArrowLeft, Camera, Calendar, MapPin, Store, Users, CloudOff } from "lucide-react";
 import { format } from "date-fns";
 import PhotoCard from "@/components/trip/PhotoCard";
 import TripMembers from "@/components/trip/TripMembers";
@@ -48,11 +62,13 @@ export default function TripDetail() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const online = useOnlineStatus();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
   const [trip, setTrip] = useState<Trip | null>(null);
   const [photos, setPhotos] = useState<Photo[]>([]);
+  const [pendingPhotos, setPendingPhotos] = useState<PendingUpload[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
@@ -63,6 +79,9 @@ export default function TripDetail() {
     if (!id) return;
     loadTrip();
     loadPhotos();
+    loadPendingPhotos();
+
+    if (!online) return;
 
     const channel = supabase
       .channel(`trip-${id}`)
@@ -70,34 +89,94 @@ export default function TripDetail() {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [id]);
+  }, [id, online]);
 
   async function loadTrip() {
-    const { data } = await supabase.from("shopping_trips").select("*").eq("id", id!).single();
-    if (data) setTrip(data);
+    // Cache first
+    const cached = await getCachedTrip(id!);
+    if (cached) {
+      setTrip(cached);
+      setLoading(false);
+    }
+
+    if (!navigator.onLine) {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const { data } = await supabase.from("shopping_trips").select("*").eq("id", id!).single();
+      if (data) {
+        setTrip(data);
+        await cacheTrips([data as any]);
+      }
+    } catch (err) {
+      console.error("[TripDetail] Network error loading trip", err);
+    }
     setLoading(false);
   }
 
   async function loadPhotos() {
-    const { data } = await supabase
-      .from("photos")
-      .select("*")
-      .eq("trip_id", id!)
-      .order("created_at", { ascending: false });
-
-    if (data) {
+    // Cache first
+    const cached = await getCachedPhotos(id!);
+    if (cached.length > 0) {
+      // Resolve cached image blobs for offline URLs
       const withUrls = await Promise.all(
-        data.map(async (p) => {
-          try {
-            const signed_url = await getSignedPhotoUrl(p.file_path);
-            return { ...p, signed_url };
-          } catch {
-            return { ...p, signed_url: undefined };
-          }
+        cached.map(async (p) => {
+          if (p.signed_url) return p;
+          const blob = await getCachedImageBlob(p.file_path);
+          return { ...p, signed_url: blob ? URL.createObjectURL(blob) : undefined };
         })
       );
-      setPhotos(withUrls);
+      setPhotos(withUrls as Photo[]);
     }
+
+    if (!navigator.onLine) return;
+
+    try {
+      const { data } = await supabase
+        .from("photos")
+        .select("*")
+        .eq("trip_id", id!)
+        .order("created_at", { ascending: false });
+
+      if (data) {
+        const withUrls = await Promise.all(
+          data.map(async (p) => {
+            try {
+              const signed_url = await getSignedPhotoUrl(p.file_path);
+              // Cache the image blob in background
+              cacheImageInBackground(p.file_path, signed_url);
+              return { ...p, signed_url };
+            } catch {
+              return { ...p, signed_url: undefined };
+            }
+          })
+        );
+        setPhotos(withUrls);
+        await cachePhotos(data as CachedPhoto[]);
+      }
+    } catch (err) {
+      console.error("[TripDetail] Network error loading photos", err);
+    }
+  }
+
+  async function cacheImageInBackground(filePath: string, url: string) {
+    try {
+      const existing = await getCachedImageBlob(filePath);
+      if (existing) return; // already cached
+      const res = await fetch(url);
+      const blob = await res.blob();
+      await cacheImageBlob(filePath, blob);
+    } catch {
+      // non-critical
+    }
+  }
+
+  async function loadPendingPhotos() {
+    if (!id) return;
+    const pending = await getPendingUploadsByTrip(id);
+    setPendingPhotos(pending);
   }
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
@@ -113,22 +192,49 @@ export default function TripDetail() {
     if (!selectedFile || !user || !id || !formRef.current) return;
     setUploading(true);
 
+    const form = new FormData(formRef.current);
+    const metadata = {
+      product_name: (form.get("product_name") as string) || null,
+      category: (form.get("category") as string) || null,
+      price: form.get("price") ? Number(form.get("price")) : null,
+      dimensions: (form.get("dimensions") as string) || null,
+      country_of_origin: (form.get("country_of_origin") as string) || null,
+      material: (form.get("material") as string) || null,
+      brand: (form.get("brand") as string) || null,
+      notes: (form.get("notes") as string) || null,
+    };
+
+    if (!navigator.onLine) {
+      // Save to pending queue
+      const pendingId = crypto.randomUUID();
+      await addPendingUpload({
+        id: pendingId,
+        trip_id: id,
+        file_blob: selectedFile,
+        file_name: selectedFile.name,
+        metadata,
+        user_id: user.id,
+        created_at: new Date().toISOString(),
+        status: "pending",
+        retry_count: 0,
+      });
+
+      toast({ title: "Saved offline", description: "Photo will upload when you're back online." });
+      setShowUploadDialog(false);
+      setSelectedFile(null);
+      setPreviewUrl(null);
+      setUploading(false);
+      loadPendingPhotos();
+      return;
+    }
+
     try {
       const filePath = await uploadPhoto(selectedFile, user.id, id);
-      const form = new FormData(formRef.current);
-
       const { error } = await supabase.from("photos").insert({
         trip_id: id,
         user_id: user.id,
         file_path: filePath,
-        product_name: (form.get("product_name") as string) || null,
-        category: (form.get("category") as string) || null,
-        price: form.get("price") ? Number(form.get("price")) : null,
-        dimensions: (form.get("dimensions") as string) || null,
-        country_of_origin: (form.get("country_of_origin") as string) || null,
-        material: (form.get("material") as string) || null,
-        brand: (form.get("brand") as string) || null,
-        notes: (form.get("notes") as string) || null,
+        ...metadata,
       });
 
       if (error) throw error;
@@ -138,7 +244,24 @@ export default function TripDetail() {
       setPreviewUrl(null);
       loadPhotos();
     } catch (err: any) {
-      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+      // If upload fails, save to pending queue
+      const pendingId = crypto.randomUUID();
+      await addPendingUpload({
+        id: pendingId,
+        trip_id: id,
+        file_blob: selectedFile,
+        file_name: selectedFile.name,
+        metadata,
+        user_id: user.id,
+        created_at: new Date().toISOString(),
+        status: "pending",
+        retry_count: 0,
+      });
+      toast({ title: "Saved for later sync", description: "Upload failed, but your photo is saved locally." });
+      setShowUploadDialog(false);
+      setSelectedFile(null);
+      setPreviewUrl(null);
+      loadPendingPhotos();
     } finally {
       setUploading(false);
     }
@@ -174,6 +297,11 @@ export default function TripDetail() {
           <Camera className="h-4 w-4" /> Add Photo
         </Button>
         <Badge variant="secondary">{photos.length} photos</Badge>
+        {pendingPhotos.length > 0 && (
+          <Badge variant="outline" className="gap-1">
+            <CloudOff className="h-3 w-3" /> {pendingPhotos.length} pending
+          </Badge>
+        )}
       </div>
 
       {/* Upload dialog */}
@@ -181,6 +309,11 @@ export default function TripDetail() {
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="font-serif">Add Photo Details</DialogTitle>
+            {!online && (
+              <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+                <CloudOff className="h-3 w-3" /> Offline — photo will sync when connected
+              </p>
+            )}
           </DialogHeader>
           <form ref={formRef} onSubmit={handleUpload} className="space-y-4">
             {previewUrl && (
@@ -228,14 +361,37 @@ export default function TripDetail() {
               </div>
             </div>
             <Button type="submit" className="w-full" disabled={uploading}>
-              {uploading ? "Uploading..." : "Save Photo"}
+              {uploading ? "Saving..." : online ? "Save Photo" : "Save Offline"}
             </Button>
           </form>
         </DialogContent>
       </Dialog>
 
+      {/* Pending uploads */}
+      {pendingPhotos.length > 0 && (
+        <div className="mb-4">
+          <p className="mb-2 text-xs font-medium text-muted-foreground flex items-center gap-1">
+            <CloudOff className="h-3 w-3" /> Pending uploads (will sync when online)
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {pendingPhotos.map((p) => {
+              const blobUrl = URL.createObjectURL(p.file_blob);
+              return (
+                <Card key={p.id} className="overflow-hidden border-dashed opacity-75">
+                  <img src={blobUrl} alt="Pending" className="h-40 w-full object-cover" />
+                  <CardContent className="p-3">
+                    <p className="text-sm font-medium">{p.metadata.product_name || "Untitled"}</p>
+                    <Badge variant="outline" className="mt-1 text-xs">{p.status}</Badge>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Photo grid */}
-      {photos.length === 0 ? (
+      {photos.length === 0 && pendingPhotos.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center py-12 text-center">
             <Camera className="mb-3 h-10 w-10 text-muted-foreground/50" />

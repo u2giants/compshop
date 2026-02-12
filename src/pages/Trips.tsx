@@ -2,31 +2,25 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { cacheTrips, getCachedTrips, type CachedTrip } from "@/lib/offline-db";
+import { useOnlineStatus } from "@/hooks/use-online-status";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Calendar, MapPin, Store, Plus, Users } from "lucide-react";
 import { format } from "date-fns";
 
-interface Trip {
-  id: string;
-  name: string;
-  store: string;
-  date: string;
-  location: string | null;
-  created_at: string;
-  photo_count?: number;
-  member_count?: number;
-}
-
 export default function Trips() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [trips, setTrips] = useState<Trip[]>([]);
+  const online = useOnlineStatus();
+  const [trips, setTrips] = useState<CachedTrip[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!user) return;
     loadTrips();
+
+    if (!online) return;
 
     const channel = supabase
       .channel("trips-realtime")
@@ -34,26 +28,42 @@ export default function Trips() {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [user]);
+  }, [user, online]);
 
   async function loadTrips() {
-    const { data } = await supabase
-      .from("shopping_trips")
-      .select("*")
-      .order("date", { ascending: false });
+    // Try cache first
+    const cached = await getCachedTrips();
+    if (cached.length > 0) {
+      setTrips(cached.sort((a, b) => b.date.localeCompare(a.date)));
+      setLoading(false);
+    }
 
-    if (data) {
-      // Get counts
-      const tripsWithCounts = await Promise.all(
-        data.map(async (trip) => {
-          const [{ count: photoCount }, { count: memberCount }] = await Promise.all([
-            supabase.from("photos").select("*", { count: "exact", head: true }).eq("trip_id", trip.id),
-            supabase.from("trip_members").select("*", { count: "exact", head: true }).eq("trip_id", trip.id),
-          ]);
-          return { ...trip, photo_count: photoCount ?? 0, member_count: memberCount ?? 0 };
-        })
-      );
-      setTrips(tripsWithCounts);
+    if (!navigator.onLine) {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const { data } = await supabase
+        .from("shopping_trips")
+        .select("*")
+        .order("date", { ascending: false });
+
+      if (data) {
+        const tripsWithCounts = await Promise.all(
+          data.map(async (trip) => {
+            const [{ count: photoCount }, { count: memberCount }] = await Promise.all([
+              supabase.from("photos").select("*", { count: "exact", head: true }).eq("trip_id", trip.id),
+              supabase.from("trip_members").select("*", { count: "exact", head: true }).eq("trip_id", trip.id),
+            ]);
+            return { ...trip, photo_count: photoCount ?? 0, member_count: memberCount ?? 0 };
+          })
+        );
+        setTrips(tripsWithCounts);
+        await cacheTrips(tripsWithCounts);
+      }
+    } catch (err) {
+      console.error("[Trips] Network error, using cache", err);
     }
     setLoading(false);
   }
@@ -123,9 +133,9 @@ export default function Trips() {
                   )}
                 </div>
                 <div className="mt-4 flex items-center gap-4 text-xs text-muted-foreground">
-                  <span>{trip.photo_count} photos</span>
+                  <span>{trip.photo_count ?? 0} photos</span>
                   <span className="flex items-center gap-1">
-                    <Users className="h-3 w-3" /> {trip.member_count}
+                    <Users className="h-3 w-3" /> {trip.member_count ?? 0}
                   </span>
                 </div>
               </CardContent>
