@@ -49,6 +49,7 @@ export default function TripDetail() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
 
   const [trip, setTrip] = useState<Trip | null>(null);
   const [photos, setPhotos] = useState<Photo[]>([]);
@@ -109,12 +110,12 @@ export default function TripDetail() {
 
   async function handleUpload(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!selectedFile || !user || !id) return;
+    if (!selectedFile || !user || !id || !formRef.current) return;
     setUploading(true);
 
     try {
       const filePath = await uploadPhoto(selectedFile, user.id, id);
-      const form = new FormData(e.currentTarget);
+      const form = new FormData(formRef.current);
 
       const { error } = await supabase.from("photos").insert({
         trip_id: id,
@@ -181,7 +182,7 @@ export default function TripDetail() {
           <DialogHeader>
             <DialogTitle className="font-serif">Add Photo Details</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleUpload} className="space-y-4">
+          <form ref={formRef} onSubmit={handleUpload} className="space-y-4">
             {previewUrl && (
               <img src={previewUrl} alt="Preview" className="max-h-48 w-full rounded-lg object-cover" />
             )}

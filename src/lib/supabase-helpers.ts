@@ -50,15 +50,12 @@ export async function getSignedPhotoUrl(filePath: string) {
 }
 
 export const PRODUCT_CATEGORIES = [
-  "Furniture",
-  "Textiles",
-  "Lighting",
-  "Wall Decor",
-  "Rugs",
-  "Accessories",
+  "Wall art",
   "Tabletop",
-  "Outdoor",
+  "Workspace",
+  "Clocks",
   "Storage",
-  "Seasonal",
-  "Other",
+  "Floor",
+  "Furniture",
+  "Garden",
 ] as const;
