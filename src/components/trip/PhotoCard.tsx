@@ -112,7 +112,7 @@ export default function PhotoCard({ photo, onUpdated }: Props) {
   }
 
   const metaItems = [
-    photo.price != null && { icon: DollarSign, text: `$${photo.price}` },
+    photo.price != null && { icon: DollarSign, text: `${photo.price}` },
     photo.country_of_origin && { icon: MapPin, text: photo.country_of_origin },
     photo.dimensions && { icon: Ruler, text: photo.dimensions },
     photo.material && { icon: Layers, text: photo.material },
