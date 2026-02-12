@@ -2,6 +2,7 @@ import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Home, Search, PlusCircle, User, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
+import SyncStatusIndicator from "@/components/SyncStatusIndicator";
 
 const navItems = [
   { icon: Home, label: "Trips", path: "/" },
@@ -25,29 +26,32 @@ export default function AppShell() {
           <button onClick={() => navigate("/")} className="font-serif text-2xl text-primary">
             CompShop
           </button>
-          <nav className="flex items-center gap-1">
-            {navItems.map((item) => (
+          <div className="flex items-center gap-3">
+            <SyncStatusIndicator />
+            <nav className="flex items-center gap-1">
+              {navItems.map((item) => (
+                <button
+                  key={item.path}
+                  onClick={() => navigate(item.path)}
+                  className={cn(
+                    "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                    location.pathname === item.path
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  )}
+                >
+                  <item.icon className="h-4 w-4" />
+                  {item.label}
+                </button>
+              ))}
               <button
-                key={item.path}
-                onClick={() => navigate(item.path)}
-                className={cn(
-                  "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                  location.pathname === item.path
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                )}
+                onClick={signOut}
+                className="ml-2 flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
               >
-                <item.icon className="h-4 w-4" />
-                {item.label}
+                <LogOut className="h-4 w-4" />
               </button>
-            ))}
-            <button
-              onClick={signOut}
-              className="ml-2 flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-            >
-              <LogOut className="h-4 w-4" />
-            </button>
-          </nav>
+            </nav>
+          </div>
         </div>
       </header>
 
@@ -58,22 +62,25 @@ export default function AppShell() {
 
       {/* Bottom nav - mobile */}
       <nav className="fixed bottom-0 left-0 right-0 z-50 border-t bg-card md:hidden">
-        <div className="flex h-16 items-center justify-around">
-          {navItems.map((item) => (
-            <button
-              key={item.path}
-              onClick={() => navigate(item.path)}
-              className={cn(
-                "flex flex-col items-center gap-0.5 px-3 py-1 text-xs transition-colors",
-                location.pathname === item.path
-                  ? "text-primary"
-                  : "text-muted-foreground"
-              )}
-            >
-              <item.icon className="h-5 w-5" />
-              {item.label}
-            </button>
-          ))}
+        <div className="flex flex-col">
+          <SyncStatusIndicator />
+          <div className="flex h-16 items-center justify-around">
+            {navItems.map((item) => (
+              <button
+                key={item.path}
+                onClick={() => navigate(item.path)}
+                className={cn(
+                  "flex flex-col items-center gap-0.5 px-3 py-1 text-xs transition-colors",
+                  location.pathname === item.path
+                    ? "text-primary"
+                    : "text-muted-foreground"
+                )}
+              >
+                <item.icon className="h-5 w-5" />
+                {item.label}
+              </button>
+            ))}
+          </div>
         </div>
       </nav>
     </div>
