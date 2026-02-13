@@ -134,6 +134,7 @@ export type Database = {
           created_at: string
           dimensions: string | null
           file_path: string
+          group_id: string | null
           id: string
           material: string | null
           notes: string | null
@@ -150,6 +151,7 @@ export type Database = {
           created_at?: string
           dimensions?: string | null
           file_path: string
+          group_id?: string | null
           id?: string
           material?: string | null
           notes?: string | null
@@ -166,6 +168,7 @@ export type Database = {
           created_at?: string
           dimensions?: string | null
           file_path?: string
+          group_id?: string | null
           id?: string
           material?: string | null
           notes?: string | null
@@ -176,6 +179,13 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "photos_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "photos"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "photos_trip_id_fkey"
             columns: ["trip_id"]
