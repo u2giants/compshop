@@ -154,7 +154,7 @@ export default function ChinaTrips() {
     }
 
     // Step 2: Separate Canton Fair photos from Factory Visit photos
-    const CLUSTER_RADIUS_KM = 0.15;
+    const CLUSTER_RADIUS_KM = 1.0;
 
     interface Cluster {
       key: string;
