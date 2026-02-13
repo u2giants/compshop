@@ -13,7 +13,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DollarSign, MapPin, Ruler, Layers, Tag, MessageSquare, Trash2, Sparkles, Loader2, ImageIcon } from "lucide-react";
+import { DollarSign, MapPin, Ruler, Layers, Tag, MessageSquare, Trash2, Sparkles, Loader2, ImageIcon, ArrowRightLeft } from "lucide-react";
+import MoveToTripDialog from "./MoveToTripDialog";
 import { useToast } from "@/hooks/use-toast";
 import PhotoComments from "./PhotoComments";
 
@@ -38,12 +39,16 @@ interface Photo {
 interface Props {
   photo: Photo;
   extraPhotos?: Photo[];
+  tripId?: string;
   onUpdated: () => void;
   onGroupPhoto?: (draggedId: string, targetId: string) => void;
   onFileDrop?: (files: File[], targetPhotoId: string) => void;
+  selected?: boolean;
+  onSelect?: (photoId: string) => void;
+  selectionMode?: boolean;
 }
 
-export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupPhoto, onFileDrop }: Props) {
+export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, onGroupPhoto, onFileDrop, selected, onSelect, selectionMode }: Props) {
   const { user, isAdmin } = useAuth();
   const { toast } = useToast();
   const countries = useCountries();
@@ -52,6 +57,7 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
   const [showComments, setShowComments] = useState(false);
   const [saving, setSaving] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+  const [showMoveDialog, setShowMoveDialog] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [imageZoomed, setImageZoomed] = useState(false);
@@ -229,7 +235,7 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
   return (
     <>
       <Card
-        className={`group overflow-hidden transition-shadow hover:shadow-md md:cursor-default cursor-pointer ${dragOver ? "ring-2 ring-primary ring-offset-2" : ""}`}
+        className={`group overflow-hidden transition-shadow hover:shadow-md md:cursor-default cursor-pointer ${dragOver ? "ring-2 ring-primary ring-offset-2" : ""} ${selected ? "ring-2 ring-primary" : ""}`}
         onClick={() => {
           // On mobile, clicking anywhere on the card opens detail
           if (window.innerWidth < 768) setShowDetail(true);
@@ -261,7 +267,17 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
           }
         }}
       >
-        <div className="relative cursor-pointer" onClick={() => setShowDetail(true)}>
+        <div className="relative cursor-pointer" onClick={() => { if (selectionMode && onSelect) { onSelect(photo.id); return; } setShowDetail(true); }}>
+          {onSelect && (
+            <button
+              className={`absolute left-2 top-2 z-10 h-5 w-5 rounded border-2 flex items-center justify-center transition-all ${
+                selected ? "bg-primary border-primary text-primary-foreground" : "border-muted-foreground/50 bg-background/80 backdrop-blur-sm opacity-0 group-hover:opacity-100"
+              } ${selectionMode ? "!opacity-100" : ""}`}
+              onClick={(e) => { e.stopPropagation(); onSelect(photo.id); }}
+            >
+              {selected && <span className="text-xs">✓</span>}
+            </button>
+          )}
           {(allImages[activeImageIndex]?.signed_url || photo.signed_url) ? (
             <img
               src={allImages[activeImageIndex]?.signed_url || photo.signed_url}
@@ -320,6 +336,11 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
             <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={(e) => { e.stopPropagation(); setShowComments(true); }}>
               <MessageSquare className="h-3 w-3" /> Comment
             </Button>
+            {tripId && canEdit && (
+              <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={(e) => { e.stopPropagation(); setShowMoveDialog(true); }}>
+                <ArrowRightLeft className="h-3 w-3" /> Move
+              </Button>
+            )}
             {canDelete && (
               <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive" onClick={(e) => { e.stopPropagation(); handleDelete(); }}>
                 <Trash2 className="h-3 w-3" />
@@ -508,6 +529,16 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
           <PhotoComments photoId={photo.id} />
         </DialogContent>
       </Dialog>
+
+      {tripId && (
+        <MoveToTripDialog
+          open={showMoveDialog}
+          onOpenChange={setShowMoveDialog}
+          photoIds={[photo.id, ...extraPhotos.map((p) => p.id)]}
+          currentTripId={tripId}
+          onMoved={onUpdated}
+        />
+      )}
     </>
   );
 }
