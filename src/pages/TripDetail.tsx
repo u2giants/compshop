@@ -33,10 +33,11 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Camera, Calendar, MapPin, Store, Users, CloudOff, Sparkles, Loader2, Download, Images } from "lucide-react";
+import { ArrowLeft, Camera, Calendar, MapPin, Store, Users, CloudOff, Sparkles, Loader2, Download, Images, ArrowRightLeft } from "lucide-react";
 import { format } from "date-fns";
 import PhotoCard from "@/components/trip/PhotoCard";
 import TripMembers from "@/components/trip/TripMembers";
+import MoveToTripDialog from "@/components/trip/MoveToTripDialog";
 
 interface Trip {
   id: string;
@@ -98,6 +99,17 @@ export default function TripDetail() {
   const [editingStore, setEditingStore] = useState(false);
   const [storeValue, setStoreValue] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedPhotos, setSelectedPhotos] = useState<Set<string>>(new Set());
+  const [showBulkMove, setShowBulkMove] = useState(false);
+
+  function toggleSelectPhoto(photoId: string) {
+    setSelectedPhotos((prev) => {
+      const next = new Set(prev);
+      if (next.has(photoId)) next.delete(photoId);
+      else next.add(photoId);
+      return next;
+    });
+  }
   const formRef = useRef<HTMLFormElement>(null);
 
   const [trip, setTrip] = useState<Trip | null>(null);
@@ -641,6 +653,16 @@ export default function TripDetail() {
             </Button>
           </>
         )}
+        {selectedPhotos.size > 0 && (
+          <>
+            <Button variant="outline" onClick={() => setShowBulkMove(true)} className="gap-2">
+              <ArrowRightLeft className="h-4 w-4" /> Move {selectedPhotos.size} Selected
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setSelectedPhotos(new Set())}>
+              Clear Selection
+            </Button>
+          </>
+        )}
         <Badge variant="secondary">{photos.length} photos</Badge>
         {pendingPhotos.length > 0 && (
           <Badge variant="outline" className="gap-1">
@@ -775,13 +797,25 @@ export default function TripDetail() {
               key={primary.id}
               photo={primary}
               extraPhotos={extras}
+              tripId={trip.id}
               onUpdated={loadPhotos}
               onGroupPhoto={handleGroupPhoto}
               onFileDrop={handleFileDropOnCard}
+              selected={selectedPhotos.has(primary.id)}
+              onSelect={toggleSelectPhoto}
+              selectionMode={selectedPhotos.size > 0}
             />
           ))}
         </div>
       )}
+
+      <MoveToTripDialog
+        open={showBulkMove}
+        onOpenChange={setShowBulkMove}
+        photoIds={Array.from(selectedPhotos)}
+        currentTripId={trip.id}
+        onMoved={() => { setSelectedPhotos(new Set()); loadPhotos(); }}
+      />
     </div>
   );
 }
