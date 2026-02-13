@@ -17,6 +17,8 @@ import {
 } from "@/lib/offline-db";
 import { runSync } from "@/lib/sync-service";
 import { useOnlineStatus } from "@/hooks/use-online-status";
+import { useCountries } from "@/hooks/use-countries";
+import AutocompleteInput from "@/components/ui/autocomplete-input";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,7 +28,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Camera, Calendar, MapPin, Store, Users, CloudOff } from "lucide-react";
+import { ArrowLeft, Camera, Calendar, MapPin, Store, Users, CloudOff, Sparkles, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import PhotoCard from "@/components/trip/PhotoCard";
 import TripMembers from "@/components/trip/TripMembers";
@@ -63,6 +65,7 @@ export default function TripDetail() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const online = useOnlineStatus();
+  const countries = useCountries();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -74,6 +77,19 @@ export default function TripDetail() {
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [countryValue, setCountryValue] = useState("");
+
+  // Controlled fields for AI pre-fill
+  const [formFields, setFormFields] = useState({
+    product_name: "",
+    category: "",
+    price: "",
+    brand: "",
+    dimensions: "",
+    material: "",
+    notes: "",
+  });
 
   useEffect(() => {
     if (!id) return;
@@ -92,35 +108,19 @@ export default function TripDetail() {
   }, [id, online]);
 
   async function loadTrip() {
-    // Cache first
     const cached = await getCachedTrip(id!);
-    if (cached) {
-      setTrip(cached);
-      setLoading(false);
-    }
-
-    if (!navigator.onLine) {
-      setLoading(false);
-      return;
-    }
-
+    if (cached) { setTrip(cached); setLoading(false); }
+    if (!navigator.onLine) { setLoading(false); return; }
     try {
       const { data } = await supabase.from("shopping_trips").select("*").eq("id", id!).single();
-      if (data) {
-        setTrip(data);
-        await cacheTrips([data as any]);
-      }
-    } catch (err) {
-      console.error("[TripDetail] Network error loading trip", err);
-    }
+      if (data) { setTrip(data); await cacheTrips([data as any]); }
+    } catch (err) { console.error("[TripDetail] Network error loading trip", err); }
     setLoading(false);
   }
 
   async function loadPhotos() {
-    // Cache first
     const cached = await getCachedPhotos(id!);
     if (cached.length > 0) {
-      // Resolve cached image blobs for offline URLs
       const withUrls = await Promise.all(
         cached.map(async (p) => {
           if (p.signed_url) return p;
@@ -130,47 +130,33 @@ export default function TripDetail() {
       );
       setPhotos(withUrls as Photo[]);
     }
-
     if (!navigator.onLine) return;
-
     try {
-      const { data } = await supabase
-        .from("photos")
-        .select("*")
-        .eq("trip_id", id!)
-        .order("created_at", { ascending: false });
-
+      const { data } = await supabase.from("photos").select("*").eq("trip_id", id!).order("created_at", { ascending: false });
       if (data) {
         const withUrls = await Promise.all(
           data.map(async (p) => {
             try {
               const signed_url = await getSignedPhotoUrl(p.file_path);
-              // Cache the image blob in background
               cacheImageInBackground(p.file_path, signed_url);
               return { ...p, signed_url };
-            } catch {
-              return { ...p, signed_url: undefined };
-            }
+            } catch { return { ...p, signed_url: undefined }; }
           })
         );
         setPhotos(withUrls);
         await cachePhotos(data as CachedPhoto[]);
       }
-    } catch (err) {
-      console.error("[TripDetail] Network error loading photos", err);
-    }
+    } catch (err) { console.error("[TripDetail] Network error loading photos", err); }
   }
 
   async function cacheImageInBackground(filePath: string, url: string) {
     try {
       const existing = await getCachedImageBlob(filePath);
-      if (existing) return; // already cached
+      if (existing) return;
       const res = await fetch(url);
       const blob = await res.blob();
       await cacheImageBlob(filePath, blob);
-    } catch {
-      // non-critical
-    }
+    } catch {}
   }
 
   async function loadPendingPhotos() {
@@ -184,83 +170,90 @@ export default function TripDetail() {
     if (!file) return;
     setSelectedFile(file);
     setPreviewUrl(URL.createObjectURL(file));
+    setFormFields({ product_name: "", category: "", price: "", brand: "", dimensions: "", material: "", notes: "" });
+    setCountryValue("");
     setShowUploadDialog(true);
+  }
+
+  async function handleAnalyze() {
+    if (!selectedFile) return;
+    setAnalyzing(true);
+    try {
+      const reader = new FileReader();
+      const base64 = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => {
+          const result = reader.result as string;
+          resolve(result.split(",")[1]);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(selectedFile);
+      });
+
+      const { data, error } = await supabase.functions.invoke("analyze-photo", {
+        body: { imageBase64: base64, mimeType: selectedFile.type },
+      });
+
+      if (error) throw error;
+
+      // Pre-fill the fields
+      if (data.product_name) setFormFields((f) => ({ ...f, product_name: data.product_name }));
+      if (data.price != null) setFormFields((f) => ({ ...f, price: String(data.price) }));
+      if (data.dimensions) setFormFields((f) => ({ ...f, dimensions: data.dimensions }));
+      if (data.brand) setFormFields((f) => ({ ...f, brand: data.brand }));
+      if (data.material) setFormFields((f) => ({ ...f, material: data.material }));
+      if (data.country_of_origin) setCountryValue(data.country_of_origin);
+
+      toast({ title: "AI analysis complete", description: "Fields have been pre-filled." });
+    } catch (err: any) {
+      toast({ title: "Analysis failed", description: err.message, variant: "destructive" });
+    } finally {
+      setAnalyzing(false);
+    }
   }
 
   async function handleUpload(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!selectedFile || !user || !id || !formRef.current) return;
+    if (!selectedFile || !user || !id) return;
     setUploading(true);
 
-    const form = new FormData(formRef.current);
     const metadata = {
-      product_name: (form.get("product_name") as string) || null,
-      category: (form.get("category") as string) || null,
-      price: form.get("price") ? Number(form.get("price")) : null,
-      dimensions: (form.get("dimensions") as string) || null,
-      country_of_origin: (form.get("country_of_origin") as string) || null,
-      material: (form.get("material") as string) || null,
-      brand: (form.get("brand") as string) || null,
-      notes: (form.get("notes") as string) || null,
+      product_name: formFields.product_name || null,
+      category: formFields.category || null,
+      price: formFields.price ? Number(formFields.price) : null,
+      dimensions: formFields.dimensions || null,
+      country_of_origin: countryValue || null,
+      material: formFields.material || null,
+      brand: formFields.brand || null,
+      notes: formFields.notes || null,
     };
 
     if (!navigator.onLine) {
-      // Save to pending queue
       const pendingId = crypto.randomUUID();
       await addPendingUpload({
-        id: pendingId,
-        trip_id: id,
-        file_blob: selectedFile,
-        file_name: selectedFile.name,
-        metadata,
-        user_id: user.id,
-        created_at: new Date().toISOString(),
-        status: "pending",
-        retry_count: 0,
+        id: pendingId, trip_id: id, file_blob: selectedFile, file_name: selectedFile.name,
+        metadata, user_id: user.id, created_at: new Date().toISOString(), status: "pending", retry_count: 0,
       });
-
       toast({ title: "Saved offline", description: "Photo will upload when you're back online." });
-      setShowUploadDialog(false);
-      setSelectedFile(null);
-      setPreviewUrl(null);
-      setUploading(false);
+      setShowUploadDialog(false); setSelectedFile(null); setPreviewUrl(null); setUploading(false);
       loadPendingPhotos();
       return;
     }
 
     try {
       const filePath = await uploadPhoto(selectedFile, user.id, id);
-      const { error } = await supabase.from("photos").insert({
-        trip_id: id,
-        user_id: user.id,
-        file_path: filePath,
-        ...metadata,
-      });
-
+      const { error } = await supabase.from("photos").insert({ trip_id: id, user_id: user.id, file_path: filePath, ...metadata });
       if (error) throw error;
       toast({ title: "Photo uploaded!" });
-      setShowUploadDialog(false);
-      setSelectedFile(null);
-      setPreviewUrl(null);
+      setShowUploadDialog(false); setSelectedFile(null); setPreviewUrl(null);
       loadPhotos();
     } catch (err: any) {
-      // If upload fails, save to pending queue
       const pendingId = crypto.randomUUID();
       await addPendingUpload({
-        id: pendingId,
-        trip_id: id,
-        file_blob: selectedFile,
-        file_name: selectedFile.name,
-        metadata,
-        user_id: user.id,
-        created_at: new Date().toISOString(),
-        status: "pending",
-        retry_count: 0,
+        id: pendingId, trip_id: id, file_blob: selectedFile, file_name: selectedFile.name,
+        metadata, user_id: user.id, created_at: new Date().toISOString(), status: "pending", retry_count: 0,
       });
       toast({ title: "Saved for later sync", description: "Upload failed, but your photo is saved locally." });
-      setShowUploadDialog(false);
-      setSelectedFile(null);
-      setPreviewUrl(null);
+      setShowUploadDialog(false); setSelectedFile(null); setPreviewUrl(null);
       loadPendingPhotos();
     } finally {
       setUploading(false);
@@ -276,7 +269,6 @@ export default function TripDetail() {
         <ArrowLeft className="h-4 w-4" /> All Trips
       </button>
 
-      {/* Trip header */}
       <div className="mb-6">
         <h1 className="font-serif text-2xl md:text-3xl">{trip.name}</h1>
         <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
@@ -287,10 +279,8 @@ export default function TripDetail() {
         {trip.notes && <p className="mt-2 text-sm text-muted-foreground">{trip.notes}</p>}
       </div>
 
-      {/* Trip members */}
       <TripMembers tripId={trip.id} createdBy={trip.created_by} />
 
-      {/* Action bar */}
       <div className="mb-6 flex items-center gap-3">
         <input ref={fileInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileSelect} />
         <Button onClick={() => fileInputRef.current?.click()} className="gap-2">
@@ -317,16 +307,31 @@ export default function TripDetail() {
           </DialogHeader>
           <form ref={formRef} onSubmit={handleUpload} className="space-y-4">
             {previewUrl && (
-              <img src={previewUrl} alt="Preview" className="max-h-48 w-full rounded-lg object-cover" />
+              <div className="relative">
+                <img src={previewUrl} alt="Preview" className="max-h-48 w-full rounded-lg object-cover" />
+                {online && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    className="absolute bottom-2 right-2 gap-1 text-xs"
+                    onClick={handleAnalyze}
+                    disabled={analyzing}
+                  >
+                    {analyzing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                    {analyzing ? "Analyzing..." : "AI Detect"}
+                  </Button>
+                )}
+              </div>
             )}
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2 space-y-2">
-                <Label htmlFor="product_name">Product Name</Label>
-                <Input id="product_name" name="product_name" placeholder="e.g. Ceramic Table Lamp" />
+                <Label>Product Name</Label>
+                <Input value={formFields.product_name} onChange={(e) => setFormFields((f) => ({ ...f, product_name: e.target.value }))} placeholder="e.g. Ceramic Table Lamp" />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="category">Category</Label>
-                <Select name="category">
+                <Label>Category</Label>
+                <Select value={formFields.category} onValueChange={(v) => setFormFields((f) => ({ ...f, category: v }))}>
                   <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
                   <SelectContent>
                     {PRODUCT_CATEGORIES.map((c) => (
@@ -336,28 +341,33 @@ export default function TripDetail() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="price">Price</Label>
-                <Input id="price" name="price" type="number" step="0.01" placeholder="$0.00" />
+                <Label>Price</Label>
+                <Input type="number" step="0.01" value={formFields.price} onChange={(e) => setFormFields((f) => ({ ...f, price: e.target.value }))} placeholder="$0.00" />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="brand">Brand</Label>
-                <Input id="brand" name="brand" placeholder="Brand name" />
+                <Label>Brand</Label>
+                <Input value={formFields.brand} onChange={(e) => setFormFields((f) => ({ ...f, brand: e.target.value }))} placeholder="Brand name" />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="dimensions">Size/Dimensions</Label>
-                <Input id="dimensions" name="dimensions" placeholder='e.g. 12"x8"' />
+                <Label>Size/Dimensions</Label>
+                <Input value={formFields.dimensions} onChange={(e) => setFormFields((f) => ({ ...f, dimensions: e.target.value }))} placeholder='e.g. 12"x8"' />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="country_of_origin">Made In</Label>
-                <Input id="country_of_origin" name="country_of_origin" placeholder="Country" />
+                <Label>Made In</Label>
+                <AutocompleteInput
+                  value={countryValue}
+                  onChange={setCountryValue}
+                  suggestions={countries}
+                  placeholder="Country"
+                />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="material">Material</Label>
-                <Input id="material" name="material" placeholder="e.g. Ceramic, Wood" />
+                <Label>Material</Label>
+                <Input value={formFields.material} onChange={(e) => setFormFields((f) => ({ ...f, material: e.target.value }))} placeholder="e.g. Ceramic, Wood" />
               </div>
               <div className="col-span-2 space-y-2">
-                <Label htmlFor="notes">Notes</Label>
-                <Textarea id="notes" name="notes" placeholder="Additional observations..." rows={2} />
+                <Label>Notes</Label>
+                <Textarea value={formFields.notes} onChange={(e) => setFormFields((f) => ({ ...f, notes: e.target.value }))} placeholder="Additional observations..." rows={2} />
               </div>
             </div>
             <Button type="submit" className="w-full" disabled={uploading}>

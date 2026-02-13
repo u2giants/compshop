@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useRetailers } from "@/hooks/use-retailers";
+import AutocompleteInput from "@/components/ui/autocomplete-input";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,8 +16,10 @@ export default function NewTrip() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { retailerNames, getLogoUrl } = useRetailers();
   const [submitting, setSubmitting] = useState(false);
   const [location, setLocation] = useState("");
+  const [store, setStore] = useState("");
   const [locatingDevice, setLocatingDevice] = useState(false);
 
   useEffect(() => {
@@ -39,7 +43,6 @@ export default function NewTrip() {
           const parts = [city, state, country].filter(Boolean);
           setLocation(parts.join(", "));
         } catch {
-          // silently fail, user can type manually
         } finally {
           setLocatingDevice(false);
         }
@@ -51,18 +54,17 @@ export default function NewTrip() {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!user) return;
+    if (!user || !store.trim()) return;
     setSubmitting(true);
 
     const form = new FormData(e.currentTarget);
-    const store = form.get("store") as string;
     const date = form.get("date") as string;
     const notes = form.get("notes") as string;
 
     try {
       const { data: trip, error } = await supabase
         .from("shopping_trips")
-        .insert({ name: store, store, date, location: location || null, notes: notes || null, created_by: user.id })
+        .insert({ name: store.trim(), store: store.trim(), date, location: location || null, notes: notes || null, created_by: user.id })
         .select()
         .single();
 
@@ -79,6 +81,8 @@ export default function NewTrip() {
     }
   };
 
+  const logoUrl = getLogoUrl(store);
+
   return (
     <div className="container max-w-lg py-6">
       <button onClick={() => navigate(-1)} className="mb-4 flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
@@ -92,7 +96,18 @@ export default function NewTrip() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="store">Store</Label>
-              <Input id="store" name="store" placeholder="e.g. West Elm" required />
+              <div className="flex items-center gap-2">
+                {logoUrl && <img src={logoUrl} alt={store} className="h-8 w-8 rounded object-contain" />}
+                <div className="flex-1">
+                  <AutocompleteInput
+                    id="store"
+                    value={store}
+                    onChange={setStore}
+                    suggestions={retailerNames}
+                    placeholder="e.g. West Elm"
+                  />
+                </div>
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -125,7 +140,7 @@ export default function NewTrip() {
               <Label htmlFor="notes">Notes</Label>
               <Textarea id="notes" name="notes" placeholder="What are you looking for on this trip?" rows={3} />
             </div>
-            <Button type="submit" className="w-full" disabled={submitting}>
+            <Button type="submit" className="w-full" disabled={submitting || !store.trim()}>
               {submitting ? "Creating..." : "Create Trip"}
             </Button>
           </form>
