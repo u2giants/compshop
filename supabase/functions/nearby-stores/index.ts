@@ -25,7 +25,7 @@ serve(async (req) => {
     // Use Places API (New) - Nearby Search
     const url = "https://places.googleapis.com/v1/places:searchNearby";
     const body = {
-      includedTypes: ["store", "shopping_mall", "supermarket", "department_store", "home_goods_store", "furniture_store", "grocery_or_supermarket", "hardware_store", "electronics_store"],
+      includedTypes: ["store", "shopping_mall", "supermarket", "department_store", "home_goods_store", "furniture_store", "hardware_store", "electronics_store"],
       maxResultCount: 8,
       locationRestriction: {
         circle: {
