@@ -4,19 +4,46 @@ import { DayPicker } from "react-day-picker";
 
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export type CalendarProps = React.ComponentProps<typeof DayPicker>;
 
 function Calendar({ className, classNames, showOutsideDays = true, ...props }: CalendarProps) {
+  const currentYear = new Date().getFullYear();
+  const [displayMonth, setDisplayMonth] = React.useState<Date>(
+    props.selected instanceof Date ? props.selected : new Date()
+  );
+
+  const years = React.useMemo(() => {
+    const result: number[] = [];
+    for (let y = currentYear - 10; y <= currentYear + 5; y++) {
+      result.push(y);
+    }
+    return result;
+  }, [currentYear]);
+
+  const months = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+  ];
+
   return (
     <DayPicker
       showOutsideDays={showOutsideDays}
+      month={displayMonth}
+      onMonthChange={setDisplayMonth}
       className={cn("p-3", className)}
       classNames={{
         months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
         month: "space-y-4",
         caption: "flex justify-center pt-1 relative items-center",
-        caption_label: "text-sm font-medium",
+        caption_label: "hidden",
         nav: "space-x-1 flex items-center",
         nav_button: cn(
           buttonVariants({ variant: "outline" }),
@@ -44,6 +71,72 @@ function Calendar({ className, classNames, showOutsideDays = true, ...props }: C
       components={{
         IconLeft: ({ ..._props }) => <ChevronLeft className="h-4 w-4" />,
         IconRight: ({ ..._props }) => <ChevronRight className="h-4 w-4" />,
+        Caption: ({ displayMonth: dm }) => (
+          <div className="flex justify-center items-center gap-1 relative pt-1">
+            <div className="absolute left-1">
+              <button
+                type="button"
+                className={cn(
+                  buttonVariants({ variant: "outline" }),
+                  "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100",
+                )}
+                onClick={() =>
+                  setDisplayMonth(new Date(dm.getFullYear(), dm.getMonth() - 1))
+                }
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+            </div>
+            <Select
+              value={dm.getMonth().toString()}
+              onValueChange={(v) =>
+                setDisplayMonth(new Date(dm.getFullYear(), parseInt(v)))
+              }
+            >
+              <SelectTrigger className="h-7 w-[110px] text-sm font-medium border-none shadow-none focus:ring-0 px-2">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="pointer-events-auto">
+                {months.map((m, i) => (
+                  <SelectItem key={i} value={i.toString()}>
+                    {m}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={dm.getFullYear().toString()}
+              onValueChange={(v) =>
+                setDisplayMonth(new Date(parseInt(v), dm.getMonth()))
+              }
+            >
+              <SelectTrigger className="h-7 w-[80px] text-sm font-medium border-none shadow-none focus:ring-0 px-2">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="pointer-events-auto">
+                {years.map((y) => (
+                  <SelectItem key={y} value={y.toString()}>
+                    {y}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="absolute right-1">
+              <button
+                type="button"
+                className={cn(
+                  buttonVariants({ variant: "outline" }),
+                  "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100",
+                )}
+                onClick={() =>
+                  setDisplayMonth(new Date(dm.getFullYear(), dm.getMonth() + 1))
+                }
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        ),
       }}
       {...props}
     />
