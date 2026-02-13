@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar, MapPin, Factory, Plus, Filter, X, Trash2, CheckSquare, Upload, Loader2, FileText } from "lucide-react";
+import { Calendar, MapPin, Factory, Plus, Filter, X, Trash2, CheckSquare, Upload, Loader2, FileText, ArrowRightLeft } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -128,6 +128,62 @@ export default function ChinaTrips() {
       ),
       duration: 8000,
     });
+  }
+
+  async function handleMergeTrips() {
+    if (selected.size < 2) {
+      toast({ title: "Select at least 2 trips to merge", variant: "destructive" });
+      return;
+    }
+    const ids = Array.from(selected);
+    // Keep the oldest trip (earliest date) as the target
+    const sortedTrips = ids
+      .map((id) => trips.find((t) => t.id === id)!)
+      .filter(Boolean)
+      .sort((a, b) => a.date.localeCompare(b.date) || a.created_at.localeCompare(b.created_at));
+
+    const target = sortedTrips[0];
+    const sourceIds = sortedTrips.slice(1).map((t) => t.id);
+
+    // Move all photos from source trips to target
+    const { error: moveError } = await supabase
+      .from("china_photos")
+      .update({ trip_id: target.id })
+      .in("trip_id", sourceIds);
+
+    if (moveError) {
+      toast({ title: "Failed to merge trips", variant: "destructive" });
+      return;
+    }
+
+    // Move trip members (check for existing to avoid duplicates)
+    const { data: targetMembers } = await supabase
+      .from("china_trip_members")
+      .select("user_id")
+      .eq("trip_id", target.id);
+    const existingUserIds = new Set((targetMembers || []).map((m) => m.user_id));
+
+    for (const sourceId of sourceIds) {
+      const { data: members } = await supabase
+        .from("china_trip_members")
+        .select("user_id")
+        .eq("trip_id", sourceId);
+      if (members) {
+        const newMembers = members.filter((m) => !existingUserIds.has(m.user_id));
+        for (const m of newMembers) {
+          await supabase.from("china_trip_members").insert({ trip_id: target.id, user_id: m.user_id });
+          existingUserIds.add(m.user_id);
+        }
+      }
+    }
+
+    // Soft-delete source trips
+    const now = new Date().toISOString();
+    await supabase.from("china_trips").update({ deleted_at: now }).in("id", sourceIds);
+
+    exitSelectMode();
+    toast({ title: `${sortedTrips.length} trips merged into "${target.supplier}"` });
+    loadTrips();
   }
 
   // ── Smart Upload ──────────────────────────────────────────────────────────
@@ -421,6 +477,9 @@ export default function ChinaTrips() {
           {selectMode ? (
             <>
               <span className="text-sm text-muted-foreground">{selected.size} selected</span>
+              <Button variant="outline" size="sm" disabled={selected.size < 2} onClick={handleMergeTrips} className="gap-1">
+                <ArrowRightLeft className="h-4 w-4" /> Merge
+              </Button>
               <Button variant="destructive" size="sm" disabled={selected.size === 0} onClick={handleBulkDelete} className="gap-1">
                 <Trash2 className="h-4 w-4" /> Delete
               </Button>
