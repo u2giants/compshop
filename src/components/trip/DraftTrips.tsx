@@ -1,15 +1,21 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { getSignedPhotoUrl } from "@/lib/supabase-helpers";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar, MapPin, Loader2, Check, Trash2, FileText } from "lucide-react";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { Calendar, MapPin, Loader2, Check, Trash2, FileText, GripHorizontal, ImageIcon } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+
+interface DraftPhoto {
+  id: string;
+  file_path: string;
+  url?: string;
+}
 
 interface DraftTrip {
   id: string;
@@ -18,7 +24,7 @@ interface DraftTrip {
   date: string;
   location: string | null;
   photo_count: number;
-  cover_url?: string;
+  photos: DraftPhoto[];
   lat?: number;
   lng?: number;
 }
@@ -43,6 +49,8 @@ export default function DraftTrips({ open, onOpenChange, onPublished }: DraftTri
   const [loadingStores, setLoadingStores] = useState<Set<string>>(new Set());
   const [customNames, setCustomNames] = useState<Map<string, string>>(new Map());
   const [publishing, setPublishing] = useState<Set<string>>(new Set());
+  const [dragPhoto, setDragPhoto] = useState<{ photoId: string; fromTripId: string } | null>(null);
+  const [dragOverTrip, setDragOverTrip] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) loadDrafts();
@@ -61,13 +69,19 @@ export default function DraftTrips({ open, onOpenChange, onPublished }: DraftTri
 
     const enriched: DraftTrip[] = await Promise.all(
       data.map(async (trip) => {
-        const [{ count }, coverRes] = await Promise.all([
-          supabase.from("photos").select("*", { count: "exact", head: true }).eq("trip_id", trip.id),
-          supabase.from("photos").select("file_path").eq("trip_id", trip.id).order("created_at").limit(1),
-        ]);
-        let cover_url: string | undefined;
-        if (coverRes.data?.[0]?.file_path) {
-          try { cover_url = await getSignedPhotoUrl(coverRes.data[0].file_path); } catch {}
+        const { data: photoData } = await supabase
+          .from("photos")
+          .select("id, file_path")
+          .eq("trip_id", trip.id)
+          .order("created_at");
+
+        const photos: DraftPhoto[] = [];
+        if (photoData) {
+          for (const p of photoData) {
+            let url: string | undefined;
+            try { url = await getSignedPhotoUrl(p.file_path); } catch {}
+            photos.push({ id: p.id, file_path: p.file_path, url });
+          }
         }
 
         // Parse lat/lng from the store name if it contains coordinates
@@ -79,7 +93,7 @@ export default function DraftTrips({ open, onOpenChange, onPublished }: DraftTri
           lng = parseFloat(coordMatch[2]);
         }
 
-        return { ...trip, photo_count: count ?? 0, cover_url, lat, lng };
+        return { ...trip, photo_count: photos.length, photos, lat, lng };
       })
     );
 
@@ -102,7 +116,6 @@ export default function DraftTrips({ open, onOpenChange, onPublished }: DraftTri
       });
       if (!error && data?.stores) {
         setStoreOptions((prev) => new Map(prev).set(tripId, data.stores));
-        // Auto-select first store as default
         if (data.stores.length > 0 && !customNames.has(tripId)) {
           setCustomNames((prev) => new Map(prev).set(tripId, data.stores[0].name));
         }
@@ -137,7 +150,6 @@ export default function DraftTrips({ open, onOpenChange, onPublished }: DraftTri
   }
 
   async function deleteDraft(tripId: string) {
-    // Permanently delete draft + its photos
     await supabase.from("photos").delete().eq("trip_id", tripId);
     await supabase.from("trip_members").delete().eq("trip_id", tripId);
     await supabase.from("shopping_trips").delete().eq("id", tripId);
@@ -146,13 +158,86 @@ export default function DraftTrips({ open, onOpenChange, onPublished }: DraftTri
     onPublished();
   }
 
+  // Drag and drop handlers
+  function handleDragStart(photoId: string, fromTripId: string) {
+    setDragPhoto({ photoId, fromTripId });
+  }
+
+  function handleDragOver(e: React.DragEvent, tripId: string) {
+    e.preventDefault();
+    if (dragPhoto && dragPhoto.fromTripId !== tripId) {
+      setDragOverTrip(tripId);
+    }
+  }
+
+  function handleDragLeave() {
+    setDragOverTrip(null);
+  }
+
+  async function handleDrop(e: React.DragEvent, toTripId: string) {
+    e.preventDefault();
+    setDragOverTrip(null);
+    if (!dragPhoto || dragPhoto.fromTripId === toTripId) return;
+
+    const { photoId, fromTripId } = dragPhoto;
+    setDragPhoto(null);
+
+    // Move photo to new trip in DB
+    const { error } = await supabase
+      .from("photos")
+      .update({ trip_id: toTripId })
+      .eq("id", photoId);
+
+    if (error) {
+      toast({ title: "Failed to move photo", variant: "destructive" });
+      return;
+    }
+
+    // Update local state
+    setDrafts((prev) => {
+      const updated = prev.map((d) => {
+        if (d.id === fromTripId) {
+          const photo = d.photos.find((p) => p.id === photoId);
+          const newPhotos = d.photos.filter((p) => p.id !== photoId);
+          return { ...d, photos: newPhotos, photo_count: newPhotos.length };
+        }
+        if (d.id === toTripId) {
+          const fromDraft = prev.find((dd) => dd.id === fromTripId);
+          const movedPhoto = fromDraft?.photos.find((p) => p.id === photoId);
+          if (movedPhoto) {
+            const newPhotos = [...d.photos, movedPhoto];
+            return { ...d, photos: newPhotos, photo_count: newPhotos.length };
+          }
+        }
+        return d;
+      });
+      // Remove empty drafts
+      return updated.filter((d) => d.photos.length > 0);
+    });
+
+    toast({ title: "Photo moved" });
+  }
+
+  // Also clean up empty trips in DB
+  useEffect(() => {
+    const emptyDrafts = drafts.filter((d) => d.photo_count === 0);
+    for (const d of emptyDrafts) {
+      supabase.from("trip_members").delete().eq("trip_id", d.id).then(() =>
+        supabase.from("shopping_trips").delete().eq("id", d.id)
+      );
+    }
+  }, [drafts]);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="font-serif flex items-center gap-2">
             <FileText className="h-5 w-5" /> Draft Trips
           </DialogTitle>
+          <DialogDescription>
+            Review auto-imported trips. Scroll through photos to verify, drag photos between trips, then publish.
+          </DialogDescription>
         </DialogHeader>
 
         {loading ? (
@@ -167,21 +252,56 @@ export default function DraftTrips({ open, onOpenChange, onPublished }: DraftTri
               const stores = storeOptions.get(draft.id) || [];
               const isLoadingStores = loadingStores.has(draft.id);
               const currentName = customNames.get(draft.id) || "";
+              const isDragTarget = dragOverTrip === draft.id;
 
               return (
-                <Card key={draft.id} className="overflow-hidden">
-                  {draft.cover_url && (
-                    <div className="h-28 w-full">
-                      <img src={draft.cover_url} alt="" className="h-full w-full object-cover" />
-                    </div>
+                <Card
+                  key={draft.id}
+                  className={`overflow-hidden transition-colors ${isDragTarget ? "ring-2 ring-primary bg-primary/5" : ""}`}
+                  onDragOver={(e) => handleDragOver(e, draft.id)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, draft.id)}
+                >
+                  {/* Horizontal scrollable photo strip */}
+                  {draft.photos.length > 0 && (
+                    <ScrollArea className="w-full whitespace-nowrap border-b">
+                      <div className="flex gap-1 p-2">
+                        {draft.photos.map((photo) => (
+                          <div
+                            key={photo.id}
+                            draggable
+                            onDragStart={() => handleDragStart(photo.id, draft.id)}
+                            className="relative flex-shrink-0 cursor-grab active:cursor-grabbing group"
+                          >
+                            {photo.url ? (
+                              <img
+                                src={photo.url}
+                                alt=""
+                                className="h-20 w-20 rounded object-cover border border-border"
+                                loading="lazy"
+                              />
+                            ) : (
+                              <div className="h-20 w-20 rounded bg-muted flex items-center justify-center border border-border">
+                                <ImageIcon className="h-5 w-5 text-muted-foreground/40" />
+                              </div>
+                            )}
+                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 rounded transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                              <GripHorizontal className="h-4 w-4 text-white drop-shadow" />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <ScrollBar orientation="horizontal" />
+                    </ScrollArea>
                   )}
+
                   <CardContent className="p-4 space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="text-sm text-muted-foreground flex items-center gap-2">
                         <Calendar className="h-3.5 w-3.5" />
                         {format(new Date(draft.date), "MMM d, yyyy")}
                       </div>
-                      <Badge variant="secondary">{draft.photo_count} photos</Badge>
+                      <span className="text-xs text-muted-foreground">{draft.photo_count} photo{draft.photo_count !== 1 ? "s" : ""}</span>
                     </div>
 
                     {draft.lat && draft.lng && (
@@ -209,12 +329,10 @@ export default function DraftTrips({ open, onOpenChange, onPublished }: DraftTri
                           <SelectContent>
                             {stores.map((s, i) => (
                               <SelectItem key={i} value={s.name}>
-                                <div>
-                                  <span>{s.name}</span>
-                                  {s.rating && (
-                                    <span className="ml-2 text-xs text-muted-foreground">★ {s.rating}</span>
-                                  )}
-                                </div>
+                                <span>{s.name}</span>
+                                {s.rating && (
+                                  <span className="ml-2 text-xs text-muted-foreground">★ {s.rating}</span>
+                                )}
                               </SelectItem>
                             ))}
                           </SelectContent>

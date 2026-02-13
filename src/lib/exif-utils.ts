@@ -8,18 +8,17 @@ export interface ExifData {
 
 export async function extractExif(file: File): Promise<ExifData> {
   try {
-    const exif = await exifr.parse(file, {
-      gps: true,
-      pick: ["DateTimeOriginal", "CreateDate", "GPSLatitude", "GPSLongitude"],
-    });
+    // Use exifr.gps() for reliable signed lat/lng (handles N/S E/W refs)
+    const [gps, tags] = await Promise.all([
+      exifr.gps(file).catch(() => null),
+      exifr.parse(file, { pick: ["DateTimeOriginal", "CreateDate"] }).catch(() => null),
+    ]);
 
-    if (!exif) return { latitude: null, longitude: null, dateTime: null };
-
-    const lat = exif.latitude ?? null;
-    const lng = exif.longitude ?? null;
+    const lat = gps?.latitude ?? null;
+    const lng = gps?.longitude ?? null;
 
     let dateTime: string | null = null;
-    const rawDate = exif.DateTimeOriginal || exif.CreateDate;
+    const rawDate = tags?.DateTimeOriginal || tags?.CreateDate;
     if (rawDate instanceof Date) {
       dateTime = rawDate.toISOString().split("T")[0];
     } else if (typeof rawDate === "string") {
