@@ -308,7 +308,7 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
           {metaItems.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
               {metaItems.slice(0, 3).map((item, i) => (
-                <span key={i} className="flex items-center gap-1">
+                <span key={i} className={`flex items-center ${item.icon === DollarSign ? 'gap-0' : 'gap-1'}`}>
                   <item.icon className="h-3 w-3 shrink-0" />{item.text}
                 </span>
               ))}
