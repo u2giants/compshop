@@ -502,31 +502,23 @@ export default function Trips() {
                     )}
                   </div>
                 )}
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2">
+                <CardContent className="p-3">
+                  <div className="flex items-center gap-2 text-sm">
                     {logoUrl && (
-                      <img src={logoUrl} alt={trip.store} className="h-6 w-6 rounded object-contain" />
+                      <img src={logoUrl} alt={trip.store} className="h-5 w-5 rounded object-contain shrink-0" />
                     )}
-                    <h3 className="font-sans text-lg font-medium leading-snug">{trip.store}</h3>
+                    <span className="font-sans font-medium truncate">{trip.store}</span>
+                    <span className="text-muted-foreground shrink-0">·</span>
+                    <span className="text-muted-foreground shrink-0">{format(new Date(trip.date), "MMM d")}</span>
+                    <span className="text-muted-foreground shrink-0">·</span>
+                    <span className="text-muted-foreground shrink-0">{trip.photo_count ?? 0} photos</span>
                   </div>
-                  <div className="mt-2 space-y-1 text-sm text-muted-foreground">
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-3.5 w-3.5" />
-                      {format(new Date(trip.date), "MMM d, yyyy")}
+                  {trip.location && (
+                    <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <MapPin className="h-3 w-3 shrink-0" />
+                      <span className="truncate">{trip.location}</span>
                     </div>
-                    {trip.location && (
-                      <div className="flex items-center gap-2">
-                        <MapPin className="h-3.5 w-3.5" />
-                        {trip.location}
-                      </div>
-                    )}
-                  </div>
-                  <div className="mt-3 flex items-center gap-4 text-xs text-muted-foreground">
-                    <span>{trip.photo_count ?? 0} photos</span>
-                    <span className="flex items-center gap-1">
-                      <Users className="h-3 w-3" /> {trip.member_count ?? 0}
-                    </span>
-                  </div>
+                  )}
                 </CardContent>
               </Card>
             );
