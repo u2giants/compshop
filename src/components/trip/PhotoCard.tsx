@@ -38,9 +38,10 @@ interface Props {
   extraPhotos?: Photo[];
   onUpdated: () => void;
   onGroupPhoto?: (draggedId: string, targetId: string) => void;
+  onFileDrop?: (files: File[], targetPhotoId: string) => void;
 }
 
-export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupPhoto }: Props) {
+export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupPhoto, onFileDrop }: Props) {
   const { user, isAdmin } = useAuth();
   const { toast } = useToast();
   const countries = useCountries();
@@ -181,13 +182,22 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
         }}
         onDragOver={(e) => {
           e.preventDefault();
-          e.dataTransfer.dropEffect = "move";
+          e.dataTransfer.dropEffect = e.dataTransfer.types.includes("Files") ? "copy" : "move";
           setDragOver(true);
         }}
         onDragLeave={() => setDragOver(false)}
         onDrop={(e) => {
           e.preventDefault();
           setDragOver(false);
+          // Check for OS file drops first
+          if (e.dataTransfer.files && e.dataTransfer.files.length > 0 && onFileDrop) {
+            const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith("image/"));
+            if (files.length > 0) {
+              onFileDrop(files, photo.id);
+              return;
+            }
+          }
+          // Internal photo grouping drag
           const draggedId = e.dataTransfer.getData("text/plain");
           if (draggedId && draggedId !== photo.id && onGroupPhoto) {
             onGroupPhoto(draggedId, photo.id);
