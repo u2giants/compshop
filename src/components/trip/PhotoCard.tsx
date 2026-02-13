@@ -2,6 +2,8 @@ import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { PRODUCT_CATEGORIES } from "@/lib/supabase-helpers";
+import { useCountries } from "@/hooks/use-countries";
+import AutocompleteInput from "@/components/ui/autocomplete-input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DollarSign, MapPin, Ruler, Layers, Tag, MessageSquare, Trash2, Pencil } from "lucide-react";
+import { DollarSign, MapPin, Ruler, Layers, Tag, MessageSquare, Trash2, Pencil, Sparkles, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import PhotoComments from "./PhotoComments";
 
@@ -38,10 +40,12 @@ interface Props {
 export default function PhotoCard({ photo, onUpdated }: Props) {
   const { user, isAdmin } = useAuth();
   const { toast } = useToast();
+  const countries = useCountries();
   const [showDetail, setShowDetail] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
 
   const [editData, setEditData] = useState({
     product_name: photo.product_name || "",
@@ -69,6 +73,45 @@ export default function PhotoCard({ photo, onUpdated }: Props) {
       notes: photo.notes || "",
     });
     setEditing(true);
+  }
+
+  async function handleAnalyze() {
+    if (!photo.signed_url) return;
+    setAnalyzing(true);
+    try {
+      // Fetch the image and convert to base64
+      const res = await fetch(photo.signed_url);
+      const blob = await res.blob();
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve((reader.result as string).split(",")[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+
+      const { data, error } = await supabase.functions.invoke("analyze-photo", {
+        body: { imageBase64: base64, mimeType: blob.type },
+      });
+
+      if (error) throw error;
+
+      // Pre-fill edit fields and enter edit mode
+      setEditData((d) => ({
+        ...d,
+        product_name: data.product_name || d.product_name,
+        price: data.price != null ? String(data.price) : d.price,
+        dimensions: data.dimensions || d.dimensions,
+        brand: data.brand || d.brand,
+        material: data.material || d.material,
+        country_of_origin: data.country_of_origin || d.country_of_origin,
+      }));
+      setEditing(true);
+      toast({ title: "AI analysis complete", description: "Fields have been pre-filled. Review and save." });
+    } catch (err: any) {
+      toast({ title: "Analysis failed", description: err.message, variant: "destructive" });
+    } finally {
+      setAnalyzing(false);
+    }
   }
 
   async function handleSave() {
@@ -176,13 +219,27 @@ export default function PhotoCard({ photo, onUpdated }: Props) {
       <Dialog open={showDetail} onOpenChange={(open) => { setShowDetail(open); if (!open) setEditing(false); }}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <DialogTitle className="font-serif">{photo.product_name || "Photo Details"}</DialogTitle>
-              {canEdit && !editing && (
-                <Button variant="outline" size="sm" className="gap-1" onClick={startEditing}>
-                  <Pencil className="h-3.5 w-3.5" /> Edit
-                </Button>
-              )}
+              <div className="flex items-center gap-1">
+                {canEdit && photo.signed_url && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1"
+                    onClick={handleAnalyze}
+                    disabled={analyzing}
+                  >
+                    {analyzing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                    {analyzing ? "Analyzing..." : "AI Detect"}
+                  </Button>
+                )}
+                {canEdit && !editing && (
+                  <Button variant="outline" size="sm" className="gap-1" onClick={startEditing}>
+                    <Pencil className="h-3.5 w-3.5" /> Edit
+                  </Button>
+                )}
+              </div>
             </div>
           </DialogHeader>
           {photo.signed_url && (
@@ -221,7 +278,12 @@ export default function PhotoCard({ photo, onUpdated }: Props) {
                 </div>
                 <div className="space-y-2">
                   <Label>Made In</Label>
-                  <Input value={editData.country_of_origin} onChange={(e) => setEditData((d) => ({ ...d, country_of_origin: e.target.value }))} />
+                  <AutocompleteInput
+                    value={editData.country_of_origin}
+                    onChange={(v) => setEditData((d) => ({ ...d, country_of_origin: v }))}
+                    suggestions={countries}
+                    placeholder="Country"
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>Material</Label>
