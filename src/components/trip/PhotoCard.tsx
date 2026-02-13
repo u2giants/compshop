@@ -278,11 +278,14 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
           </DialogHeader>
           {totalImages > 1 ? (
             <div className="relative">
-              <img
-                src={allImages[activeImageIndex]?.signed_url || ""}
-                alt={photo.product_name || "Photo"}
-                className="w-full rounded-lg"
-              />
+              <div className="overflow-auto touch-pan-x touch-pan-y">
+                <img
+                  src={allImages[activeImageIndex]?.signed_url || ""}
+                  alt={photo.product_name || "Photo"}
+                  className="w-full rounded-lg origin-center"
+                  style={{ touchAction: "pinch-zoom" }}
+                />
+              </div>
               <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
                 {allImages.map((_, i) => (
                   <button
@@ -310,7 +313,9 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
               </Button>
             </div>
           ) : photo.signed_url ? (
-            <img src={photo.signed_url} alt={photo.product_name || "Photo"} className="w-full rounded-lg" />
+            <div className="overflow-auto touch-pan-x touch-pan-y">
+              <img src={photo.signed_url} alt={photo.product_name || "Photo"} className="w-full rounded-lg origin-center" style={{ touchAction: "pinch-zoom" }} />
+            </div>
           ) : null}
 
           {editing ? (
