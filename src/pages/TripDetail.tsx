@@ -105,13 +105,28 @@ export default function TripDetail() {
   const [selectedPhotos, setSelectedPhotos] = useState<Set<string>>(new Set());
   const [showBulkMove, setShowBulkMove] = useState(false);
   const [showBulkEdit, setShowBulkEdit] = useState(false);
-  function toggleSelectPhoto(photoId: string) {
+  const lastSelectedPhotoRef = useRef<string | null>(null);
+  function getFlatPrimaryIds() { return groupPhotos(photos).map(g => g.primary.id); }
+  function toggleSelectPhoto(photoId: string, event?: React.MouseEvent) {
     setSelectedPhotos((prev) => {
       const next = new Set(prev);
+      if (event?.shiftKey && lastSelectedPhotoRef.current && lastSelectedPhotoRef.current !== photoId) {
+        const ids = getFlatPrimaryIds();
+        const startIdx = ids.indexOf(lastSelectedPhotoRef.current);
+        const endIdx = ids.indexOf(photoId);
+        if (startIdx !== -1 && endIdx !== -1) {
+          const [from, to] = startIdx < endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
+          for (let i = from; i <= to; i++) {
+            next.add(ids[i]);
+          }
+          return next;
+        }
+      }
       if (next.has(photoId)) next.delete(photoId);
       else next.add(photoId);
       return next;
     });
+    lastSelectedPhotoRef.current = photoId;
   }
   const formRef = useRef<HTMLFormElement>(null);
 

@@ -136,6 +136,7 @@ export default function ChinaTripDetail() {
   const [showBulkMove, setShowBulkMove] = useState(false);
   const [showBulkEdit, setShowBulkEdit] = useState(false);
   const [bulkAnalyzing, setBulkAnalyzing] = useState(false);
+  const lastSelectedPhotoRef = useRef<string | null>(null);
   const [bulkAnalyzeProgress, setBulkAnalyzeProgress] = useState(0);
   const [downloading, setDownloading] = useState(false);
 
@@ -153,12 +154,28 @@ export default function ChinaTripDetail() {
     ...emptySections,
   ])];
 
-  function toggleSelectPhoto(photoId: string) {
+  // Flat ordered list of primary photo IDs for shift-click range selection
+  const allGroups = groupPhotos(photos);
+  const flatPrimaryIds = allGroups.map(g => g.primary.id);
+
+  function toggleSelectPhoto(photoId: string, event?: React.MouseEvent) {
     setSelectedPhotos((prev) => {
       const next = new Set(prev);
+      if (event?.shiftKey && lastSelectedPhotoRef.current && lastSelectedPhotoRef.current !== photoId) {
+        const startIdx = flatPrimaryIds.indexOf(lastSelectedPhotoRef.current);
+        const endIdx = flatPrimaryIds.indexOf(photoId);
+        if (startIdx !== -1 && endIdx !== -1) {
+          const [from, to] = startIdx < endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
+          for (let i = from; i <= to; i++) {
+            next.add(flatPrimaryIds[i]);
+          }
+          return next;
+        }
+      }
       if (next.has(photoId)) next.delete(photoId); else next.add(photoId);
       return next;
     });
+    lastSelectedPhotoRef.current = photoId;
   }
 
   // ── Download All with file renaming ──
