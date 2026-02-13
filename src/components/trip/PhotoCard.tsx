@@ -229,7 +229,11 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
   return (
     <>
       <Card
-        className={`group overflow-hidden transition-shadow hover:shadow-md ${dragOver ? "ring-2 ring-primary ring-offset-2" : ""}`}
+        className={`group overflow-hidden transition-shadow hover:shadow-md md:cursor-default cursor-pointer ${dragOver ? "ring-2 ring-primary ring-offset-2" : ""}`}
+        onClick={() => {
+          // On mobile, clicking anywhere on the card opens detail
+          if (window.innerWidth < 768) setShowDetail(true);
+        }}
         draggable
         onDragStart={(e) => {
           e.dataTransfer.setData("text/plain", photo.id);
@@ -313,11 +317,11 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
             </div>
           )}
           <div className="mt-3 flex items-center gap-2">
-            <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={() => setShowComments(true)}>
+            <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={(e) => { e.stopPropagation(); setShowComments(true); }}>
               <MessageSquare className="h-3 w-3" /> Comment
             </Button>
             {canDelete && (
-              <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive" onClick={handleDelete}>
+              <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive" onClick={(e) => { e.stopPropagation(); handleDelete(); }}>
                 <Trash2 className="h-3 w-3" />
               </Button>
             )}
