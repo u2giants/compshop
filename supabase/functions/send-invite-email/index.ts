@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
         'content-type': 'application/json',
       },
       body: JSON.stringify({
-        sender: { name: 'CompShop', email: 'noreply@compshop.app' },
+        sender: { name: 'CompShop', email: 'noreply@designflow.app' },
         to: [{ email }],
         subject: `${inviterName || 'Your team'} invited you to CompShop`,
         htmlContent: `

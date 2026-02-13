@@ -30,14 +30,17 @@ interface Photo {
   user_id: string | null;
   created_at: string;
   signed_url?: string;
+  group_id?: string | null;
 }
 
 interface Props {
   photo: Photo;
+  extraPhotos?: Photo[];
   onUpdated: () => void;
+  onGroupPhoto?: (draggedId: string, targetId: string) => void;
 }
 
-export default function PhotoCard({ photo, onUpdated }: Props) {
+export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupPhoto }: Props) {
   const { user, isAdmin } = useAuth();
   const { toast } = useToast();
   const countries = useCountries();
@@ -46,6 +49,11 @@ export default function PhotoCard({ photo, onUpdated }: Props) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+
+  const allImages = [photo, ...extraPhotos];
+  const totalImages = allImages.length;
 
   const [editData, setEditData] = useState({
     product_name: photo.product_name || "",
@@ -164,7 +172,28 @@ export default function PhotoCard({ photo, onUpdated }: Props) {
 
   return (
     <>
-      <Card className="group overflow-hidden transition-shadow hover:shadow-md">
+      <Card
+        className={`group overflow-hidden transition-shadow hover:shadow-md ${dragOver ? "ring-2 ring-primary ring-offset-2" : ""}`}
+        draggable
+        onDragStart={(e) => {
+          e.dataTransfer.setData("text/plain", photo.id);
+          e.dataTransfer.effectAllowed = "move";
+        }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+          setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          const draggedId = e.dataTransfer.getData("text/plain");
+          if (draggedId && draggedId !== photo.id && onGroupPhoto) {
+            onGroupPhoto(draggedId, photo.id);
+          }
+        }}
+      >
         <div className="relative cursor-pointer" onClick={() => setShowDetail(true)}>
           {photo.signed_url ? (
             <img
@@ -181,6 +210,11 @@ export default function PhotoCard({ photo, onUpdated }: Props) {
           {photo.category && (
             <Badge className="absolute left-2 top-2 bg-background/80 text-foreground backdrop-blur-sm">
               {photo.category}
+            </Badge>
+          )}
+          {totalImages > 1 && (
+            <Badge className="absolute right-2 top-2 bg-background/80 text-foreground backdrop-blur-sm">
+              {totalImages} photos
             </Badge>
           )}
         </div>
@@ -242,9 +276,42 @@ export default function PhotoCard({ photo, onUpdated }: Props) {
               </div>
             </div>
           </DialogHeader>
-          {photo.signed_url && (
+          {totalImages > 1 ? (
+            <div className="relative">
+              <img
+                src={allImages[activeImageIndex]?.signed_url || ""}
+                alt={photo.product_name || "Photo"}
+                className="w-full rounded-lg"
+              />
+              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
+                {allImages.map((_, i) => (
+                  <button
+                    key={i}
+                    className={`h-2 w-2 rounded-full transition-colors ${i === activeImageIndex ? "bg-primary" : "bg-primary/30"}`}
+                    onClick={() => setActiveImageIndex(i)}
+                  />
+                ))}
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="absolute left-1 top-1/2 -translate-y-1/2 h-8 w-8 p-0 bg-background/60 backdrop-blur-sm"
+                onClick={() => setActiveImageIndex((i) => (i - 1 + totalImages) % totalImages)}
+              >
+                ‹
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 p-0 bg-background/60 backdrop-blur-sm"
+                onClick={() => setActiveImageIndex((i) => (i + 1) % totalImages)}
+              >
+                ›
+              </Button>
+            </div>
+          ) : photo.signed_url ? (
             <img src={photo.signed_url} alt={photo.product_name || "Photo"} className="w-full rounded-lg" />
-          )}
+          ) : null}
 
           {editing ? (
             <div className="space-y-4">

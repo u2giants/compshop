@@ -12,6 +12,7 @@ import TripDetail from "@/pages/TripDetail";
 import SearchPage from "@/pages/SearchPage";
 import Profile from "@/pages/Profile";
 import ImportKeep from "@/pages/ImportKeep";
+import ImportTeams from "@/pages/ImportTeams";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -52,6 +53,7 @@ const App = () => (
               <Route path="/search" element={<SearchPage />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/import/keep" element={<ImportKeep />} />
+              <Route path="/import/teams" element={<ImportTeams />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

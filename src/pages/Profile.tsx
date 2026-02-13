@@ -98,9 +98,12 @@ export default function Profile() {
             <FileDown className="h-5 w-5" /> Import Data
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-2">
           <Button variant="outline" className="w-full gap-2" onClick={() => navigate("/import/keep")}>
             Import from Google Keep
+          </Button>
+          <Button variant="outline" className="w-full gap-2" onClick={() => navigate("/import/teams")}>
+            Import from Microsoft Teams
           </Button>
         </CardContent>
       </Card>

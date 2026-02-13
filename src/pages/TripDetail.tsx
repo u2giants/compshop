@@ -57,6 +57,28 @@ interface Photo {
   user_id: string | null;
   created_at: string;
   signed_url?: string;
+  group_id: string | null;
+}
+
+// Group photos: primary photos (no group_id) with their children
+function groupPhotos(photos: Photo[]): { primary: Photo; extras: Photo[] }[] {
+  const grouped = new Map<string, Photo[]>();
+  const primaries: Photo[] = [];
+
+  for (const p of photos) {
+    if (p.group_id) {
+      const list = grouped.get(p.group_id) || [];
+      list.push(p);
+      grouped.set(p.group_id, list);
+    } else {
+      primaries.push(p);
+    }
+  }
+
+  return primaries.map((p) => ({
+    primary: p,
+    extras: grouped.get(p.id) || [],
+  }));
 }
 
 export default function TripDetail() {
@@ -80,7 +102,42 @@ export default function TripDetail() {
   const [analyzing, setAnalyzing] = useState(false);
   const [countryValue, setCountryValue] = useState("");
 
-  // Controlled fields for AI pre-fill
+  const [lastGroupAction, setLastGroupAction] = useState<{ photoId: string; previousGroupId: string | null } | null>(null);
+
+  async function handleGroupPhoto(draggedId: string, targetId: string) {
+    if (draggedId === targetId) return;
+    const dragged = photos.find((p) => p.id === draggedId);
+    if (!dragged) return;
+    setLastGroupAction({ photoId: draggedId, previousGroupId: dragged.group_id });
+
+    const { error } = await supabase
+      .from("photos")
+      .update({ group_id: targetId })
+      .eq("id", draggedId);
+    if (error) {
+      toast({ title: "Grouping failed", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Photos grouped", description: "Dragged photo merged onto the target card." });
+    loadPhotos();
+  }
+
+  async function handleUndoGroup() {
+    if (!lastGroupAction) return;
+    const { error } = await supabase
+      .from("photos")
+      .update({ group_id: lastGroupAction.previousGroupId })
+      .eq("id", lastGroupAction.photoId);
+    if (error) {
+      toast({ title: "Undo failed", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Ungrouped" });
+    setLastGroupAction(null);
+    loadPhotos();
+  }
+
+
   const [formFields, setFormFields] = useState({
     product_name: "",
     category: "",
@@ -128,7 +185,7 @@ export default function TripDetail() {
           return { ...p, signed_url: blob ? URL.createObjectURL(blob) : undefined };
         })
       );
-      setPhotos(withUrls as Photo[]);
+      setPhotos(withUrls as unknown as Photo[]);
     }
     if (!navigator.onLine) return;
     try {
@@ -144,7 +201,7 @@ export default function TripDetail() {
           })
         );
         setPhotos(withUrls);
-        await cachePhotos(data as CachedPhoto[]);
+        await cachePhotos(data as unknown as CachedPhoto[]);
       }
     } catch (err) { console.error("[TripDetail] Network error loading photos", err); }
   }
@@ -335,6 +392,11 @@ export default function TripDetail() {
             <CloudOff className="h-3 w-3" /> {pendingPhotos.length} pending
           </Badge>
         )}
+        {lastGroupAction && (
+          <Button variant="outline" size="sm" onClick={handleUndoGroup} className="gap-1 text-xs">
+            Undo group
+          </Button>
+        )}
       </div>
 
       {/* Upload dialog */}
@@ -453,8 +515,14 @@ export default function TripDetail() {
         </Card>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {photos.map((photo) => (
-            <PhotoCard key={photo.id} photo={photo} onUpdated={loadPhotos} />
+          {groupPhotos(photos).map(({ primary, extras }) => (
+            <PhotoCard
+              key={primary.id}
+              photo={primary}
+              extraPhotos={extras}
+              onUpdated={loadPhotos}
+              onGroupPhoto={handleGroupPhoto}
+            />
           ))}
         </div>
       )}
