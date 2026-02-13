@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -9,7 +9,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, MapPin, Loader2, Store, Star } from "lucide-react";
+
+interface NearbyStore {
+  name: string;
+  address: string;
+  rating: number | null;
+}
 
 export default function NewChinaTrip() {
   const { user } = useAuth();
@@ -19,6 +25,69 @@ export default function NewChinaTrip() {
   const [supplier, setSupplier] = useState("");
   const [venueType, setVenueType] = useState<string>("canton_fair");
   const [location, setLocation] = useState("");
+  const [locatingDevice, setLocatingDevice] = useState(false);
+  const [nearbyStores, setNearbyStores] = useState<NearbyStore[]>([]);
+  const [loadingStores, setLoadingStores] = useState(false);
+  const coordsRef = useRef<{ lat: number; lng: number } | null>(null);
+
+  useEffect(() => {
+    detectLocation();
+  }, []);
+
+  const detectLocation = () => {
+    if (!navigator.geolocation) return;
+    setLocatingDevice(true);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const { latitude, longitude } = position.coords;
+          coordsRef.current = { lat: latitude, lng: longitude };
+
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`
+          );
+          const data = await res.json();
+          const city = data.address?.city || data.address?.town || data.address?.village || "";
+          const state = data.address?.state || "";
+          const country = data.address?.country || "";
+          const parts = [city, state, country].filter(Boolean);
+          setLocation(parts.join(", "));
+
+          // Use larger radius (1km) for trade shows / large venues
+          fetchNearbyStores(latitude, longitude);
+        } catch {
+        } finally {
+          setLocatingDevice(false);
+        }
+      },
+      () => setLocatingDevice(false),
+      { timeout: 10000 }
+    );
+  };
+
+  const fetchNearbyStores = async (latitude: number, longitude: number) => {
+    setLoadingStores(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("nearby-stores", {
+        body: { latitude, longitude, radius: 1000 },
+      });
+      if (error) throw error;
+      if (data?.stores) {
+        setNearbyStores(data.stores);
+      }
+    } catch (err: any) {
+      console.error("Failed to fetch nearby stores:", err);
+    } finally {
+      setLoadingStores(false);
+    }
+  };
+
+  const selectNearbyStore = (s: NearbyStore) => {
+    setSupplier(s.name);
+    if (s.address && !location) {
+      setLocation(s.address);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -79,6 +148,39 @@ export default function NewChinaTrip() {
               />
             </div>
 
+            {/* Nearby Location Suggestions */}
+            {(loadingStores || nearbyStores.length > 0) && (
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Store className="h-3.5 w-3.5" /> Nearby locations
+                </Label>
+                {loadingStores ? (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Loader2 className="h-3 w-3 animate-spin" /> Finding locations near you…
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {nearbyStores.map((s, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => selectNearbyStore(s)}
+                        className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
+                        title={s.address}
+                      >
+                        {s.name}
+                        {s.rating && (
+                          <span className="flex items-center gap-0.5 text-muted-foreground">
+                            <Star className="h-3 w-3 fill-current" /> {s.rating}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label>Venue Type</Label>
               <Select value={venueType} onValueChange={setVenueType}>
@@ -99,12 +201,24 @@ export default function NewChinaTrip() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="location">Location</Label>
-                <Input
-                  id="location"
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                  placeholder="City or booth #"
-                />
+                <div className="relative">
+                  <Input
+                    id="location"
+                    value={location}
+                    onChange={(e) => setLocation(e.target.value)}
+                    placeholder="City or booth #"
+                    className="pr-9"
+                  />
+                  <button
+                    type="button"
+                    onClick={detectLocation}
+                    disabled={locatingDevice}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    title="Detect location"
+                  >
+                    {locatingDevice ? <Loader2 className="h-4 w-4 animate-spin" /> : <MapPin className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
             </div>
             <div className="space-y-2">
