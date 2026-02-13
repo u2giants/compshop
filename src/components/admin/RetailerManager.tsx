@@ -58,12 +58,16 @@ export default function RetailerManager() {
 
   async function handleLogoUpload(retailerId: string, file: File) {
     const ext = file.name.split(".").pop();
-    const path = `${retailerId}.${ext}`;
+    // Use a unique path each time to avoid browser caching issues
+    const path = `${retailerId}_${Date.now()}.${ext}`;
 
-    // Remove old logo first
-    await supabase.storage.from("retailer-logos").remove([path]);
+    // Remove old logo first if it exists
+    const retailer = retailers.find((r) => r.id === retailerId);
+    if (retailer?.logo_path) {
+      await supabase.storage.from("retailer-logos").remove([retailer.logo_path]);
+    }
 
-    const { error: uploadErr } = await supabase.storage.from("retailer-logos").upload(path, file, { upsert: true });
+    const { error: uploadErr } = await supabase.storage.from("retailer-logos").upload(path, file);
     if (uploadErr) {
       toast({ title: "Upload failed", description: uploadErr.message, variant: "destructive" });
       return;
