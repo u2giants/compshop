@@ -41,10 +41,13 @@ Deno.serve(async (req) => {
       throw new Error("GOOGLE_MAPS_API_KEY is not configured");
     }
 
-    const { latitude, longitude } = await req.json();
+    const { latitude, longitude, radius } = await req.json();
     if (!latitude || !longitude) {
       throw new Error("latitude and longitude are required");
     }
+
+    // Default 150m for shopping; caller can pass larger radius for trade shows
+    const searchRadius = Math.min(Math.max(radius || 150, 50), 5000);
 
     const url = "https://places.googleapis.com/v1/places:searchNearby";
     const body = {
@@ -52,7 +55,7 @@ Deno.serve(async (req) => {
       locationRestriction: {
         circle: {
           center: { latitude, longitude },
-          radius: 150.0,
+          radius: searchRadius,
         },
       },
     };
