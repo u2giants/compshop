@@ -385,14 +385,30 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                {photo.category && <div><span className="text-muted-foreground">Category:</span> {photo.category}</div>}
-                {photo.price != null && <div><span className="text-muted-foreground">Price:</span> ${photo.price}</div>}
-                {photo.brand && <div><span className="text-muted-foreground">Brand:</span> {photo.brand}</div>}
-                {photo.dimensions && <div><span className="text-muted-foreground">Dimensions:</span> {photo.dimensions}</div>}
-                {photo.country_of_origin && <div><span className="text-muted-foreground">Made In:</span> {photo.country_of_origin}</div>}
-                {photo.material && <div><span className="text-muted-foreground">Material:</span> {photo.material}</div>}
-              </div>
+              {(photo.category || photo.price != null || photo.brand || photo.dimensions || photo.country_of_origin || photo.material) ? (
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  {photo.category && <div><span className="text-muted-foreground">Category:</span> {photo.category}</div>}
+                  {photo.price != null && <div><span className="text-muted-foreground">Price:</span> ${photo.price}</div>}
+                  {photo.brand && <div><span className="text-muted-foreground">Brand:</span> {photo.brand}</div>}
+                  {photo.dimensions && <div><span className="text-muted-foreground">Dimensions:</span> {photo.dimensions}</div>}
+                  {photo.country_of_origin && <div><span className="text-muted-foreground">Made In:</span> {photo.country_of_origin}</div>}
+                  {photo.material && <div><span className="text-muted-foreground">Material:</span> {photo.material}</div>}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground italic">
+                  No product details yet.{" "}
+                  {canEdit && (
+                    <>
+                      <button className="underline text-primary cursor-pointer" onClick={startEditing}>Add manually</button>
+                      {photo.signed_url && (
+                        <> or <button className="underline text-primary cursor-pointer" onClick={handleAnalyze} disabled={analyzing}>
+                          {analyzing ? "Analyzing..." : "use AI Detect"}
+                        </button></>
+                      )}
+                    </>
+                  )}
+                </p>
+              )}
               {photo.notes && (
                 <div className="text-sm">
                   <span className="text-muted-foreground">Notes:</span>
