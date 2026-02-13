@@ -13,7 +13,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DollarSign, MapPin, Ruler, Layers, Tag, MessageSquare, Trash2, Sparkles, Loader2, ImageIcon, ArrowRightLeft } from "lucide-react";
+import { DollarSign, MapPin, Ruler, Layers, Tag, MessageSquare, Trash2, Sparkles, Loader2, ImageIcon, ArrowRightLeft, Crop } from "lucide-react";
+import PhotoCropDialog from "./PhotoCropDialog";
 import MoveToTripDialog from "./MoveToTripDialog";
 import ChinaMoveToTripDialog from "./ChinaMoveToTripDialog";
 import { useToast } from "@/hooks/use-toast";
@@ -62,6 +63,7 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
   const [saving, setSaving] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [showMoveDialog, setShowMoveDialog] = useState(false);
+  const [showCropDialog, setShowCropDialog] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [imageZoomed, setImageZoomed] = useState(false);
@@ -159,7 +161,7 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
       setEditData((d) => ({
         ...d,
         product_name: data.product_name || d.product_name,
-        category: data.category || d.category,
+        category: (data.category ? (categories.find((c) => c.toLowerCase() === data.category.toLowerCase()) || data.category) : null) || d.category,
         price: data.price != null ? String(data.price) : d.price,
         dimensions: data.dimensions || d.dimensions,
         brand: data.brand || d.brand,
@@ -368,16 +370,26 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
               <DialogTitle className="font-sans">{editData.product_name || "Photo Details"}</DialogTitle>
               <div className="flex items-center gap-1">
                 {canEdit && photo.signed_url && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="gap-1"
-                    onClick={handleAnalyze}
-                    disabled={analyzing}
-                  >
-                    {analyzing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-                    {analyzing ? "Analyzing..." : "AI Detect"}
-                  </Button>
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1"
+                      onClick={() => setShowCropDialog(true)}
+                    >
+                      <Crop className="h-3.5 w-3.5" /> Crop
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1"
+                      onClick={handleAnalyze}
+                      disabled={analyzing}
+                    >
+                      {analyzing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                      {analyzing ? "Analyzing..." : "AI Detect"}
+                    </Button>
+                  </>
                 )}
               </div>
             </div>
@@ -556,6 +568,17 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
           photoIds={[photo.id, ...extraPhotos.map((p) => p.id)]}
           currentTripId={tripId}
           onMoved={onUpdated}
+        />
+      )}
+      {photo.signed_url && (
+        <PhotoCropDialog
+          open={showCropDialog}
+          onOpenChange={setShowCropDialog}
+          imageUrl={photo.signed_url}
+          photoId={photo.id}
+          filePath={photo.file_path}
+          chinaMode={chinaMode}
+          onCropped={onUpdated}
         />
       )}
     </>
