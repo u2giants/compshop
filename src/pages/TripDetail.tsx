@@ -33,11 +33,12 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Camera, Calendar, MapPin, Store, Users, CloudOff, Sparkles, Loader2, Download, Images, ArrowRightLeft } from "lucide-react";
+import { ArrowLeft, Camera, Calendar, MapPin, Store, Users, CloudOff, Sparkles, Loader2, Download, Images, ArrowRightLeft, PenLine } from "lucide-react";
 import { format } from "date-fns";
 import PhotoCard from "@/components/trip/PhotoCard";
 import TripMembers from "@/components/trip/TripMembers";
 import MoveToTripDialog from "@/components/trip/MoveToTripDialog";
+import BulkEditDialog from "@/components/trip/BulkEditDialog";
 
 interface Trip {
   id: string;
@@ -101,7 +102,7 @@ export default function TripDetail() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedPhotos, setSelectedPhotos] = useState<Set<string>>(new Set());
   const [showBulkMove, setShowBulkMove] = useState(false);
-
+  const [showBulkEdit, setShowBulkEdit] = useState(false);
   function toggleSelectPhoto(photoId: string) {
     setSelectedPhotos((prev) => {
       const next = new Set(prev);
@@ -655,6 +656,9 @@ export default function TripDetail() {
         )}
         {selectedPhotos.size > 0 && (
           <>
+            <Button variant="outline" onClick={() => setShowBulkEdit(true)} className="gap-2">
+              <PenLine className="h-4 w-4" /> Edit {selectedPhotos.size} Selected
+            </Button>
             <Button variant="outline" onClick={() => setShowBulkMove(true)} className="gap-2">
               <ArrowRightLeft className="h-4 w-4" /> Move {selectedPhotos.size} Selected
             </Button>
@@ -815,6 +819,14 @@ export default function TripDetail() {
         photoIds={Array.from(selectedPhotos)}
         currentTripId={trip.id}
         onMoved={() => { setSelectedPhotos(new Set()); loadPhotos(); }}
+      />
+
+      <BulkEditDialog
+        open={showBulkEdit}
+        onOpenChange={setShowBulkEdit}
+        photoIds={Array.from(selectedPhotos)}
+        photos={photos.map((p) => ({ id: p.id, product_name: p.product_name }))}
+        onApplied={() => { setSelectedPhotos(new Set()); loadPhotos(); }}
       />
     </div>
   );
