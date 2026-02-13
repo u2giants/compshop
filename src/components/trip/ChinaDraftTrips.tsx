@@ -88,9 +88,10 @@ export default function ChinaDraftTrips({ open, onOpenChange, onPublished }: Chi
   }
 
   async function publishDraft(tripId: string) {
-    const name = supplierNames.get(tripId);
+    const draft = drafts.find((d) => d.id === tripId);
+    const name = supplierNames.get(tripId) ?? draft?.supplier;
     if (!name?.trim()) {
-      toast({ title: "Please enter a supplier name", variant: "destructive" });
+      toast({ title: "Please enter a supplier name", variant: "destructive", description: "The supplier/booth name field cannot be empty." });
       return;
     }
 
