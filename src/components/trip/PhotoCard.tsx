@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { PRODUCT_CATEGORIES } from "@/lib/supabase-helpers";
+import { PRODUCT_CATEGORIES, IMAGE_TYPES } from "@/lib/supabase-helpers";
 import { useCountries } from "@/hooks/use-countries";
 import AutocompleteInput from "@/components/ui/autocomplete-input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -27,6 +27,7 @@ interface Photo {
   material: string | null;
   brand: string | null;
   notes: string | null;
+  image_type: string | null;
   user_id: string | null;
   created_at: string;
   signed_url?: string;
@@ -101,6 +102,7 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
     country_of_origin: photo.country_of_origin || "",
     material: photo.material || "",
     notes: photo.notes || "",
+    image_type: (photo as any).image_type || "",
   });
 
   // Sync editData when photo prop changes
@@ -116,6 +118,7 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
       country_of_origin: photo.country_of_origin || "",
       material: photo.material || "",
       notes: photo.notes || "",
+      image_type: (photo as any).image_type || "",
     });
   }
 
@@ -172,6 +175,7 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
           country_of_origin: editData.country_of_origin || null,
           material: editData.material || null,
           notes: editData.notes || null,
+          image_type: editData.image_type || null,
         })
         .eq("id", photo.id);
       if (error) throw error;
@@ -463,6 +467,17 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">Material</Label>
                 <Input value={editData.material} onChange={(e) => setEditData((d) => ({ ...d, material: e.target.value }))} placeholder="e.g. Ceramic" disabled={!canEdit} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Image Type</Label>
+                <Select value={editData.image_type} onValueChange={(v) => setEditData((d) => ({ ...d, image_type: v }))} disabled={!canEdit}>
+                  <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
+                  <SelectContent>
+                    {IMAGE_TYPES.map((t) => (
+                      <SelectItem key={t} value={t}>{t}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="col-span-2 space-y-1">
                 <Label className="text-xs text-muted-foreground">Notes</Label>
