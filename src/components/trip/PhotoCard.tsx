@@ -205,9 +205,9 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
         }}
       >
         <div className="relative cursor-pointer" onClick={() => setShowDetail(true)}>
-          {photo.signed_url ? (
+          {(allImages[activeImageIndex]?.signed_url || photo.signed_url) ? (
             <img
-              src={photo.signed_url}
+              src={allImages[activeImageIndex]?.signed_url || photo.signed_url}
               alt={photo.product_name || "Photo"}
               className="aspect-[4/3] w-full object-cover"
               loading="lazy"
@@ -223,9 +223,27 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
             </Badge>
           )}
           {totalImages > 1 && (
-            <Badge className="absolute right-2 top-2 bg-background/80 text-foreground backdrop-blur-sm">
-              {totalImages} photos
-            </Badge>
+            <>
+              <Badge className="absolute right-2 top-2 bg-background/80 text-foreground backdrop-blur-sm">
+                {activeImageIndex + 1}/{totalImages}
+              </Badge>
+              <Button
+                variant="outline"
+                size="sm"
+                className="absolute left-1 top-1/2 -translate-y-1/2 h-8 w-8 p-0 border-2 border-destructive bg-background/80 backdrop-blur-sm text-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                onClick={(e) => { e.stopPropagation(); setActiveImageIndex((i) => (i - 1 + totalImages) % totalImages); }}
+              >
+                ‹
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 p-0 border-2 border-destructive bg-background/80 backdrop-blur-sm text-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                onClick={(e) => { e.stopPropagation(); setActiveImageIndex((i) => (i + 1) % totalImages); }}
+              >
+                ›
+              </Button>
+            </>
           )}
         </div>
         <CardContent className="p-3">
@@ -306,17 +324,17 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
                 ))}
               </div>
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
-                className="absolute left-1 top-1/2 -translate-y-1/2 h-8 w-8 p-0 bg-background/60 backdrop-blur-sm"
+                className="absolute left-1 top-1/2 -translate-y-1/2 h-10 w-10 p-0 border-2 border-destructive bg-background/80 backdrop-blur-sm text-foreground"
                 onClick={() => setActiveImageIndex((i) => (i - 1 + totalImages) % totalImages)}
               >
                 ‹
               </Button>
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
-                className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 p-0 bg-background/60 backdrop-blur-sm"
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-10 w-10 p-0 border-2 border-destructive bg-background/80 backdrop-blur-sm text-foreground"
                 onClick={() => setActiveImageIndex((i) => (i + 1) % totalImages)}
               >
                 ›
@@ -385,36 +403,17 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
             </div>
           ) : (
             <>
-              {(photo.category || photo.price != null || photo.brand || photo.dimensions || photo.country_of_origin || photo.material) ? (
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  {photo.category && <div><span className="text-muted-foreground">Category:</span> {photo.category}</div>}
-                  {photo.price != null && <div><span className="text-muted-foreground">Price:</span> ${photo.price}</div>}
-                  {photo.brand && <div><span className="text-muted-foreground">Brand:</span> {photo.brand}</div>}
-                  {photo.dimensions && <div><span className="text-muted-foreground">Dimensions:</span> {photo.dimensions}</div>}
-                  {photo.country_of_origin && <div><span className="text-muted-foreground">Made In:</span> {photo.country_of_origin}</div>}
-                  {photo.material && <div><span className="text-muted-foreground">Material:</span> {photo.material}</div>}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground italic">
-                  No product details yet.{" "}
-                  {canEdit && (
-                    <>
-                      <button className="underline text-primary cursor-pointer" onClick={startEditing}>Add manually</button>
-                      {photo.signed_url && (
-                        <> or <button className="underline text-primary cursor-pointer" onClick={handleAnalyze} disabled={analyzing}>
-                          {analyzing ? "Analyzing..." : "use AI Detect"}
-                        </button></>
-                      )}
-                    </>
-                  )}
-                </p>
-              )}
-              {photo.notes && (
-                <div className="text-sm">
-                  <span className="text-muted-foreground">Notes:</span>
-                  <p className="mt-1">{photo.notes}</p>
-                </div>
-              )}
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div><span className="text-muted-foreground">Category:</span> {photo.category || <span className="italic text-muted-foreground/50">—</span>}</div>
+                <div><span className="text-muted-foreground">Price:</span> {photo.price != null ? `$${photo.price}` : <span className="italic text-muted-foreground/50">—</span>}</div>
+                <div><span className="text-muted-foreground">Brand:</span> {photo.brand || <span className="italic text-muted-foreground/50">—</span>}</div>
+                <div><span className="text-muted-foreground">Dimensions:</span> {photo.dimensions || <span className="italic text-muted-foreground/50">—</span>}</div>
+                <div><span className="text-muted-foreground">Made In:</span> {photo.country_of_origin || <span className="italic text-muted-foreground/50">—</span>}</div>
+                <div><span className="text-muted-foreground">Material:</span> {photo.material || <span className="italic text-muted-foreground/50">—</span>}</div>
+              </div>
+              <div className="text-sm">
+                <span className="text-muted-foreground">Notes:</span> {photo.notes || <span className="italic text-muted-foreground/50">—</span>}
+              </div>
             </>
           )}
           <PhotoComments photoId={photo.id} />
