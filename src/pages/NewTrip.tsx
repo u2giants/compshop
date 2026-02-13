@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -10,7 +10,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, MapPin, Loader2 } from "lucide-react";
+import { ArrowLeft, MapPin, Loader2, Store, Star } from "lucide-react";
+
+interface NearbyStore {
+  name: string;
+  address: string;
+  rating: number | null;
+}
 
 export default function NewTrip() {
   const { user } = useAuth();
@@ -21,6 +27,9 @@ export default function NewTrip() {
   const [location, setLocation] = useState("");
   const [store, setStore] = useState("");
   const [locatingDevice, setLocatingDevice] = useState(false);
+  const [nearbyStores, setNearbyStores] = useState<NearbyStore[]>([]);
+  const [loadingStores, setLoadingStores] = useState(false);
+  const coordsRef = useRef<{ lat: number; lng: number } | null>(null);
 
   useEffect(() => {
     detectLocation();
@@ -33,6 +42,9 @@ export default function NewTrip() {
       async (position) => {
         try {
           const { latitude, longitude } = position.coords;
+          coordsRef.current = { lat: latitude, lng: longitude };
+
+          // Reverse geocode for location name
           const res = await fetch(
             `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`
           );
@@ -42,6 +54,9 @@ export default function NewTrip() {
           const country = data.address?.country || "";
           const parts = [city, state, country].filter(Boolean);
           setLocation(parts.join(", "));
+
+          // Fetch nearby stores
+          fetchNearbyStores(latitude, longitude);
         } catch {
         } finally {
           setLocatingDevice(false);
@@ -50,6 +65,30 @@ export default function NewTrip() {
       () => setLocatingDevice(false),
       { timeout: 10000 }
     );
+  };
+
+  const fetchNearbyStores = async (latitude: number, longitude: number) => {
+    setLoadingStores(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("nearby-stores", {
+        body: { latitude, longitude },
+      });
+      if (error) throw error;
+      if (data?.stores) {
+        setNearbyStores(data.stores);
+      }
+    } catch (err: any) {
+      console.error("Failed to fetch nearby stores:", err);
+    } finally {
+      setLoadingStores(false);
+    }
+  };
+
+  const selectNearbyStore = (s: NearbyStore) => {
+    setStore(s.name);
+    if (s.address && !location) {
+      setLocation(s.address);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -109,6 +148,40 @@ export default function NewTrip() {
                 </div>
               </div>
             </div>
+
+            {/* Nearby Store Suggestions */}
+            {(loadingStores || nearbyStores.length > 0) && (
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Store className="h-3.5 w-3.5" /> Nearby stores
+                </Label>
+                {loadingStores ? (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Loader2 className="h-3 w-3 animate-spin" /> Finding stores near you…
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {nearbyStores.map((s, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => selectNearbyStore(s)}
+                        className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
+                        title={s.address}
+                      >
+                        {s.name}
+                        {s.rating && (
+                          <span className="flex items-center gap-0.5 text-muted-foreground">
+                            <Star className="h-3 w-3 fill-current" /> {s.rating}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="date">Date</Label>
