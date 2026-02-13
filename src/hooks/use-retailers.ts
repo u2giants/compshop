@@ -21,7 +21,10 @@ export function useRetailers() {
 
   function getLogoUrl(name: string): string | null {
     const norm = normalize(name);
-    const r = retailers.find((r) => normalize(r.name) === norm);
+    const r = retailers.find((r) => {
+      const rNorm = normalize(r.name);
+      return rNorm === norm || norm.includes(rNorm) || rNorm.includes(norm);
+    });
     if (!r?.logo_path) return null;
     const { data } = supabase.storage.from("retailer-logos").getPublicUrl(r.logo_path);
     return data.publicUrl;
