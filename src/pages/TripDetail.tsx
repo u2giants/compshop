@@ -242,12 +242,13 @@ export default function TripDetail() {
         });
 
         const { data, error } = await supabase.functions.invoke("analyze-photo", {
-          body: { imageBase64: base64, mimeType: blob.type },
+          body: { imageBase64: base64, mimeType: blob.type, categories },
         });
         if (error) throw error;
 
         const updates: Record<string, unknown> = {};
         if (data.product_name) updates.product_name = data.product_name;
+        if (data.category) updates.category = data.category;
         if (data.price != null) updates.price = data.price;
         if (data.dimensions) updates.dimensions = data.dimensions;
         if (data.brand) updates.brand = data.brand;
@@ -468,13 +469,14 @@ export default function TripDetail() {
       });
 
       const { data, error } = await supabase.functions.invoke("analyze-photo", {
-        body: { imageBase64: base64, mimeType: selectedFile.type },
+        body: { imageBase64: base64, mimeType: selectedFile.type, categories },
       });
 
       if (error) throw error;
 
       // Pre-fill the fields
       if (data.product_name) setFormFields((f) => ({ ...f, product_name: data.product_name }));
+      if (data.category) setFormFields((f) => ({ ...f, category: data.category }));
       if (data.price != null) setFormFields((f) => ({ ...f, price: String(data.price) }));
       if (data.dimensions) setFormFields((f) => ({ ...f, dimensions: data.dimensions }));
       if (data.brand) setFormFields((f) => ({ ...f, brand: data.brand }));

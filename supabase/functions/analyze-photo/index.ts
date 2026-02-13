@@ -41,8 +41,12 @@ Deno.serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-    const { imageBase64, mimeType } = await req.json();
+    const { imageBase64, mimeType, categories } = await req.json();
     if (!imageBase64) throw new Error("No image provided");
+
+    const categoryInstruction = categories && categories.length > 0
+      ? `\n  "category": "one of these categories that best fits: [${categories.join(", ")}]",`
+      : `\n  "category": "general product category if identifiable",`;
 
     const response = await fetch(AI_GATEWAY_URL, {
       method: "POST",
@@ -60,7 +64,7 @@ Deno.serve(async (req) => {
                 type: "text",
                 text: `Analyze this product photo. Extract any visible information and return a JSON object with ONLY these fields (use null if not found):
 {
-  "product_name": "name of the product if visible",
+  "product_name": "name of the product if visible",${categoryInstruction}
   "price": numeric price value only (no currency symbol), 
   "dimensions": "size/dimensions if shown on label",
   "brand": "brand name if visible",

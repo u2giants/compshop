@@ -148,7 +148,7 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
       });
 
       const { data, error } = await supabase.functions.invoke("analyze-photo", {
-        body: { imageBase64: base64, mimeType: blob.type },
+        body: { imageBase64: base64, mimeType: blob.type, categories },
       });
 
       if (error) throw error;
@@ -156,6 +156,7 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
       setEditData((d) => ({
         ...d,
         product_name: data.product_name || d.product_name,
+        category: data.category || d.category,
         price: data.price != null ? String(data.price) : d.price,
         dimensions: data.dimensions || d.dimensions,
         brand: data.brand || d.brand,
