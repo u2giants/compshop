@@ -253,6 +253,7 @@ export type Database = {
           date: string
           deleted_at: string | null
           id: string
+          is_draft: boolean
           location: string | null
           name: string
           notes: string | null
@@ -265,6 +266,7 @@ export type Database = {
           date?: string
           deleted_at?: string | null
           id?: string
+          is_draft?: boolean
           location?: string | null
           name: string
           notes?: string | null
@@ -277,6 +279,7 @@ export type Database = {
           date?: string
           deleted_at?: string | null
           id?: string
+          is_draft?: boolean
           location?: string | null
           name?: string
           notes?: string | null

@@ -14,11 +14,12 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Calendar, MapPin, Store, Plus, Users, Filter, X, Upload, Loader2, Trash2, CheckSquare } from "lucide-react";
+import { Calendar, MapPin, Store, Plus, Users, Filter, X, Upload, Loader2, Trash2, CheckSquare, FileText } from "lucide-react";
 import { format } from "date-fns";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import RecycleBin from "@/components/trip/RecycleBin";
+import DraftTrips from "@/components/trip/DraftTrips";
 
 interface TripWithCover extends CachedTrip {
   cover_url?: string;
@@ -44,6 +45,7 @@ export default function Trips() {
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [recycleBinOpen, setRecycleBinOpen] = useState(false);
+  const [draftsOpen, setDraftsOpen] = useState(false);
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSelectedRef = useRef<string | null>(null);
 
@@ -64,7 +66,7 @@ export default function Trips() {
   async function loadTrips() {
     const cached = await getCachedTrips();
     if (cached.length > 0) {
-      setTrips(cached.filter(t => !(t as any).deleted_at).sort((a, b) => b.date.localeCompare(a.date)));
+      setTrips(cached.filter(t => !(t as any).deleted_at && !(t as any).is_draft).sort((a, b) => b.date.localeCompare(a.date)));
       setLoading(false);
     }
 
@@ -78,6 +80,7 @@ export default function Trips() {
         .from("shopping_trips")
         .select("*")
         .is("deleted_at", null)
+        .eq("is_draft", false)
         .order("date", { ascending: false });
 
       if (data) {
@@ -204,7 +207,7 @@ export default function Trips() {
     }
 
     // Step 2: Cluster by date + location (within 1km = same store)
-    const CLUSTER_RADIUS_KM = 1;
+    const CLUSTER_RADIUS_KM = 0.35;
     interface Cluster { date: string; lat: number | null; lng: number | null; indices: number[]; tripId?: string; tripName?: string; isNew?: boolean }
     const clusters: Cluster[] = [];
 
@@ -248,15 +251,16 @@ export default function Trips() {
         tripId = matchedTrip.id;
         tripName = matchedTrip.store;
       } else {
-        const locationLabel = cluster.lat != null ? ` (${cluster.lat.toFixed(3)}, ${cluster.lng!.toFixed(3)})` : "";
-        const storeName = `Auto-import ${format(new Date(cluster.date), "MMM d, yyyy")}${locationLabel}`;
+        const locationLabel = cluster.lat != null ? `(${cluster.lat.toFixed(4)}, ${cluster.lng!.toFixed(4)})` : "";
+        const draftName = `${format(new Date(cluster.date), "MMM d, yyyy")} ${locationLabel}`.trim();
         const { data: newTrip, error } = await supabase
           .from("shopping_trips")
           .insert({
-            name: storeName,
-            store: storeName,
+            name: draftName,
+            store: draftName,
             date: cluster.date,
             created_by: user.id,
+            is_draft: true,
           })
           .select()
           .single();
@@ -268,10 +272,9 @@ export default function Trips() {
 
         await supabase.from("trip_members").insert({ trip_id: newTrip.id, user_id: user.id });
         tripId = newTrip.id;
-        tripName = storeName;
+        tripName = draftName;
         isNew = true;
-        matchedTrip = { ...newTrip, photo_count: 0, member_count: 1 } as TripWithCover;
-        setTrips((prev) => [matchedTrip!, ...prev]);
+        // Don't add drafts to the main trips list
       }
 
       for (const idx of cluster.indices) {
@@ -303,10 +306,14 @@ export default function Trips() {
     setSmartResults(Array.from(results.values()));
     setShowSmartResults(true);
     loadTrips();
+    const draftCount = Array.from(results.values()).filter(r => r.isNew).length;
     toast({
       title: "Smart upload complete",
-      description: `${fileArray.length} photos sorted into ${results.size} trip(s) by date.`,
+      description: draftCount > 0
+        ? `${fileArray.length} photos sorted into ${results.size} trip(s). ${draftCount} draft(s) ready to review.`
+        : `${fileArray.length} photos sorted into ${results.size} trip(s).`,
     });
+    if (draftCount > 0) setDraftsOpen(true);
   }
 
   const filteredTrips = trips.filter((trip) => {
@@ -338,6 +345,9 @@ export default function Trips() {
             </>
           ) : (
             <>
+              <Button variant="ghost" size="icon" onClick={() => setDraftsOpen(true)} title="Draft Trips">
+                <FileText className="h-4 w-4" />
+              </Button>
               <Button variant="ghost" size="icon" onClick={() => setRecycleBinOpen(true)} title="Recycling Bin">
                 <Trash2 className="h-4 w-4" />
               </Button>
@@ -522,6 +532,7 @@ export default function Trips() {
         </div>
       )}
 
+      <DraftTrips open={draftsOpen} onOpenChange={setDraftsOpen} onPublished={loadTrips} />
       <RecycleBin open={recycleBinOpen} onOpenChange={setRecycleBinOpen} onRestored={loadTrips} />
     </div>
   );
