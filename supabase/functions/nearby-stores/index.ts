@@ -50,47 +50,34 @@ Deno.serve(async (req) => {
     const searchRadius = Math.min(Math.max(radius || 150, 50), 5000);
 
     const url = "https://places.googleapis.com/v1/places:searchNearby";
-
-    // Fetch up to 20 results per page, then follow nextPageToken for more
-    let allPlaces: any[] = [];
-    let pageToken: string | undefined;
-    const maxPages = 3; // Up to 60 results
-
-    for (let page = 0; page < maxPages; page++) {
-      const body: any = {
-        maxResultCount: 20,
-        locationRestriction: {
-          circle: {
-            center: { latitude, longitude },
-            radius: searchRadius,
-          },
+    const body = {
+      maxResultCount: 20,
+      locationRestriction: {
+        circle: {
+          center: { latitude, longitude },
+          radius: searchRadius,
         },
-      };
-      if (pageToken) body.pageToken = pageToken;
+      },
+    };
 
-      const res = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Goog-Api-Key": apiKey,
-          "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.rating,places.types,nextPageToken",
-        },
-        body: JSON.stringify(body),
-      });
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": apiKey,
+        "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.rating,places.types",
+      },
+      body: JSON.stringify(body),
+    });
 
-      const data = await res.json();
+    const data = await res.json();
 
-      if (!res.ok) {
-        console.error("Places API (New) error:", JSON.stringify(data));
-        throw new Error(`Places API error [${res.status}]: ${JSON.stringify(data)}`);
-      }
-
-      allPlaces = allPlaces.concat(data.places || []);
-      pageToken = data.nextPageToken;
-      if (!pageToken) break;
+    if (!res.ok) {
+      console.error("Places API (New) error:", JSON.stringify(data));
+      throw new Error(`Places API error [${res.status}]: ${JSON.stringify(data)}`);
     }
 
-    const stores = allPlaces.map((place: any) => ({
+    const stores = (data.places || []).map((place: any) => ({
       name: place.displayName?.text || "",
       address: place.formattedAddress || "",
       rating: place.rating || null,
