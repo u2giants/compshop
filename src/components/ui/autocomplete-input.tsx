@@ -33,7 +33,13 @@ export default function AutocompleteInput({
       return;
     }
     const lower = value.toLowerCase();
-    setFiltered(suggestions.filter((s) => s.toLowerCase().includes(lower)));
+    const matches = suggestions.filter((s) => s.toLowerCase().includes(lower));
+    matches.sort((a, b) => {
+      const aStarts = a.toLowerCase().startsWith(lower) ? 0 : 1;
+      const bStarts = b.toLowerCase().startsWith(lower) ? 0 : 1;
+      return aStarts - bStarts;
+    });
+    setFiltered(matches);
   }, [value, suggestions]);
 
   useEffect(() => {
