@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { uploadPhoto, getSignedPhotoUrl, PRODUCT_CATEGORIES } from "@/lib/supabase-helpers";
+import { uploadPhoto, getSignedPhotoUrl, PRODUCT_CATEGORIES, hashFile, checkDuplicatePhoto } from "@/lib/supabase-helpers";
 import {
   getCachedTrip,
   cacheTrips,
@@ -357,6 +357,7 @@ export default function TripDetail() {
     setUploading(true);
     let successCount = 0;
     let failCount = 0;
+    let dupCount = 0;
 
     for (const file of files) {
       try {
@@ -369,8 +370,13 @@ export default function TripDetail() {
           });
           successCount++;
         } else {
+          const fileHash = await hashFile(file);
+          if (await checkDuplicatePhoto(fileHash)) {
+            dupCount++;
+            continue;
+          }
           const filePath = await uploadPhoto(file, user.id, id);
-          const { error } = await supabase.from("photos").insert({ trip_id: id, user_id: user.id, file_path: filePath });
+          const { error } = await supabase.from("photos").insert({ trip_id: id, user_id: user.id, file_path: filePath, file_hash: fileHash });
           if (error) throw error;
           successCount++;
         }
@@ -382,7 +388,7 @@ export default function TripDetail() {
     setUploading(false);
     toast({
       title: `Bulk upload complete`,
-      description: `${successCount} uploaded${failCount > 0 ? `, ${failCount} failed` : ""}. You can add details to each photo individually.`,
+      description: `${successCount} uploaded${dupCount > 0 ? `, ${dupCount} duplicate${dupCount > 1 ? "s" : ""} skipped` : ""}${failCount > 0 ? `, ${failCount} failed` : ""}. You can add details to each photo individually.`,
     });
     loadPhotos();
     loadPendingPhotos();
@@ -404,9 +410,11 @@ export default function TripDetail() {
           });
           successCount++;
         } else {
+          const fileHash = await hashFile(file);
+          if (await checkDuplicatePhoto(fileHash)) continue;
           const filePath = await uploadPhoto(file, user.id, id);
           const { error } = await supabase.from("photos").insert({
-            trip_id: id, user_id: user.id, file_path: filePath, group_id: targetPhotoId,
+            trip_id: id, user_id: user.id, file_path: filePath, group_id: targetPhotoId, file_hash: fileHash,
           });
           if (error) throw error;
           successCount++;
@@ -489,8 +497,14 @@ export default function TripDetail() {
     }
 
     try {
+      const fileHash = await hashFile(selectedFile);
+      if (await checkDuplicatePhoto(fileHash)) {
+        toast({ title: "Duplicate detected", description: "This photo has already been uploaded.", variant: "destructive" });
+        setUploading(false);
+        return;
+      }
       const filePath = await uploadPhoto(selectedFile, user.id, id);
-      const { error } = await supabase.from("photos").insert({ trip_id: id, user_id: user.id, file_path: filePath, ...metadata });
+      const { error } = await supabase.from("photos").insert({ trip_id: id, user_id: user.id, file_path: filePath, file_hash: fileHash, ...metadata });
       if (error) throw error;
       toast({ title: "Photo uploaded!" });
       setShowUploadDialog(false); setSelectedFile(null); setPreviewUrl(null);

@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import { uploadPhoto } from "@/lib/supabase-helpers";
+import { uploadPhoto, hashFile, checkDuplicatePhoto } from "@/lib/supabase-helpers";
 import {
   getPendingUploads,
   updatePendingUploadStatus,
@@ -36,12 +36,18 @@ async function syncOne(upload: PendingUpload): Promise<boolean> {
     await updatePendingUploadStatus(upload.id, "uploading");
 
     const file = new File([upload.file_blob], upload.file_name, { type: upload.file_blob.type });
+    const fileHash = await hashFile(file);
+    if (await checkDuplicatePhoto(fileHash)) {
+      await removePendingUpload(upload.id);
+      return true;
+    }
     const filePath = await uploadPhoto(file, upload.user_id, upload.trip_id);
 
     const { error } = await supabase.from("photos").insert({
       trip_id: upload.trip_id,
       user_id: upload.user_id,
       file_path: filePath,
+      file_hash: fileHash,
       ...upload.metadata,
     });
 

@@ -6,7 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { cacheTrips, getCachedTrips, clearCachedTrips, type CachedTrip } from "@/lib/offline-db";
 import { useOnlineStatus } from "@/hooks/use-online-status";
 import { useRetailers } from "@/hooks/use-retailers";
-import { getSignedPhotoUrl, uploadPhoto } from "@/lib/supabase-helpers";
+import { getSignedPhotoUrl, uploadPhoto, hashFile, checkDuplicatePhoto } from "@/lib/supabase-helpers";
 import { extractExif, distanceKm } from "@/lib/exif-utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -287,11 +287,14 @@ export default function Trips() {
         uploaded++;
         setSmartProgress(40 + Math.round((uploaded / totalFiles) * 60));
         try {
+          const fileHash = await hashFile(file);
+          if (await checkDuplicatePhoto(fileHash)) continue;
           const filePath = await uploadPhoto(file, user.id, tripId);
           await supabase.from("photos").insert({
             trip_id: tripId,
             user_id: user.id,
             file_path: filePath,
+            file_hash: fileHash,
           });
 
           const existing = results.get(tripId);
