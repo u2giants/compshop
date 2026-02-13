@@ -175,9 +175,10 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
 
   async function handleSave() {
     setSaving(true);
+    const table = chinaMode ? "china_photos" : "photos";
     try {
       const { error } = await supabase
-        .from("photos")
+        .from(table)
         .update({
           product_name: editData.product_name || null,
           category: editData.category || null,
@@ -203,9 +204,10 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
 
   async function handleDelete() {
     if (!confirm("Delete this photo?")) return;
+    const table = chinaMode ? "china_photos" : "photos";
     try {
       await supabase.storage.from("photos").remove([photo.file_path]);
-      const { error } = await supabase.from("photos").delete().eq("id", photo.id);
+      const { error } = await supabase.from(table).delete().eq("id", photo.id);
       if (error) throw error;
       toast({ title: "Photo deleted" });
       onUpdated();
