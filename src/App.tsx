@@ -3,16 +3,18 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { lazy, Suspense } from "react";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import AppShell from "@/components/layout/AppShell";
-import Auth from "@/pages/Auth";
-import Trips from "@/pages/Trips";
-import NewTrip from "@/pages/NewTrip";
-import TripDetail from "@/pages/TripDetail";
-import Profile from "@/pages/Profile";
-import ImportKeep from "@/pages/ImportKeep";
-import ImportTeams from "@/pages/ImportTeams";
-import NotFound from "./pages/NotFound";
+
+const Auth = lazy(() => import("@/pages/Auth"));
+const Trips = lazy(() => import("@/pages/Trips"));
+const NewTrip = lazy(() => import("@/pages/NewTrip"));
+const TripDetail = lazy(() => import("@/pages/TripDetail"));
+const Profile = lazy(() => import("@/pages/Profile"));
+const ImportKeep = lazy(() => import("@/pages/ImportKeep"));
+const ImportTeams = lazy(() => import("@/pages/ImportTeams"));
+const NotFound = lazy(() => import("@/pages/NotFound"));
 
 const queryClient = new QueryClient();
 
@@ -30,6 +32,12 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+const PageLoader = () => (
+  <div className="flex min-h-screen items-center justify-center bg-background">
+    <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+  </div>
+);
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -37,25 +45,27 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
-          <Routes>
-            <Route path="/auth" element={<Auth />} />
-            <Route
-              element={
-                <ProtectedRoute>
-                  <AppShell />
-                </ProtectedRoute>
-              }
-            >
-              <Route path="/" element={<Trips />} />
-              <Route path="/trips/new" element={<NewTrip />} />
-              <Route path="/trips/:id" element={<TripDetail />} />
-              <Route path="/search" element={<Navigate to="/" replace />} />
-              <Route path="/profile" element={<Profile />} />
-              <Route path="/import/keep" element={<ImportKeep />} />
-              <Route path="/import/teams" element={<ImportTeams />} />
-            </Route>
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+          <Suspense fallback={<PageLoader />}>
+            <Routes>
+              <Route path="/auth" element={<Auth />} />
+              <Route
+                element={
+                  <ProtectedRoute>
+                    <AppShell />
+                  </ProtectedRoute>
+                }
+              >
+                <Route path="/" element={<Trips />} />
+                <Route path="/trips/new" element={<NewTrip />} />
+                <Route path="/trips/:id" element={<TripDetail />} />
+                <Route path="/search" element={<Navigate to="/" replace />} />
+                <Route path="/profile" element={<Profile />} />
+                <Route path="/import/keep" element={<ImportKeep />} />
+                <Route path="/import/teams" element={<ImportTeams />} />
+              </Route>
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </Suspense>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
