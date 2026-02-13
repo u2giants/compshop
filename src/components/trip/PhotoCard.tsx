@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DollarSign, MapPin, Ruler, Layers, Tag, MessageSquare, Trash2, Sparkles, Loader2 } from "lucide-react";
+import { DollarSign, MapPin, Ruler, Layers, Tag, MessageSquare, Trash2, Sparkles, Loader2, ImageIcon } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import PhotoComments from "./PhotoComments";
 
@@ -219,11 +219,9 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
   }
 
   const metaItems = [
-    photo.price != null && { icon: DollarSign, text: `${photo.price}` },
-    photo.country_of_origin && { icon: MapPin, text: photo.country_of_origin },
+    (photo as any).image_type && { icon: ImageIcon, text: (photo as any).image_type },
     photo.dimensions && { icon: Ruler, text: displayDimensions(photo.dimensions) },
-    photo.material && { icon: Layers, text: photo.material },
-    photo.brand && { icon: Tag, text: photo.brand },
+    photo.price != null && { icon: DollarSign, text: `${photo.price}` },
   ].filter(Boolean) as { icon: any; text: string }[];
 
   return (
