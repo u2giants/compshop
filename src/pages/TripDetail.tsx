@@ -139,11 +139,37 @@ export default function TripDetail() {
 
   const [downloading, setDownloading] = useState(false);
 
+  function buildFileName(photo: Photo, indexInGroup?: number): string {
+    const ext = photo.file_path.split(".").pop() || "jpg";
+    // YYYYMM from trip date or photo created_at
+    const dateStr = trip?.date || photo.created_at;
+    const d = new Date(dateStr);
+    const yyyymm = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`;
+    // Store name — sanitize for filename
+    const storeName = (trip?.store || "Store").replace(/[^a-zA-Z0-9]/g, "");
+    // Product description — sanitize
+    const desc = (photo.product_name || "Photo").replace(/[^a-zA-Z0-9 ]/g, "").replace(/\s+/g, "");
+    const suffix = indexInGroup && indexInGroup > 1 ? `_${indexInGroup}` : "";
+    return `${yyyymm}_${storeName}_${desc}${suffix}.${ext}`;
+  }
+
   async function handleDownloadAll() {
     if (photos.length === 0) return;
     setDownloading(true);
     let count = 0;
-    for (const photo of photos) {
+
+    // Build grouped structure for correct numbering
+    const groups = groupPhotos(photos);
+    const downloadList: { photo: Photo; fileName: string }[] = [];
+
+    for (const { primary, extras } of groups) {
+      downloadList.push({ photo: primary, fileName: buildFileName(primary, 1) });
+      extras.forEach((ex, i) => {
+        downloadList.push({ photo: ex, fileName: buildFileName(primary, i + 2) });
+      });
+    }
+
+    for (const { photo, fileName } of downloadList) {
       try {
         const url = photo.signed_url;
         if (!url) continue;
@@ -151,8 +177,7 @@ export default function TripDetail() {
         const blob = await res.blob();
         const a = document.createElement("a");
         a.href = URL.createObjectURL(blob);
-        const ext = photo.file_path.split(".").pop() || "jpg";
-        a.download = `${photo.product_name || "photo"}_${count + 1}.${ext}`;
+        a.download = fileName;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
