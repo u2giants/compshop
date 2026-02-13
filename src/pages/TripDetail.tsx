@@ -143,16 +143,13 @@ export default function TripDetail() {
 
   function buildFileName(photo: Photo, indexInGroup?: number): string {
     const ext = photo.file_path.split(".").pop() || "jpg";
-    // YYYYMM from trip date or photo created_at
     const dateStr = trip?.date || photo.created_at;
     const d = new Date(dateStr);
-    const yyyymm = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`;
-    // Store name — sanitize for filename
+    const yyyymmdd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
     const storeName = (trip?.store || "Store").replace(/[^a-zA-Z0-9]/g, "");
-    // Product description — sanitize
     const desc = (photo.product_name || "Photo").replace(/[^a-zA-Z0-9 ]/g, "").replace(/\s+/g, "");
     const suffix = indexInGroup && indexInGroup > 1 ? `_${indexInGroup}` : "";
-    return `${yyyymm}_${storeName}_${desc}${suffix}.${ext}`;
+    return `${yyyymmdd}_${storeName}_${desc}${suffix}.${ext}`;
   }
 
   async function handleDownloadAll() {

@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DollarSign, MapPin, Ruler, Layers, Tag, MessageSquare, Trash2, Pencil, Sparkles, Loader2 } from "lucide-react";
+import { DollarSign, MapPin, Ruler, Layers, Tag, MessageSquare, Trash2, Sparkles, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import PhotoComments from "./PhotoComments";
 
@@ -47,7 +47,6 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
   const countries = useCountries();
   const [showDetail, setShowDetail] = useState(false);
   const [showComments, setShowComments] = useState(false);
-  const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -67,10 +66,10 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
     notes: photo.notes || "",
   });
 
-  const canEdit = isAdmin || photo.user_id === user?.id;
-  const canDelete = canEdit;
-
-  function startEditing() {
+  // Sync editData when photo prop changes
+  const [lastPhotoId, setLastPhotoId] = useState(photo.id);
+  if (photo.id !== lastPhotoId) {
+    setLastPhotoId(photo.id);
     setEditData({
       product_name: photo.product_name || "",
       category: photo.category || "",
@@ -81,14 +80,15 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
       material: photo.material || "",
       notes: photo.notes || "",
     });
-    setEditing(true);
   }
+
+  const canEdit = isAdmin || photo.user_id === user?.id;
+  const canDelete = canEdit;
 
   async function handleAnalyze() {
     if (!photo.signed_url) return;
     setAnalyzing(true);
     try {
-      // Fetch the image and convert to base64
       const res = await fetch(photo.signed_url);
       const blob = await res.blob();
       const base64 = await new Promise<string>((resolve, reject) => {
@@ -104,7 +104,6 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
 
       if (error) throw error;
 
-      // Pre-fill edit fields and enter edit mode
       setEditData((d) => ({
         ...d,
         product_name: data.product_name || d.product_name,
@@ -114,8 +113,7 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
         material: data.material || d.material,
         country_of_origin: data.country_of_origin || d.country_of_origin,
       }));
-      setEditing(true);
-      toast({ title: "AI analysis complete", description: "Fields have been pre-filled. Review and save." });
+      toast({ title: "AI analysis complete", description: "Fields have been pre-filled." });
     } catch (err: any) {
       toast({ title: "Analysis failed", description: err.message, variant: "destructive" });
     } finally {
@@ -141,7 +139,6 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
         .eq("id", photo.id);
       if (error) throw error;
       toast({ title: "Photo updated!" });
-      setEditing(false);
       onUpdated();
     } catch (err: any) {
       toast({ title: "Update failed", description: err.message, variant: "destructive" });
@@ -189,7 +186,6 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
         onDrop={(e) => {
           e.preventDefault();
           setDragOver(false);
-          // Check for OS file drops first
           if (e.dataTransfer.files && e.dataTransfer.files.length > 0 && onFileDrop) {
             const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith("image/"));
             if (files.length > 0) {
@@ -197,7 +193,6 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
               return;
             }
           }
-          // Internal photo grouping drag
           const draggedId = e.dataTransfer.getData("text/plain");
           if (draggedId && draggedId !== photo.id && onGroupPhoto) {
             onGroupPhoto(draggedId, photo.id);
@@ -263,11 +258,6 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
             <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={() => setShowComments(true)}>
               <MessageSquare className="h-3 w-3" /> Comment
             </Button>
-            {canEdit && (
-              <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={() => { setShowDetail(true); startEditing(); }}>
-                <Pencil className="h-3 w-3" /> Edit
-              </Button>
-            )}
             {canDelete && (
               <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive" onClick={handleDelete}>
                 <Trash2 className="h-3 w-3" />
@@ -278,11 +268,11 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
       </Card>
 
       {/* Full detail / edit dialog */}
-      <Dialog open={showDetail} onOpenChange={(open) => { setShowDetail(open); if (!open) setEditing(false); }}>
+      <Dialog open={showDetail} onOpenChange={setShowDetail}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <div className="flex items-center justify-between gap-2">
-              <DialogTitle className="font-sans">{photo.product_name || "Photo Details"}</DialogTitle>
+              <DialogTitle className="font-sans">{editData.product_name || "Photo Details"}</DialogTitle>
               <div className="flex items-center gap-1">
                 {canEdit && photo.signed_url && (
                   <Button
@@ -296,21 +286,18 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
                     {analyzing ? "Analyzing..." : "AI Detect"}
                   </Button>
                 )}
-                {canEdit && !editing && (
-                  <Button variant="outline" size="sm" className="gap-1" onClick={startEditing}>
-                    <Pencil className="h-3.5 w-3.5" /> Edit
-                  </Button>
-                )}
               </div>
             </div>
           </DialogHeader>
+
+          {/* Image with max height so fields are always visible */}
           {totalImages > 1 ? (
             <div className="relative">
               <div className="overflow-auto touch-pan-x touch-pan-y">
                 <img
                   src={allImages[activeImageIndex]?.signed_url || ""}
                   alt={photo.product_name || "Photo"}
-                  className="w-full rounded-lg origin-center"
+                  className="w-full max-h-[40vh] object-contain rounded-lg origin-center"
                   style={{ touchAction: "pinch-zoom" }}
                 />
               </div>
@@ -342,80 +329,65 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
             </div>
           ) : photo.signed_url ? (
             <div className="overflow-auto touch-pan-x touch-pan-y">
-              <img src={photo.signed_url} alt={photo.product_name || "Photo"} className="w-full rounded-lg origin-center" style={{ touchAction: "pinch-zoom" }} />
+              <img src={photo.signed_url} alt={photo.product_name || "Photo"} className="w-full max-h-[40vh] object-contain rounded-lg origin-center" style={{ touchAction: "pinch-zoom" }} />
             </div>
           ) : null}
 
-          {editing ? (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="col-span-2 space-y-2">
-                  <Label>Product Name</Label>
-                  <Input value={editData.product_name} onChange={(e) => setEditData((d) => ({ ...d, product_name: e.target.value }))} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Category</Label>
-                  <Select value={editData.category} onValueChange={(v) => setEditData((d) => ({ ...d, category: v }))}>
-                    <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
-                    <SelectContent>
-                      {PRODUCT_CATEGORIES.map((c) => (
-                        <SelectItem key={c} value={c}>{c}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Price</Label>
-                  <Input type="number" step="0.01" value={editData.price} onChange={(e) => setEditData((d) => ({ ...d, price: e.target.value }))} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Brand</Label>
-                  <Input value={editData.brand} onChange={(e) => setEditData((d) => ({ ...d, brand: e.target.value }))} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Size/Dimensions</Label>
-                  <Input value={editData.dimensions} onChange={(e) => setEditData((d) => ({ ...d, dimensions: e.target.value }))} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Made In</Label>
-                  <AutocompleteInput
-                    value={editData.country_of_origin}
-                    onChange={(v) => setEditData((d) => ({ ...d, country_of_origin: v }))}
-                    suggestions={countries}
-                    placeholder="Country"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Material</Label>
-                  <Input value={editData.material} onChange={(e) => setEditData((d) => ({ ...d, material: e.target.value }))} />
-                </div>
-                <div className="col-span-2 space-y-2">
-                  <Label>Notes</Label>
-                  <Textarea rows={2} value={editData.notes} onChange={(e) => setEditData((d) => ({ ...d, notes: e.target.value }))} />
-                </div>
+          {/* Always-editable fields */}
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2 space-y-1">
+                <Label className="text-xs text-muted-foreground">Product Name</Label>
+                <Input value={editData.product_name} onChange={(e) => setEditData((d) => ({ ...d, product_name: e.target.value }))} placeholder="Product name" disabled={!canEdit} />
               </div>
-              <div className="flex gap-2">
-                <Button onClick={handleSave} disabled={saving} className="flex-1">
-                  {saving ? "Saving..." : "Save Changes"}
-                </Button>
-                <Button variant="outline" onClick={() => setEditing(false)}>Cancel</Button>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Category</Label>
+                <Select value={editData.category} onValueChange={(v) => setEditData((d) => ({ ...d, category: v }))} disabled={!canEdit}>
+                  <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
+                  <SelectContent>
+                    {PRODUCT_CATEGORIES.map((c) => (
+                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Price</Label>
+                <Input type="number" step="0.01" value={editData.price} onChange={(e) => setEditData((d) => ({ ...d, price: e.target.value }))} placeholder="$0.00" disabled={!canEdit} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Brand</Label>
+                <Input value={editData.brand} onChange={(e) => setEditData((d) => ({ ...d, brand: e.target.value }))} placeholder="Brand" disabled={!canEdit} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Size/Dimensions</Label>
+                <Input value={editData.dimensions} onChange={(e) => setEditData((d) => ({ ...d, dimensions: e.target.value }))} placeholder='e.g. 12"x8"' disabled={!canEdit} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Made In</Label>
+                <AutocompleteInput
+                  value={editData.country_of_origin}
+                  onChange={(v) => setEditData((d) => ({ ...d, country_of_origin: v }))}
+                  suggestions={countries}
+                  placeholder="Country"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Material</Label>
+                <Input value={editData.material} onChange={(e) => setEditData((d) => ({ ...d, material: e.target.value }))} placeholder="e.g. Ceramic" disabled={!canEdit} />
+              </div>
+              <div className="col-span-2 space-y-1">
+                <Label className="text-xs text-muted-foreground">Notes</Label>
+                <Textarea rows={2} value={editData.notes} onChange={(e) => setEditData((d) => ({ ...d, notes: e.target.value }))} placeholder="Notes..." disabled={!canEdit} />
               </div>
             </div>
-          ) : (
-            <>
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div><span className="text-muted-foreground">Category:</span> {photo.category || <span className="italic text-muted-foreground/50">—</span>}</div>
-                <div><span className="text-muted-foreground">Price:</span> {photo.price != null ? `$${photo.price}` : <span className="italic text-muted-foreground/50">—</span>}</div>
-                <div><span className="text-muted-foreground">Brand:</span> {photo.brand || <span className="italic text-muted-foreground/50">—</span>}</div>
-                <div><span className="text-muted-foreground">Dimensions:</span> {photo.dimensions || <span className="italic text-muted-foreground/50">—</span>}</div>
-                <div><span className="text-muted-foreground">Made In:</span> {photo.country_of_origin || <span className="italic text-muted-foreground/50">—</span>}</div>
-                <div><span className="text-muted-foreground">Material:</span> {photo.material || <span className="italic text-muted-foreground/50">—</span>}</div>
-              </div>
-              <div className="text-sm">
-                <span className="text-muted-foreground">Notes:</span> {photo.notes || <span className="italic text-muted-foreground/50">—</span>}
-              </div>
-            </>
-          )}
+            {canEdit && (
+              <Button onClick={handleSave} disabled={saving} className="w-full">
+                {saving ? "Saving..." : "Save Changes"}
+              </Button>
+            )}
+          </div>
+
           <PhotoComments photoId={photo.id} />
         </DialogContent>
       </Dialog>
