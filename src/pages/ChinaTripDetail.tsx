@@ -14,9 +14,11 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Camera, Calendar, MapPin, Factory, Sparkles, Loader2, Download } from "lucide-react";
+import { ArrowLeft, Camera, Calendar, MapPin, Factory, Sparkles, Loader2, Download, Images, ArrowRightLeft, PenLine } from "lucide-react";
 import { format } from "date-fns";
 import PhotoCard from "@/components/trip/PhotoCard";
+import ChinaMoveToTripDialog from "@/components/trip/ChinaMoveToTripDialog";
+import BulkEditDialog from "@/components/trip/BulkEditDialog";
 import AutocompleteInput from "@/components/ui/autocomplete-input";
 
 interface ChinaTrip {
@@ -84,6 +86,73 @@ export default function ChinaTripDetail() {
   const [formFields, setFormFields] = useState({
     product_name: "", category: "", price: "", brand: "", dimensions: "", material: "", notes: "",
   });
+  const [selectedPhotos, setSelectedPhotos] = useState<Set<string>>(new Set());
+  const [showBulkMove, setShowBulkMove] = useState(false);
+  const [showBulkEdit, setShowBulkEdit] = useState(false);
+  const [bulkAnalyzing, setBulkAnalyzing] = useState(false);
+  const [bulkAnalyzeProgress, setBulkAnalyzeProgress] = useState(0);
+
+  function toggleSelectPhoto(photoId: string) {
+    setSelectedPhotos((prev) => {
+      const next = new Set(prev);
+      if (next.has(photoId)) next.delete(photoId); else next.add(photoId);
+      return next;
+    });
+  }
+
+  async function handleBulkAiDetect() {
+    const photosWithoutMeta = photos.filter(
+      (p) => !p.product_name && !p.brand && !p.price && p.signed_url
+    );
+    if (photosWithoutMeta.length === 0) {
+      toast({ title: "All photos already have metadata" });
+      return;
+    }
+    setBulkAnalyzing(true);
+    setBulkAnalyzeProgress(0);
+    let success = 0;
+
+    for (let i = 0; i < photosWithoutMeta.length; i++) {
+      const photo = photosWithoutMeta[i];
+      setBulkAnalyzeProgress(Math.round((i / photosWithoutMeta.length) * 100));
+      try {
+        const res = await fetch(photo.signed_url!);
+        const blob = await res.blob();
+        const reader = new FileReader();
+        const base64 = await new Promise<string>((resolve, reject) => {
+          reader.onload = () => resolve((reader.result as string).split(",")[1]);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+        const { data, error } = await supabase.functions.invoke("analyze-photo", {
+          body: { imageBase64: base64, mimeType: blob.type, categories },
+        });
+        if (error) continue;
+        const updates: Record<string, unknown> = {};
+        if (data.product_name) updates.product_name = data.product_name;
+        if (data.category) updates.category = data.category;
+        if (data.price != null) updates.price = data.price;
+        if (data.dimensions) updates.dimensions = data.dimensions;
+        if (data.brand) updates.brand = data.brand;
+        if (data.material) updates.material = data.material;
+        if (data.country_of_origin) updates.country_of_origin = data.country_of_origin;
+        if (Object.keys(updates).length > 0) {
+          await supabase.from("china_photos").update(updates).eq("id", photo.id);
+          success++;
+        }
+      } catch (err) {
+        console.error("Bulk AI detect failed for:", photo.id, err);
+      }
+    }
+
+    setBulkAnalyzeProgress(100);
+    setBulkAnalyzing(false);
+    toast({
+      title: "Bulk AI detection complete",
+      description: `${success} of ${photosWithoutMeta.length} photos updated with detected metadata.`,
+    });
+    loadPhotos();
+  }
 
   useEffect(() => {
     if (!id) return;
@@ -286,6 +355,35 @@ export default function ChinaTripDetail() {
           {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
           {uploading ? "Uploading..." : "Add Photos"}
         </Button>
+        <Button variant="outline" onClick={() => { fileInputRef.current?.click(); }} className="gap-2">
+          <Images className="h-4 w-4" /> Bulk Upload
+        </Button>
+        {photos.length > 0 && (
+          <>
+            <Button
+              variant="outline"
+              onClick={handleBulkAiDetect}
+              disabled={bulkAnalyzing}
+              className="gap-2"
+            >
+              <Sparkles className="h-4 w-4" />
+              {bulkAnalyzing ? `AI Detecting... ${bulkAnalyzeProgress}%` : "AI Detect All"}
+            </Button>
+          </>
+        )}
+        {selectedPhotos.size > 0 && (
+          <>
+            <Button variant="outline" onClick={() => setShowBulkEdit(true)} className="gap-2">
+              <PenLine className="h-4 w-4" /> Edit {selectedPhotos.size} Selected
+            </Button>
+            <Button variant="outline" onClick={() => setShowBulkMove(true)} className="gap-2">
+              <ArrowRightLeft className="h-4 w-4" /> Move {selectedPhotos.size} Selected
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setSelectedPhotos(new Set())}>
+              Clear Selection
+            </Button>
+          </>
+        )}
       </div>
 
       {/* Photos grid */}
@@ -308,6 +406,9 @@ export default function ChinaTripDetail() {
               onUpdated={loadPhotos}
               onGroupPhoto={handleGroupPhoto}
               chinaMode
+              selected={selectedPhotos.has(primary.id)}
+              onSelect={toggleSelectPhoto}
+              selectionMode={selectedPhotos.size > 0}
               onFileDrop={(files, targetId) => {
                 if (!user || !id) return;
                 files.forEach(async (file) => {
@@ -382,6 +483,25 @@ export default function ChinaTripDetail() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {trip && (
+        <ChinaMoveToTripDialog
+          open={showBulkMove}
+          onOpenChange={setShowBulkMove}
+          photoIds={Array.from(selectedPhotos)}
+          currentTripId={trip.id}
+          onMoved={() => { setSelectedPhotos(new Set()); loadPhotos(); }}
+        />
+      )}
+
+      <BulkEditDialog
+        open={showBulkEdit}
+        onOpenChange={setShowBulkEdit}
+        photoIds={Array.from(selectedPhotos)}
+        photos={photos.map((p) => ({ id: p.id, product_name: p.product_name }))}
+        onApplied={() => { setSelectedPhotos(new Set()); loadPhotos(); }}
+        chinaMode
+      />
     </div>
   );
 }

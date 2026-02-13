@@ -24,9 +24,10 @@ interface Props {
   /** We need existing photos to append to product_name */
   photos: Photo[];
   onApplied: () => void;
+  chinaMode?: boolean;
 }
 
-export default function BulkEditDialog({ open, onOpenChange, photoIds, photos, onApplied }: Props) {
+export default function BulkEditDialog({ open, onOpenChange, photoIds, photos, onApplied, chinaMode }: Props) {
   const { toast } = useToast();
   const imageTypes = useImageTypes();
   const countries = useCountries();
@@ -81,7 +82,7 @@ export default function BulkEditDialog({ open, onOpenChange, photoIds, photos, o
       // If only shared (no append), we can do a single bulk update
       if (hasSharedUpdate && !hasAppend) {
         const { error } = await supabase
-          .from("photos")
+          .from(chinaMode ? "china_photos" : "photos")
           .update(sharedUpdate)
           .in("id", photoIds);
         if (error) throw error;
@@ -97,7 +98,7 @@ export default function BulkEditDialog({ open, onOpenChange, photoIds, photos, o
               : appendText;
           }
           const { error } = await supabase
-            .from("photos")
+            .from(chinaMode ? "china_photos" : "photos")
             .update(update)
             .eq("id", pid);
           if (error) throw error;
