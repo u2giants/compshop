@@ -18,6 +18,7 @@ import {
 import { runSync } from "@/lib/sync-service";
 import { useOnlineStatus } from "@/hooks/use-online-status";
 import { useCountries } from "@/hooks/use-countries";
+import { useRetailers } from "@/hooks/use-retailers";
 import AutocompleteInput from "@/components/ui/autocomplete-input";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -88,6 +89,7 @@ export default function TripDetail() {
   const { toast } = useToast();
   const online = useOnlineStatus();
   const countries = useCountries();
+  const { getLogoUrl } = useRetailers();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -485,7 +487,14 @@ export default function TripDetail() {
       <div className="mb-6">
         <h1 className="font-serif text-2xl md:text-3xl">{trip.name}</h1>
         <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-          <span className="flex items-center gap-1"><Store className="h-3.5 w-3.5" /> {trip.store}</span>
+          {(() => {
+            const logoUrl = getLogoUrl(trip.store);
+            return logoUrl ? (
+              <img src={logoUrl} alt={trip.store} className="h-6 object-contain" title={trip.store} />
+            ) : (
+              <span className="flex items-center gap-1"><Store className="h-3.5 w-3.5" /> {trip.store}</span>
+            );
+          })()}
           <span className="flex items-center gap-1"><Calendar className="h-3.5 w-3.5" /> {format(new Date(trip.date), "MMM d, yyyy")}</span>
           {trip.location && <span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5" /> {trip.location}</span>}
         </div>
