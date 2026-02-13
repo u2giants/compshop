@@ -1,17 +1,22 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { cacheTrips, getCachedTrips, type CachedTrip } from "@/lib/offline-db";
 import { useOnlineStatus } from "@/hooks/use-online-status";
 import { useRetailers } from "@/hooks/use-retailers";
-import { getSignedPhotoUrl } from "@/lib/supabase-helpers";
+import { getSignedPhotoUrl, uploadPhoto } from "@/lib/supabase-helpers";
+import { extractExif, distanceKm } from "@/lib/exif-utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Calendar, MapPin, Store, Plus, Users, Filter, X } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Calendar, MapPin, Store, Plus, Users, Filter, X, Upload, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
 
 interface TripWithCover extends CachedTrip {
   cover_url?: string;
@@ -21,11 +26,17 @@ export default function Trips() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const online = useOnlineStatus();
+  const { toast } = useToast();
   const { retailerNames, getLogoUrl } = useRetailers();
   const [trips, setTrips] = useState<TripWithCover[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterDate, setFilterDate] = useState("");
   const [filterRetailer, setFilterRetailer] = useState("");
+  const smartUploadRef = useRef<HTMLInputElement>(null);
+  const [smartUploading, setSmartUploading] = useState(false);
+  const [smartProgress, setSmartProgress] = useState(0);
+  const [showSmartResults, setShowSmartResults] = useState(false);
+  const [smartResults, setSmartResults] = useState<{ tripName: string; count: number; isNew: boolean }[]>([]);
 
   useEffect(() => {
     if (!user) return;
@@ -85,6 +96,92 @@ export default function Trips() {
     setLoading(false);
   }
 
+  async function handleSmartUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files;
+    if (!files || files.length === 0 || !user) return;
+    setSmartUploading(true);
+    setSmartProgress(0);
+
+    const fileArray = Array.from(files);
+    const results: Map<string, { tripId: string; tripName: string; count: number; isNew: boolean }> = new Map();
+
+    // Parse location from trip data (simple lat/lng from location string isn't available,
+    // so we match by date only, or create new trips)
+    for (let i = 0; i < fileArray.length; i++) {
+      const file = fileArray[i];
+      setSmartProgress(Math.round((i / fileArray.length) * 100));
+
+      const exif = await extractExif(file);
+      const photoDate = exif.dateTime || new Date().toISOString().split("T")[0];
+
+      // Try to find an existing trip with matching date
+      let matchedTrip = trips.find((t) => t.date === photoDate);
+
+      let tripId: string;
+      let tripName: string;
+      let isNew = false;
+
+      if (matchedTrip) {
+        tripId = matchedTrip.id;
+        tripName = matchedTrip.store;
+      } else {
+        // Create a new trip
+        const storeName = `Auto-import ${format(new Date(photoDate), "MMM d, yyyy")}`;
+        const { data: newTrip, error } = await supabase
+          .from("shopping_trips")
+          .insert({
+            name: storeName,
+            store: storeName,
+            date: photoDate,
+            created_by: user.id,
+          })
+          .select()
+          .single();
+
+        if (error || !newTrip) {
+          console.error("Failed to create trip:", error);
+          continue;
+        }
+
+        await supabase.from("trip_members").insert({ trip_id: newTrip.id, user_id: user.id });
+        tripId = newTrip.id;
+        tripName = storeName;
+        isNew = true;
+        // Add to local trips so subsequent photos on same date match
+        matchedTrip = { ...newTrip, photo_count: 0, member_count: 1 } as TripWithCover;
+        setTrips((prev) => [matchedTrip!, ...prev]);
+      }
+
+      try {
+        const filePath = await uploadPhoto(file, user.id, tripId);
+        await supabase.from("photos").insert({
+          trip_id: tripId,
+          user_id: user.id,
+          file_path: filePath,
+        });
+
+        const existing = results.get(tripId);
+        if (existing) {
+          existing.count++;
+        } else {
+          results.set(tripId, { tripId, tripName, count: 1, isNew });
+        }
+      } catch (err) {
+        console.error("Upload failed for:", file.name, err);
+      }
+    }
+
+    setSmartProgress(100);
+    setSmartUploading(false);
+    setSmartResults(Array.from(results.values()));
+    setShowSmartResults(true);
+    loadTrips();
+    toast({
+      title: "Smart upload complete",
+      description: `${fileArray.length} photos sorted into ${results.size} trip(s) by date.`,
+    });
+  }
+
   const filteredTrips = trips.filter((trip) => {
     if (filterDate && trip.date !== filterDate) return false;
     if (filterRetailer && trip.store.toLowerCase() !== filterRetailer.toLowerCase()) return false;
@@ -103,11 +200,49 @@ export default function Trips() {
           <h1 className="font-serif text-3xl md:text-4xl">Shopping Trips</h1>
           <p className="mt-1 text-muted-foreground">Your team's comparison shopping intel</p>
         </div>
-        <Button onClick={() => navigate("/trips/new")} className="gap-2">
-          <Plus className="h-4 w-4" />
-          <span className="hidden sm:inline">New Trip</span>
-        </Button>
+        <div className="flex items-center gap-2">
+          <input ref={smartUploadRef} type="file" accept="image/*" multiple className="hidden" onChange={handleSmartUpload} />
+          <Button variant="outline" onClick={() => smartUploadRef.current?.click()} disabled={smartUploading} className="gap-2">
+            {smartUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+            {smartUploading ? `${smartProgress}%` : "Smart Upload"}
+          </Button>
+          <Button onClick={() => navigate("/trips/new")} className="gap-2">
+            <Plus className="h-4 w-4" />
+            <span className="hidden sm:inline">New Trip</span>
+          </Button>
+        </div>
       </div>
+
+      {/* Smart upload progress */}
+      {smartUploading && (
+        <div className="mb-4">
+          <Progress value={smartProgress} className="h-2" />
+          <p className="mt-1 text-xs text-muted-foreground">Reading EXIF data and sorting photos by date...</p>
+        </div>
+      )}
+
+      {/* Smart upload results dialog */}
+      <Dialog open={showSmartResults} onOpenChange={setShowSmartResults}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-serif">Smart Upload Results</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            {smartResults.map((r, i) => (
+              <div key={i} className="flex items-center justify-between rounded-md border p-3 text-sm">
+                <div>
+                  <p className="font-medium">{r.tripName}</p>
+                  <p className="text-xs text-muted-foreground">{r.count} photo{r.count !== 1 ? "s" : ""}</p>
+                </div>
+                <Badge variant={r.isNew ? "default" : "secondary"}>
+                  {r.isNew ? "New trip" : "Existing"}
+                </Badge>
+              </div>
+            ))}
+          </div>
+          <Button onClick={() => setShowSmartResults(false)} className="w-full">Done</Button>
+        </DialogContent>
+      </Dialog>
 
       {/* Filters */}
       {trips.length > 0 && (
