@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from "react";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -31,6 +32,7 @@ export default function Trips() {
   const online = useOnlineStatus();
   const { toast } = useToast();
   const { retailerNames, getLogoUrl } = useRetailers();
+  const isMobile = useIsMobile();
   const [trips, setTrips] = useState<TripWithCover[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterDate, setFilterDate] = useState("");
@@ -332,7 +334,7 @@ export default function Trips() {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="font-sans text-3xl md:text-4xl">Shopping Trips</h1>
-          <p className="mt-1 text-muted-foreground">Your team's comparison shopping intel</p>
+          <p className="mt-1 text-muted-foreground hidden md:block">Your team's comparison shopping intel</p>
         </div>
         <div className="flex items-center gap-2">
           {selectMode ? (
@@ -403,10 +405,10 @@ export default function Trips() {
 
       {/* Filters */}
       {trips.length > 0 && (
-        <div className="mb-4 flex flex-wrap items-center gap-3">
-          <Filter className="h-4 w-4 text-muted-foreground" />
+        <div className="mb-4 flex flex-wrap items-center gap-2 md:gap-3">
+          <Filter className="h-4 w-4 text-muted-foreground hidden md:block" />
           <Select value={filterDate} onValueChange={setFilterDate}>
-            <SelectTrigger className="w-[160px]">
+            <SelectTrigger className="w-[130px] md:w-[160px]">
               <SelectValue placeholder="Filter by date" />
             </SelectTrigger>
             <SelectContent>
@@ -416,8 +418,8 @@ export default function Trips() {
             </SelectContent>
           </Select>
           <Select value={filterRetailer} onValueChange={setFilterRetailer}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Filter by retailer" />
+            <SelectTrigger className="w-[120px] md:w-[180px]">
+              <SelectValue placeholder={isMobile ? "Filter by str" : "Filter by retailer"} />
             </SelectTrigger>
             <SelectContent>
               {uniqueStores.map((s) => (

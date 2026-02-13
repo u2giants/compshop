@@ -431,8 +431,8 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
 
           {/* Always-editable fields */}
           <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="col-span-2 space-y-1">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              <div className="col-span-2 md:col-span-3 space-y-1">
                 <Label className="text-xs text-muted-foreground">Product Name</Label>
                 <Input value={editData.product_name} onChange={(e) => setEditData((d) => ({ ...d, product_name: e.target.value }))} placeholder="Product name" disabled={!canEdit} />
               </div>
@@ -483,7 +483,7 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
                   </SelectContent>
                 </Select>
               </div>
-              <div className="col-span-2 space-y-1">
+              <div className="col-span-2 md:col-span-3 space-y-1">
                 <Label className="text-xs text-muted-foreground">Notes</Label>
                 <Textarea rows={2} value={editData.notes} onChange={(e) => setEditData((d) => ({ ...d, notes: e.target.value }))} placeholder="Notes..." disabled={!canEdit} />
               </div>
