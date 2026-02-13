@@ -3,7 +3,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { cacheTrips, getCachedTrips, type CachedTrip } from "@/lib/offline-db";
+import { cacheTrips, getCachedTrips, clearCachedTrips, type CachedTrip } from "@/lib/offline-db";
 import { useOnlineStatus } from "@/hooks/use-online-status";
 import { useRetailers } from "@/hooks/use-retailers";
 import { getSignedPhotoUrl, uploadPhoto } from "@/lib/supabase-helpers";
@@ -103,6 +103,9 @@ export default function Trips() {
           })
         );
         setTrips(tripsWithCounts);
+
+        // Replace cache entirely with fresh server data to remove stale/deleted trips
+        await clearCachedTrips();
         await cacheTrips(tripsWithCounts);
       }
     } catch (err) {
