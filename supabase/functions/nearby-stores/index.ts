@@ -29,7 +29,7 @@ serve(async (req) => {
       locationRestriction: {
         circle: {
           center: { latitude, longitude },
-          radius: 500.0,
+          radius: 150.0,
         },
       },
     };

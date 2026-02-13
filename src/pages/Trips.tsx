@@ -207,7 +207,7 @@ export default function Trips() {
     }
 
     // Step 2: Cluster by date + location (within 1km = same store)
-    const CLUSTER_RADIUS_KM = 0.35;
+    const CLUSTER_RADIUS_KM = 0.15;
     interface Cluster { date: string; lat: number | null; lng: number | null; indices: number[]; tripId?: string; tripName?: string; isNew?: boolean }
     const clusters: Cluster[] = [];
 
