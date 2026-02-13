@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { PRODUCT_CATEGORIES } from "@/lib/supabase-helpers";
+import { useCategories } from "@/hooks/use-categories";
 import { useImageTypes } from "@/hooks/use-image-types";
 import { useCountries } from "@/hooks/use-countries";
 import AutocompleteInput from "@/components/ui/autocomplete-input";
@@ -31,6 +31,7 @@ export default function BulkEditDialog({ open, onOpenChange, photoIds, photos, o
   const imageTypes = useImageTypes();
   const countries = useCountries();
   const [saving, setSaving] = useState(false);
+  const categories = useCategories();
 
   // Each field has a value + enabled toggle (only apply fields the user fills in)
   const [productNameAppend, setProductNameAppend] = useState("");
@@ -151,7 +152,7 @@ export default function BulkEditDialog({ open, onOpenChange, photoIds, photos, o
             <Select value={category} onValueChange={setCategory}>
               <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
               <SelectContent>
-                {PRODUCT_CATEGORIES.map((c) => (
+                {categories.map((c) => (
                   <SelectItem key={c} value={c}>{c}</SelectItem>
                 ))}
               </SelectContent>

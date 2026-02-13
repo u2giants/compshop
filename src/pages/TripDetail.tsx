@@ -2,7 +2,8 @@ import { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { uploadPhoto, getSignedPhotoUrl, PRODUCT_CATEGORIES, hashFile, checkDuplicatePhoto } from "@/lib/supabase-helpers";
+import { uploadPhoto, getSignedPhotoUrl, hashFile, checkDuplicatePhoto } from "@/lib/supabase-helpers";
+import { useCategories } from "@/hooks/use-categories";
 import {
   getCachedTrip,
   cacheTrips,
@@ -96,6 +97,7 @@ export default function TripDetail() {
   const { toast } = useToast();
   const online = useOnlineStatus();
   const countries = useCountries();
+  const categories = useCategories();
   const { retailerNames, getLogoUrl } = useRetailers();
   const [editingStore, setEditingStore] = useState(false);
   const [storeValue, setStoreValue] = useState("");
@@ -720,7 +722,7 @@ export default function TripDetail() {
                 <Select value={formFields.category} onValueChange={(v) => setFormFields((f) => ({ ...f, category: v }))}>
                   <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
                   <SelectContent>
-                    {PRODUCT_CATEGORIES.map((c) => (
+                    {categories.map((c) => (
                       <SelectItem key={c} value={c}>{c}</SelectItem>
                     ))}
                   </SelectContent>

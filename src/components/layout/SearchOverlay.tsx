@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { getSignedPhotoUrl, PRODUCT_CATEGORIES } from "@/lib/supabase-helpers";
+import { getSignedPhotoUrl } from "@/lib/supabase-helpers";
+import { useCategories } from "@/hooks/use-categories";
 import { useImageTypes } from "@/hooks/use-image-types";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -41,6 +42,7 @@ function escapeLikePattern(input: string): string {
 
 export default function SearchOverlay({ open, onClose }: Props) {
   const IMAGE_TYPES = useImageTypes();
+  const categories = useCategories();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<string>("");
   const [imageType, setImageType] = useState<string>("");
@@ -141,7 +143,7 @@ export default function SearchOverlay({ open, onClose }: Props) {
               <Select value={category} onValueChange={setCategory}>
                 <SelectTrigger><SelectValue placeholder="Any" /></SelectTrigger>
                 <SelectContent>
-                  {PRODUCT_CATEGORIES.map((c) => (
+                  {categories.map((c) => (
                     <SelectItem key={c} value={c}>{c}</SelectItem>
                   ))}
                 </SelectContent>
