@@ -437,27 +437,23 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
                 <Input value={editData.product_name} onChange={(e) => setEditData((d) => ({ ...d, product_name: e.target.value }))} placeholder="Product name" disabled={!canEdit} />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Category</Label>
-                <Select value={editData.category} onValueChange={(v) => setEditData((d) => ({ ...d, category: v }))} disabled={!canEdit}>
+                <Label className="text-xs text-muted-foreground">Image Type</Label>
+                <Select value={editData.image_type} onValueChange={(v) => setEditData((d) => ({ ...d, image_type: v }))} disabled={!canEdit}>
                   <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
                   <SelectContent>
-                    {PRODUCT_CATEGORIES.map((c) => (
-                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    {IMAGE_TYPES.map((t) => (
+                      <SelectItem key={t} value={t}>{t}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Price</Label>
-                <Input type="number" step="0.01" value={editData.price} onChange={(e) => setEditData((d) => ({ ...d, price: e.target.value }))} placeholder="$0.00" disabled={!canEdit} />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Brand</Label>
-                <Input value={editData.brand} onChange={(e) => setEditData((d) => ({ ...d, brand: e.target.value }))} placeholder="Brand" disabled={!canEdit} />
-              </div>
-              <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">Size/Dimensions</Label>
                 <Input value={editData.dimensions} onChange={(e) => setEditData((d) => ({ ...d, dimensions: e.target.value }))} placeholder='e.g. 12"x8"' disabled={!canEdit} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Price</Label>
+                <Input type="number" step="0.01" value={editData.price} onChange={(e) => setEditData((d) => ({ ...d, price: e.target.value }))} placeholder="$0.00" disabled={!canEdit} />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">Made In</Label>
@@ -469,19 +465,23 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
                 />
               </div>
               <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Category</Label>
+                <Select value={editData.category} onValueChange={(v) => setEditData((d) => ({ ...d, category: v }))} disabled={!canEdit}>
+                  <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
+                  <SelectContent>
+                    {PRODUCT_CATEGORIES.map((c) => (
+                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">Material</Label>
                 <Input value={editData.material} onChange={(e) => setEditData((d) => ({ ...d, material: e.target.value }))} placeholder="e.g. Ceramic" disabled={!canEdit} />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Image Type</Label>
-                <Select value={editData.image_type} onValueChange={(v) => setEditData((d) => ({ ...d, image_type: v }))} disabled={!canEdit}>
-                  <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
-                  <SelectContent>
-                    {IMAGE_TYPES.map((t) => (
-                      <SelectItem key={t} value={t}>{t}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label className="text-xs text-muted-foreground">Brand</Label>
+                <Input value={editData.brand} onChange={(e) => setEditData((d) => ({ ...d, brand: e.target.value }))} placeholder="Brand" disabled={!canEdit} />
               </div>
               <div className="col-span-2 md:col-span-3 space-y-1">
                 <Label className="text-xs text-muted-foreground">Notes</Label>
