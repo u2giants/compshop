@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -7,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { LogOut, Shield } from "lucide-react";
+import { LogOut, Shield, FileDown } from "lucide-react";
 import InviteManager from "@/components/admin/InviteManager";
 import RetailerManager from "@/components/admin/RetailerManager";
 import CountryManager from "@/components/admin/CountryManager";
@@ -15,6 +16,7 @@ import StorageQuotaManager from "@/components/settings/StorageQuotaManager";
 
 export default function Profile() {
   const { user, isAdmin, signOut } = useAuth();
+  const navigate = useNavigate();
   const { toast } = useToast();
   const [displayName, setDisplayName] = useState("");
   const [saving, setSaving] = useState(false);
@@ -85,6 +87,20 @@ export default function Profile() {
           </form>
           <Button variant="outline" className="mt-4 w-full gap-2" onClick={signOut}>
             <LogOut className="h-4 w-4" /> Sign Out
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Data import */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 font-serif text-lg">
+            <FileDown className="h-5 w-5" /> Import Data
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Button variant="outline" className="w-full gap-2" onClick={() => navigate("/import/keep")}>
+            Import from Google Keep
           </Button>
         </CardContent>
       </Card>

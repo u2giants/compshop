@@ -11,6 +11,7 @@ import NewTrip from "@/pages/NewTrip";
 import TripDetail from "@/pages/TripDetail";
 import SearchPage from "@/pages/SearchPage";
 import Profile from "@/pages/Profile";
+import ImportKeep from "@/pages/ImportKeep";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -50,6 +51,7 @@ const App = () => (
               <Route path="/trips/:id" element={<TripDetail />} />
               <Route path="/search" element={<SearchPage />} />
               <Route path="/profile" element={<Profile />} />
+              <Route path="/import/keep" element={<ImportKeep />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

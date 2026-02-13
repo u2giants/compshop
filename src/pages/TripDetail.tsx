@@ -166,13 +166,56 @@ export default function TripDetail() {
   }
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setSelectedFile(file);
-    setPreviewUrl(URL.createObjectURL(file));
-    setFormFields({ product_name: "", category: "", price: "", brand: "", dimensions: "", material: "", notes: "" });
-    setCountryValue("");
-    setShowUploadDialog(true);
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    
+    if (files.length === 1) {
+      // Single file — open detail dialog
+      setSelectedFile(files[0]);
+      setPreviewUrl(URL.createObjectURL(files[0]));
+      setFormFields({ product_name: "", category: "", price: "", brand: "", dimensions: "", material: "", notes: "" });
+      setCountryValue("");
+      setShowUploadDialog(true);
+    } else {
+      // Multiple files — bulk upload with no metadata
+      handleBulkUpload(Array.from(files));
+    }
+  }
+
+  async function handleBulkUpload(files: File[]) {
+    if (!user || !id) return;
+    setUploading(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const file of files) {
+      try {
+        if (!navigator.onLine) {
+          const pendingId = crypto.randomUUID();
+          await addPendingUpload({
+            id: pendingId, trip_id: id, file_blob: file, file_name: file.name,
+            metadata: { product_name: null, category: null, price: null, dimensions: null, country_of_origin: null, material: null, brand: null, notes: null },
+            user_id: user.id, created_at: new Date().toISOString(), status: "pending", retry_count: 0,
+          });
+          successCount++;
+        } else {
+          const filePath = await uploadPhoto(file, user.id, id);
+          const { error } = await supabase.from("photos").insert({ trip_id: id, user_id: user.id, file_path: filePath });
+          if (error) throw error;
+          successCount++;
+        }
+      } catch {
+        failCount++;
+      }
+    }
+
+    setUploading(false);
+    toast({
+      title: `Bulk upload complete`,
+      description: `${successCount} uploaded${failCount > 0 ? `, ${failCount} failed` : ""}. You can add details to each photo individually.`,
+    });
+    loadPhotos();
+    loadPendingPhotos();
   }
 
   async function handleAnalyze() {
@@ -282,7 +325,7 @@ export default function TripDetail() {
       <TripMembers tripId={trip.id} createdBy={trip.created_by} />
 
       <div className="mb-6 flex items-center gap-3">
-        <input ref={fileInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileSelect} />
+        <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFileSelect} />
         <Button onClick={() => fileInputRef.current?.click()} className="gap-2">
           <Camera className="h-4 w-4" /> Add Photo
         </Button>
