@@ -136,6 +136,7 @@ export type Database = {
           file_path: string
           group_id: string | null
           id: string
+          image_type: string | null
           material: string | null
           notes: string | null
           price: number | null
@@ -153,6 +154,7 @@ export type Database = {
           file_path: string
           group_id?: string | null
           id?: string
+          image_type?: string | null
           material?: string | null
           notes?: string | null
           price?: number | null
@@ -170,6 +172,7 @@ export type Database = {
           file_path?: string
           group_id?: string | null
           id?: string
+          image_type?: string | null
           material?: string | null
           notes?: string | null
           price?: number | null

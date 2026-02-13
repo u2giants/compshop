@@ -59,3 +59,8 @@ export const PRODUCT_CATEGORIES = [
   "Furniture",
   "Garden",
 ] as const;
+
+export const IMAGE_TYPES = [
+  "Product Format",
+  "Design Idea",
+] as const;

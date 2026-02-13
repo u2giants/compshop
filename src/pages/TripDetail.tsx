@@ -55,6 +55,7 @@ interface Photo {
   material: string | null;
   brand: string | null;
   notes: string | null;
+  image_type: string | null;
   user_id: string | null;
   created_at: string;
   signed_url?: string;

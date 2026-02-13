@@ -1,0 +1,1 @@
+ALTER TABLE public.photos ADD COLUMN image_type text;
