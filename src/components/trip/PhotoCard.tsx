@@ -254,7 +254,7 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <div className="flex items-center justify-between gap-2">
-              <DialogTitle className="font-serif">{photo.product_name || "Photo Details"}</DialogTitle>
+              <DialogTitle className="font-sans">{photo.product_name || "Photo Details"}</DialogTitle>
               <div className="flex items-center gap-1">
                 {canEdit && photo.signed_url && (
                   <Button
@@ -399,7 +399,7 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
       <Dialog open={showComments} onOpenChange={setShowComments}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="font-serif">Comments</DialogTitle>
+            <DialogTitle className="font-sans">Comments</DialogTitle>
           </DialogHeader>
           <PhotoComments photoId={photo.id} />
         </DialogContent>

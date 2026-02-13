@@ -331,7 +331,7 @@ export default function Trips() {
     <div className="container py-6">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="font-serif text-3xl md:text-4xl">Shopping Trips</h1>
+          <h1 className="font-sans text-3xl md:text-4xl">Shopping Trips</h1>
           <p className="mt-1 text-muted-foreground">Your team's comparison shopping intel</p>
         </div>
         <div className="flex items-center gap-2">
@@ -382,7 +382,7 @@ export default function Trips() {
       <Dialog open={showSmartResults} onOpenChange={setShowSmartResults}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="font-serif">Smart Upload Results</DialogTitle>
+            <DialogTitle className="font-sans">Smart Upload Results</DialogTitle>
           </DialogHeader>
           <div className="space-y-2">
             {smartResults.map((r, i) => (
@@ -449,7 +449,7 @@ export default function Trips() {
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
             <Store className="mb-4 h-12 w-12 text-muted-foreground/50" />
-            <h2 className="font-serif text-xl">{hasFilters ? "No matching trips" : "No trips yet"}</h2>
+            <h2 className="font-sans text-xl">{hasFilters ? "No matching trips" : "No trips yet"}</h2>
             <p className="mt-2 max-w-sm text-sm text-muted-foreground">
               {hasFilters
                 ? "Try adjusting your filters."
@@ -505,7 +505,7 @@ export default function Trips() {
                     {logoUrl && (
                       <img src={logoUrl} alt={trip.store} className="h-6 w-6 rounded object-contain" />
                     )}
-                    <h3 className="font-serif text-lg font-medium leading-snug">{trip.store}</h3>
+                    <h3 className="font-sans text-lg font-medium leading-snug">{trip.store}</h3>
                   </div>
                   <div className="mt-2 space-y-1 text-sm text-muted-foreground">
                     <div className="flex items-center gap-2">

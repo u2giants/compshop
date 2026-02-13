@@ -83,7 +83,7 @@ export default function RecycleBin({ open, onOpenChange, onRestored }: RecycleBi
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="font-serif flex items-center gap-2">
+          <DialogTitle className="font-sans flex items-center gap-2">
             <Trash2 className="h-5 w-5" /> Recycling Bin
           </DialogTitle>
         </DialogHeader>

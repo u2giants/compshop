@@ -232,7 +232,7 @@ export default function DraftTrips({ open, onOpenChange, onPublished }: DraftTri
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle className="font-serif flex items-center gap-2">
+          <DialogTitle className="font-sans flex items-center gap-2">
             <FileText className="h-5 w-5" /> Draft Trips
           </DialogTitle>
           <DialogDescription>

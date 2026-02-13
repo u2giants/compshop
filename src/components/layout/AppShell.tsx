@@ -23,7 +23,7 @@ export default function AppShell() {
       {/* Top bar - desktop */}
       <header className="hidden border-b bg-card md:block">
         <div className="container flex h-14 items-center justify-between">
-          <button onClick={() => navigate("/")} className="font-serif text-2xl text-primary">
+          <button onClick={() => navigate("/")} className="font-sans text-2xl font-semibold text-primary">
             CompShop
           </button>
           <div className="flex items-center gap-3">

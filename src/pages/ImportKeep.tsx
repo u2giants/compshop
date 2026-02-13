@@ -174,12 +174,12 @@ export default function ImportKeep() {
         <ArrowLeft className="h-4 w-4" /> Back to Profile
       </button>
 
-      <h1 className="mb-6 font-serif text-2xl">Import from Google Keep</h1>
+      <h1 className="mb-6 font-sans text-2xl font-semibold">Import from Google Keep</h1>
 
       {phase === "select" && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg font-serif">How to export from Google Keep</CardTitle>
+            <CardTitle className="text-lg font-sans">How to export from Google Keep</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground">
