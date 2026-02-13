@@ -3,6 +3,8 @@ import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { uploadPhoto, getSignedPhotoUrl, hashFile, checkDuplicatePhoto } from "@/lib/supabase-helpers";
+import { extractExif } from "@/lib/exif-utils";
+import { isInAsia } from "@/lib/geo-utils";
 import { useCategories } from "@/hooks/use-categories";
 import {
   getCachedTrip,
@@ -33,6 +35,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Camera, Calendar, MapPin, Store, Users, CloudOff, Sparkles, Loader2, Download, Images, ArrowRightLeft, PenLine } from "lucide-react";
 import { format } from "date-fns";
@@ -383,21 +386,84 @@ export default function TripDetail() {
     setPendingPhotos(pending);
   }
 
+  // Geo-fence state
+  const [geoWarningFiles, setGeoWarningFiles] = useState<File[]>([]);
+  const [showGeoWarning, setShowGeoWarning] = useState(false);
+  const [geoWarningType, setGeoWarningType] = useState<"single" | "bulk">("single");
+
+  async function checkGeoFence(files: File[]): Promise<{ ok: File[]; warned: File[] }> {
+    const ok: File[] = [];
+    const warned: File[] = [];
+    for (const file of files) {
+      const exif = await extractExif(file);
+      if (exif.latitude != null && exif.longitude != null && isInAsia(exif.latitude, exif.longitude)) {
+        warned.push(file);
+      } else {
+        ok.push(file);
+      }
+    }
+    return { ok, warned };
+  }
+
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files;
     if (!files || files.length === 0) return;
     
     if (files.length === 1) {
-      // Single file — open detail dialog
-      setSelectedFile(files[0]);
-      setPreviewUrl(URL.createObjectURL(files[0]));
-      setFormFields({ product_name: "", category: "", price: "", brand: "", dimensions: "", material: "", notes: "" });
-      setCountryValue("");
-      setShowUploadDialog(true);
+      // Single file — check geo then open detail dialog
+      const file = files[0];
+      extractExif(file).then((exif) => {
+        if (exif.latitude != null && exif.longitude != null && isInAsia(exif.latitude, exif.longitude)) {
+          setGeoWarningFiles([file]);
+          setGeoWarningType("single");
+          setShowGeoWarning(true);
+        } else {
+          openSingleUpload(file);
+        }
+      });
     } else {
-      // Multiple files — bulk upload with no metadata
-      handleBulkUpload(Array.from(files));
+      // Multiple files — check geo for all
+      const fileArray = Array.from(files);
+      checkGeoFence(fileArray).then(({ ok, warned }) => {
+        if (warned.length > 0 && ok.length === 0) {
+          setGeoWarningFiles(warned);
+          setGeoWarningType("bulk");
+          setShowGeoWarning(true);
+        } else if (warned.length > 0) {
+          // Some warned, some ok — upload ok ones, warn about rest
+          handleBulkUpload(ok);
+          setGeoWarningFiles(warned);
+          setGeoWarningType("bulk");
+          setShowGeoWarning(true);
+        } else {
+          handleBulkUpload(ok);
+        }
+      });
     }
+  }
+
+  function openSingleUpload(file: File) {
+    setSelectedFile(file);
+    setPreviewUrl(URL.createObjectURL(file));
+    setFormFields({ product_name: "", category: "", price: "", brand: "", dimensions: "", material: "", notes: "" });
+    setCountryValue("");
+    setShowUploadDialog(true);
+  }
+
+  function handleGeoWarningContinue() {
+    setShowGeoWarning(false);
+    if (geoWarningType === "single" && geoWarningFiles.length === 1) {
+      openSingleUpload(geoWarningFiles[0]);
+    } else {
+      handleBulkUpload(geoWarningFiles);
+    }
+    setGeoWarningFiles([]);
+  }
+
+  function handleGeoWarningCancel() {
+    setShowGeoWarning(false);
+    setGeoWarningFiles([]);
+    toast({ title: "Upload cancelled", description: "Photos with Asia GPS coordinates were not uploaded." });
   }
 
   async function handleBulkUpload(files: File[]) {
@@ -793,7 +859,24 @@ export default function TripDetail() {
         </DialogContent>
       </Dialog>
 
-      {/* Pending uploads */}
+      {/* Geo-fence warning */}
+      <AlertDialog open={showGeoWarning} onOpenChange={setShowGeoWarning}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Photo geotagged in Asia</AlertDialogTitle>
+            <AlertDialogDescription>
+              {geoWarningFiles.length === 1
+                ? "This photo appears to have been taken in Asia based on its GPS coordinates. You're uploading to a Store Shopping trip — did you mean to upload to an Asia Trip instead?"
+                : `${geoWarningFiles.length} photos appear to have been taken in Asia. You're uploading to a Store Shopping trip — did you mean to upload to an Asia Trip instead?`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleGeoWarningCancel}>Cancel Upload</AlertDialogCancel>
+            <AlertDialogAction onClick={handleGeoWarningContinue}>Upload Anyway</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {pendingPhotos.length > 0 && (
         <div className="mb-4">
           <p className="mb-2 text-xs font-medium text-muted-foreground flex items-center gap-1">

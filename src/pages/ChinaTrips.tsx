@@ -470,8 +470,8 @@ export default function ChinaTrips() {
     <div className="container py-6">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="font-sans text-3xl md:text-4xl">China Trips</h1>
-          <p className="mt-1 text-muted-foreground hidden md:block">Factory visits & Canton Fair sourcing intel</p>
+          <h1 className="font-sans text-3xl md:text-4xl">Asia Trips</h1>
+          <p className="mt-1 text-muted-foreground hidden md:block">Factory visits & trade show sourcing intel</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 justify-end">
           {selectMode ? (
@@ -589,11 +589,11 @@ export default function ChinaTrips() {
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
             <Factory className="mb-4 h-12 w-12 text-muted-foreground/50" />
-            <h2 className="font-sans text-xl">{hasFilters ? "No matching trips" : "No China trips yet"}</h2>
+            <h2 className="font-sans text-xl">{hasFilters ? "No matching trips" : "No Asia trips yet"}</h2>
             <p className="mt-2 max-w-sm text-sm text-muted-foreground">
               {hasFilters
                 ? "Try adjusting your filters."
-                : "Create your first China trip or use Smart Upload to auto-sort photos by Canton Fair session."}
+                : "Create your first Asia trip or use Smart Upload to auto-sort photos by Canton Fair session."}
             </p>
             {!hasFilters && (
               <Button onClick={() => navigate("/china/new")} className="mt-6 gap-2">

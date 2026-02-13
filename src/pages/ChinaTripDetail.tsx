@@ -3,6 +3,8 @@ import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { uploadPhoto, getSignedPhotoUrl, hashFile, checkDuplicatePhoto } from "@/lib/supabase-helpers";
+import { extractExif } from "@/lib/exif-utils";
+import { isInAmericas } from "@/lib/geo-utils";
 import { useCategories } from "@/hooks/use-categories";
 import { useCountries } from "@/hooks/use-countries";
 import { useOnlineStatus } from "@/hooks/use-online-status";
@@ -28,6 +30,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarPicker } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
@@ -148,6 +151,13 @@ export default function ChinaTripDetail() {
   const [showAddSection, setShowAddSection] = useState(false);
   const [newSectionName, setNewSectionName] = useState("");
   const [emptySections, setEmptySections] = useState<string[]>([]);
+
+  // Location resolution state
+  const [resolvingLocation, setResolvingLocation] = useState(false);
+  const [locationSuggestions, setLocationSuggestions] = useState<{ name: string; address: string }[]>([]);
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [editingLocation, setEditingLocation] = useState(false);
+  const [locationEditValue, setLocationEditValue] = useState("");
 
   const existingSections = [...new Set([
     ...photos.filter((p) => p.section).map((p) => p.section!),
@@ -392,19 +402,80 @@ export default function ChinaTripDetail() {
     setPendingPhotos(pending);
   }
 
-  // ── File handling ──
+  // Geo-fence state
+  const [geoWarningFiles, setGeoWarningFiles] = useState<File[]>([]);
+  const [showGeoWarning, setShowGeoWarning] = useState(false);
+  const [geoWarningType, setGeoWarningType] = useState<"single" | "bulk">("single");
+
+  async function checkGeoFence(files: File[]): Promise<{ ok: File[]; warned: File[] }> {
+    const ok: File[] = [];
+    const warned: File[] = [];
+    for (const file of files) {
+      const exif = await extractExif(file);
+      if (exif.latitude != null && exif.longitude != null && isInAmericas(exif.latitude, exif.longitude)) {
+        warned.push(file);
+      } else {
+        ok.push(file);
+      }
+    }
+    return { ok, warned };
+  }
+
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files;
     if (!files || files.length === 0) return;
     if (files.length === 1) {
-      setSelectedFile(files[0]);
-      setPreviewUrl(URL.createObjectURL(files[0]));
-      setFormFields({ product_name: "", category: "", price: "", brand: "", dimensions: "", material: "", notes: "" });
-      setCountryValue("");
-      setShowUploadDialog(true);
+      const file = files[0];
+      extractExif(file).then((exif) => {
+        if (exif.latitude != null && exif.longitude != null && isInAmericas(exif.latitude, exif.longitude)) {
+          setGeoWarningFiles([file]);
+          setGeoWarningType("single");
+          setShowGeoWarning(true);
+        } else {
+          openSingleUpload(file);
+        }
+      });
     } else {
-      handleBulkUpload(Array.from(files));
+      const fileArray = Array.from(files);
+      checkGeoFence(fileArray).then(({ ok, warned }) => {
+        if (warned.length > 0 && ok.length === 0) {
+          setGeoWarningFiles(warned);
+          setGeoWarningType("bulk");
+          setShowGeoWarning(true);
+        } else if (warned.length > 0) {
+          handleBulkUpload(ok);
+          setGeoWarningFiles(warned);
+          setGeoWarningType("bulk");
+          setShowGeoWarning(true);
+        } else {
+          handleBulkUpload(ok);
+        }
+      });
     }
+  }
+
+  function openSingleUpload(file: File) {
+    setSelectedFile(file);
+    setPreviewUrl(URL.createObjectURL(file));
+    setFormFields({ product_name: "", category: "", price: "", brand: "", dimensions: "", material: "", notes: "" });
+    setCountryValue("");
+    setShowUploadDialog(true);
+  }
+
+  function handleGeoWarningContinue() {
+    setShowGeoWarning(false);
+    if (geoWarningType === "single" && geoWarningFiles.length === 1) {
+      openSingleUpload(geoWarningFiles[0]);
+    } else {
+      handleBulkUpload(geoWarningFiles);
+    }
+    setGeoWarningFiles([]);
+  }
+
+  function handleGeoWarningCancel() {
+    setShowGeoWarning(false);
+    setGeoWarningFiles([]);
+    toast({ title: "Upload cancelled", description: "Photos with US GPS coordinates were not uploaded." });
   }
 
   async function handleBulkUpload(files: File[]) {
@@ -571,7 +642,7 @@ export default function ChinaTripDetail() {
     return (
       <div className="container py-6 text-center">
         <p className="text-muted-foreground">Trip not found</p>
-        <Button onClick={() => navigate("/china")} className="mt-4">Back to China Trips</Button>
+        <Button onClick={() => navigate("/china")} className="mt-4">Back to Asia Trips</Button>
       </div>
     );
   }
@@ -579,7 +650,7 @@ export default function ChinaTripDetail() {
   return (
     <div className="container py-6">
       <button onClick={() => navigate("/china")} className="mb-4 flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="h-4 w-4" /> Back to China Trips
+        <ArrowLeft className="h-4 w-4" /> Back to Asia Trips
       </button>
 
       {/* Trip header with inline editing */}
@@ -641,7 +712,92 @@ export default function ChinaTripDetail() {
               />
             </PopoverContent>
           </Popover>
-          {trip.location && <span className="flex items-center gap-1"><MapPin className="h-4 w-4" />{trip.location}</span>}
+          {trip.location ? (
+            <Popover open={showLocationPicker} onOpenChange={setShowLocationPicker}>
+              <PopoverTrigger asChild>
+                <button
+                  className="flex items-center gap-1 group hover:text-foreground transition-colors"
+                  title="Click to change location label"
+                  onClick={async () => {
+                    setShowLocationPicker(true);
+                    setLocationEditValue(trip.location || "");
+                    // Check if location looks like GPS coordinates
+                    const coordMatch = trip.location?.match(/\(([-\d.]+),\s*([-\d.]+)\)/);
+                    if (coordMatch) {
+                      setResolvingLocation(true);
+                      try {
+                        const { data } = await supabase.functions.invoke("nearby-stores", {
+                          body: { latitude: parseFloat(coordMatch[1]), longitude: parseFloat(coordMatch[2]), radius: 1000 },
+                        });
+                        if (data?.stores) {
+                          setLocationSuggestions(data.stores.map((s: any) => ({ name: s.name, address: s.address })));
+                        }
+                      } catch {} finally {
+                        setResolvingLocation(false);
+                      }
+                    }
+                  }}
+                >
+                  <MapPin className="h-4 w-4" />{trip.location}
+                  <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-72 p-3" align="start">
+                <div className="space-y-2">
+                  <label className="text-xs font-medium">Location Label</label>
+                  <Input
+                    value={locationEditValue}
+                    onChange={(e) => setLocationEditValue(e.target.value)}
+                    placeholder="e.g. Canton Fair Complex"
+                    className="text-sm"
+                  />
+                  {resolvingLocation && (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Loader2 className="h-3 w-3 animate-spin" /> Finding nearby locations…
+                    </div>
+                  )}
+                  {locationSuggestions.length > 0 && (
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Nearby locations:</label>
+                      {locationSuggestions.map((s, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => setLocationEditValue(s.name)}
+                          className="flex w-full items-start gap-2 rounded px-2 py-1.5 text-xs text-left hover:bg-accent hover:text-accent-foreground transition-colors"
+                        >
+                          <MapPin className="h-3 w-3 mt-0.5 shrink-0" />
+                          <div>
+                            <span className="font-medium">{s.name}</span>
+                            {s.address && <span className="block text-muted-foreground truncate">{s.address}</span>}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex gap-2 pt-1">
+                    <Button size="sm" className="flex-1" onClick={async () => {
+                      if (!locationEditValue.trim()) return;
+                      const { error } = await supabase.from("china_trips").update({ location: locationEditValue.trim() }).eq("id", trip.id);
+                      if (error) { toast({ title: "Failed to update", variant: "destructive" }); return; }
+                      setTrip({ ...trip, location: locationEditValue.trim() });
+                      setShowLocationPicker(false);
+                      setLocationSuggestions([]);
+                      toast({ title: "Location updated" });
+                    }}>Save</Button>
+                    <Button size="sm" variant="ghost" onClick={() => { setShowLocationPicker(false); setLocationSuggestions([]); }}>Cancel</Button>
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
+          ) : (
+            <button
+              className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
+              onClick={() => { setLocationEditValue(""); setShowLocationPicker(true); }}
+            >
+              <MapPin className="h-4 w-4" /> Add location
+            </button>
+          )}
           <span>{photos.length} photos</span>
           {!online && (
             <Badge variant="outline" className="gap-1">
@@ -896,6 +1052,24 @@ export default function ChinaTripDetail() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Geo-fence warning */}
+      <AlertDialog open={showGeoWarning} onOpenChange={setShowGeoWarning}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Photo geotagged in the U.S.</AlertDialogTitle>
+            <AlertDialogDescription>
+              {geoWarningFiles.length === 1
+                ? "This photo appears to have been taken in the Americas based on its GPS coordinates. You're uploading to an Asia Trip — did you mean to upload to a Store Shopping trip instead?"
+                : `${geoWarningFiles.length} photos appear to have been taken in the Americas. You're uploading to an Asia Trip — did you mean to upload to a Store Shopping trip instead?`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleGeoWarningCancel}>Cancel Upload</AlertDialogCancel>
+            <AlertDialogAction onClick={handleGeoWarningContinue}>Upload Anyway</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {trip && (
         <ChinaMoveToTripDialog

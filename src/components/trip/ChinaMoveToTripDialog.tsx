@@ -74,7 +74,7 @@ export default function ChinaMoveToTripDialog({ open, onOpenChange, photoIds, cu
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="font-sans">Move to China Trip</DialogTitle>
+          <DialogTitle className="font-sans">Move to Asia Trip</DialogTitle>
           <DialogDescription>
             Select a destination trip for {photoIds.length} photo{photoIds.length > 1 ? "s" : ""}.
           </DialogDescription>
@@ -92,7 +92,7 @@ export default function ChinaMoveToTripDialog({ open, onOpenChange, photoIds, cu
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
         ) : filtered.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">No other China trips found.</p>
+          <p className="py-6 text-center text-sm text-muted-foreground">No other Asia trips found.</p>
         ) : (
           <ScrollArea className="max-h-64">
             <div className="space-y-1">

@@ -226,7 +226,7 @@ export default function ChinaDraftTrips({ open, onOpenChange, onPublished }: Chi
       >
         <DialogHeader>
           <DialogTitle className="font-sans flex items-center gap-2">
-            <FileText className="h-5 w-5" /> China Draft Trips
+            <FileText className="h-5 w-5" /> Asia Draft Trips
           </DialogTitle>
           <DialogDescription>
             Click photos to select multiple, then drag them to another trip. Enter supplier names and publish.
@@ -247,7 +247,7 @@ export default function ChinaDraftTrips({ open, onOpenChange, onPublished }: Chi
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : drafts.length === 0 ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">No draft China trips to review.</p>
+          <p className="py-8 text-center text-sm text-muted-foreground">No draft Asia trips to review.</p>
         ) : (
           <div className="space-y-4">
             {drafts.map((draft) => {
