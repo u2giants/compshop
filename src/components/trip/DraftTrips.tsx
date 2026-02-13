@@ -1,7 +1,8 @@
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useDragAutoScroll } from "@/hooks/use-drag-autoscroll";
 import { supabase } from "@/integrations/supabase/client";
 import { getSignedPhotoUrl } from "@/lib/supabase-helpers";
+import { useAuth } from "@/contexts/AuthContext";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -9,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import AutocompleteInput from "@/components/ui/autocomplete-input";
 import { useRetailers } from "@/hooks/use-retailers";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-import { Calendar, MapPin, Loader2, Check, Trash2, FileText, GripHorizontal, ImageIcon } from "lucide-react";
+import { Calendar, MapPin, Loader2, Check, Trash2, FileText, GripHorizontal, ImageIcon, Plus, ZoomIn } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 
@@ -44,6 +45,7 @@ interface DraftTripsProps {
 }
 
 export default function DraftTrips({ open, onOpenChange, onPublished }: DraftTripsProps) {
+  const { user } = useAuth();
   const { retailerNames, getLogoUrl } = useRetailers();
   const { toast } = useToast();
   const { scrollRef, handleDragOverScroll, stopAutoScroll } = useDragAutoScroll();
@@ -53,11 +55,16 @@ export default function DraftTrips({ open, onOpenChange, onPublished }: DraftTri
   const [loadingStores, setLoadingStores] = useState<Set<string>>(new Set());
   const [customNames, setCustomNames] = useState<Map<string, string>>(new Map());
   const [publishing, setPublishing] = useState<Set<string>>(new Set());
-  const [dragPhoto, setDragPhoto] = useState<{ photoId: string; fromTripId: string } | null>(null);
+  const [selectedPhotos, setSelectedPhotos] = useState<Set<string>>(new Set());
+  const [dragFromTripId, setDragFromTripId] = useState<string | null>(null);
   const [dragOverTrip, setDragOverTrip] = useState<string | null>(null);
+  const [zoomedPhoto, setZoomedPhoto] = useState<{ url: string; id: string } | null>(null);
 
   useEffect(() => {
-    if (open) loadDrafts();
+    if (open) {
+      loadDrafts();
+      setSelectedPhotos(new Set());
+    }
   }, [open]);
 
   async function loadDrafts() {
@@ -88,7 +95,6 @@ export default function DraftTrips({ open, onOpenChange, onPublished }: DraftTri
           }
         }
 
-        // Parse lat/lng from the store name if it contains coordinates
         let lat: number | undefined;
         let lng: number | undefined;
         const coordMatch = trip.store.match(/\(([-\d.]+),\s*([-\d.]+)\)/);
@@ -104,7 +110,6 @@ export default function DraftTrips({ open, onOpenChange, onPublished }: DraftTri
     setDrafts(enriched);
     setLoading(false);
 
-    // Fetch store suggestions for drafts with coordinates
     for (const draft of enriched) {
       if (draft.lat && draft.lng && !storeOptions.has(draft.id)) {
         fetchStoreOptions(draft.id, draft.lat, draft.lng);
@@ -158,71 +163,162 @@ export default function DraftTrips({ open, onOpenChange, onPublished }: DraftTri
     await supabase.from("trip_members").delete().eq("trip_id", tripId);
     await supabase.from("shopping_trips").delete().eq("id", tripId);
     setDrafts((prev) => prev.filter((d) => d.id !== tripId));
+    setSelectedPhotos(new Set());
     toast({ title: "Draft deleted" });
     onPublished();
   }
 
-  // Drag and drop handlers
+  // Multi-select
+  function togglePhotoSelection(photoId: string, tripId: string) {
+    setSelectedPhotos((prev) => {
+      const next = new Set(prev);
+      if (next.has(photoId)) {
+        next.delete(photoId);
+      } else {
+        const currentDraft = drafts.find((d) => d.id === tripId);
+        if (currentDraft?.photos.some((p) => p.id === photoId)) {
+          if (next.size > 0) {
+            const firstSelectedId = next.values().next().value;
+            const fromSameTrip = currentDraft?.photos.some((p) => p.id === firstSelectedId);
+            if (!fromSameTrip) next.clear();
+          }
+          next.add(photoId);
+        }
+      }
+      return next;
+    });
+  }
+
+  // Drag-and-drop: drag selected photos (or single unselected)
   function handleDragStart(photoId: string, fromTripId: string) {
-    setDragPhoto({ photoId, fromTripId });
+    if (!selectedPhotos.has(photoId)) {
+      setSelectedPhotos(new Set([photoId]));
+    }
+    setDragFromTripId(fromTripId);
   }
 
   function handleDragOver(e: React.DragEvent, tripId: string) {
     e.preventDefault();
-    if (dragPhoto && dragPhoto.fromTripId !== tripId) {
-      setDragOverTrip(tripId);
-    }
+    if (dragFromTripId && dragFromTripId !== tripId) setDragOverTrip(tripId);
   }
 
-  function handleDragLeave() {
-    setDragOverTrip(null);
-  }
+  function handleDragLeave() { setDragOverTrip(null); }
 
   async function handleDrop(e: React.DragEvent, toTripId: string) {
     e.preventDefault();
     setDragOverTrip(null);
-    if (!dragPhoto || dragPhoto.fromTripId === toTripId) return;
+    if (!dragFromTripId || dragFromTripId === toTripId || selectedPhotos.size === 0) return;
 
-    const { photoId, fromTripId } = dragPhoto;
-    setDragPhoto(null);
+    const fromTripId = dragFromTripId;
+    const photoIds = Array.from(selectedPhotos);
+    setDragFromTripId(null);
 
-    // Move photo to new trip in DB
     const { error } = await supabase
       .from("photos")
       .update({ trip_id: toTripId })
-      .eq("id", photoId);
+      .in("id", photoIds);
+
+    if (error) { toast({ title: "Failed to move photos", variant: "destructive" }); return; }
+
+    setDrafts((prev) => {
+      const movedSet = new Set(photoIds);
+      const updated = prev.map((d) => {
+        if (d.id === fromTripId) {
+          const remaining = d.photos.filter((p) => !movedSet.has(p.id));
+          return { ...d, photos: remaining, photo_count: remaining.length };
+        }
+        if (d.id === toTripId) {
+          const fromDraft = prev.find((dd) => dd.id === fromTripId);
+          const movedPhotos = fromDraft?.photos.filter((p) => movedSet.has(p.id)) || [];
+          const newPhotos = [...d.photos, ...movedPhotos];
+          return { ...d, photos: newPhotos, photo_count: newPhotos.length };
+        }
+        return d;
+      });
+      return updated.filter((d) => d.photos.length > 0);
+    });
+
+    toast({ title: `${photoIds.length} photo${photoIds.length !== 1 ? "s" : ""} moved` });
+    setSelectedPhotos(new Set());
+  }
+
+  // Create a new draft card from selected photos
+  async function createNewDraftFromSelected() {
+    if (selectedPhotos.size === 0) return;
+
+    // Find which draft they belong to
+    const sourceDraft = drafts.find((d) => d.photos.some((p) => selectedPhotos.has(p.id)));
+    if (!sourceDraft || !user) return;
+
+    const photoIds = Array.from(selectedPhotos);
+
+    // Create a new draft trip
+    const { data: newTrip, error: tripError } = await supabase
+      .from("shopping_trips")
+      .insert({
+        name: "New Draft",
+        store: "New Draft",
+        date: sourceDraft.date,
+        location: sourceDraft.location,
+        is_draft: true,
+        created_by: user.id,
+      })
+      .select()
+      .single();
+
+    if (tripError || !newTrip) {
+      toast({ title: "Failed to create new draft", variant: "destructive" });
+      return;
+    }
+
+    // Add user as member
+    await supabase.from("trip_members").insert({ trip_id: newTrip.id, user_id: user.id });
+
+    // Move selected photos to new trip
+    const { error } = await supabase
+      .from("photos")
+      .update({ trip_id: newTrip.id })
+      .in("id", photoIds);
 
     if (error) {
-      toast({ title: "Failed to move photo", variant: "destructive" });
+      toast({ title: "Failed to move photos", variant: "destructive" });
       return;
     }
 
     // Update local state
+    const movedSet = new Set(photoIds);
+    const movedPhotos = sourceDraft.photos.filter((p) => movedSet.has(p.id));
+    const remainingPhotos = sourceDraft.photos.filter((p) => !movedSet.has(p.id));
+
     setDrafts((prev) => {
       const updated = prev.map((d) => {
-        if (d.id === fromTripId) {
-          const photo = d.photos.find((p) => p.id === photoId);
-          const newPhotos = d.photos.filter((p) => p.id !== photoId);
-          return { ...d, photos: newPhotos, photo_count: newPhotos.length };
-        }
-        if (d.id === toTripId) {
-          const fromDraft = prev.find((dd) => dd.id === fromTripId);
-          const movedPhoto = fromDraft?.photos.find((p) => p.id === photoId);
-          if (movedPhoto) {
-            const newPhotos = [...d.photos, movedPhoto];
-            return { ...d, photos: newPhotos, photo_count: newPhotos.length };
-          }
+        if (d.id === sourceDraft.id) {
+          return { ...d, photos: remainingPhotos, photo_count: remainingPhotos.length };
         }
         return d;
-      });
-      // Remove empty drafts
-      return updated.filter((d) => d.photos.length > 0);
+      }).filter((d) => d.photos.length > 0);
+
+      // Add the new draft
+      const newDraft: DraftTrip = {
+        ...newTrip,
+        photo_count: movedPhotos.length,
+        photos: movedPhotos,
+        lat: sourceDraft.lat,
+        lng: sourceDraft.lng,
+      };
+      return [newDraft, ...updated];
     });
 
-    toast({ title: "Photo moved" });
+    // Fetch store options for new draft if it has coordinates
+    if (sourceDraft.lat && sourceDraft.lng) {
+      fetchStoreOptions(newTrip.id, sourceDraft.lat, sourceDraft.lng);
+    }
+
+    toast({ title: `New draft created with ${photoIds.length} photo${photoIds.length !== 1 ? "s" : ""}` });
+    setSelectedPhotos(new Set());
   }
 
-  // Also clean up empty trips in DB
+  // Clean up empty drafts in DB
   useEffect(() => {
     const emptyDrafts = drafts.filter((d) => d.photo_count === 0);
     for (const d of emptyDrafts) {
@@ -246,9 +342,23 @@ export default function DraftTrips({ open, onOpenChange, onPublished }: DraftTri
             <FileText className="h-5 w-5" /> Draft Trips
           </DialogTitle>
           <DialogDescription>
-            Review auto-imported trips. Scroll through photos to verify, drag photos between trips, then publish.
+            Click photos to select, then drag to another trip or split into a new card. Tap the magnifier to zoom.
           </DialogDescription>
         </DialogHeader>
+
+        {selectedPhotos.size > 0 && (
+          <div className="flex items-center justify-between rounded-md bg-primary/10 px-3 py-2 text-sm">
+            <span className="font-medium">{selectedPhotos.size} photo{selectedPhotos.size !== 1 ? "s" : ""} selected</span>
+            <div className="flex gap-1">
+              <Button variant="outline" size="sm" className="h-6 text-xs gap-1" onClick={createNewDraftFromSelected}>
+                <Plus className="h-3 w-3" /> New Card
+              </Button>
+              <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setSelectedPhotos(new Set())}>
+                Clear
+              </Button>
+            </div>
+          </div>
+        )}
 
         {loading ? (
           <div className="flex justify-center py-8">
@@ -272,34 +382,55 @@ export default function DraftTrips({ open, onOpenChange, onPublished }: DraftTri
                   onDragLeave={handleDragLeave}
                   onDrop={(e) => handleDrop(e, draft.id)}
                 >
-                  {/* Horizontal scrollable photo strip */}
                   {draft.photos.length > 0 && (
                     <ScrollArea className="w-full whitespace-nowrap border-b">
                       <div className="flex gap-1 p-2">
-                        {draft.photos.map((photo) => (
-                          <div
-                            key={photo.id}
-                            draggable
-                            onDragStart={() => handleDragStart(photo.id, draft.id)}
-                            className="relative flex-shrink-0 cursor-grab active:cursor-grabbing group"
-                          >
-                            {photo.url ? (
-                              <img
-                                src={photo.url}
-                                alt=""
-                                className="h-20 w-20 rounded object-cover border border-border"
-                                loading="lazy"
-                              />
-                            ) : (
-                              <div className="h-20 w-20 rounded bg-muted flex items-center justify-center border border-border">
-                                <ImageIcon className="h-5 w-5 text-muted-foreground/40" />
-                              </div>
-                            )}
-                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 rounded transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
-                              <GripHorizontal className="h-4 w-4 text-white drop-shadow" />
+                        {draft.photos.map((photo) => {
+                          const isSelected = selectedPhotos.has(photo.id);
+                          return (
+                            <div
+                              key={photo.id}
+                              draggable
+                              onDragStart={() => handleDragStart(photo.id, draft.id)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                togglePhotoSelection(photo.id, draft.id);
+                              }}
+                              className={`relative flex-shrink-0 cursor-grab active:cursor-grabbing group ${
+                                isSelected ? "ring-2 ring-primary rounded" : ""
+                              }`}
+                            >
+                              {photo.url ? (
+                                <img src={photo.url} alt="" className="h-20 w-20 rounded object-cover border border-border" loading="lazy" />
+                              ) : (
+                                <div className="h-20 w-20 rounded bg-muted flex items-center justify-center border border-border">
+                                  <ImageIcon className="h-5 w-5 text-muted-foreground/40" />
+                                </div>
+                              )}
+                              {isSelected ? (
+                                <div className="absolute top-1 right-1 h-5 w-5 rounded-full bg-primary flex items-center justify-center">
+                                  <Check className="h-3 w-3 text-primary-foreground" />
+                                </div>
+                              ) : (
+                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 rounded transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                                  <GripHorizontal className="h-4 w-4 text-white drop-shadow" />
+                                </div>
+                              )}
+                              {/* Zoom button */}
+                              {photo.url && (
+                                <button
+                                  className="absolute bottom-1 left-1 h-5 w-5 rounded-full bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setZoomedPhoto({ url: photo.url!, id: photo.id });
+                                  }}
+                                >
+                                  <ZoomIn className="h-3 w-3 text-white" />
+                                </button>
+                              )}
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                       <ScrollBar orientation="horizontal" />
                     </ScrollArea>
@@ -321,7 +452,6 @@ export default function DraftTrips({ open, onOpenChange, onPublished }: DraftTri
                       </div>
                     )}
 
-                    {/* Store name selection */}
                     <div className="space-y-2">
                       <label className="text-xs font-medium">Store Name</label>
                       {isLoadingStores ? (
@@ -336,7 +466,7 @@ export default function DraftTrips({ open, onOpenChange, onPublished }: DraftTri
                           <SelectTrigger>
                             <SelectValue placeholder="Choose a store" />
                           </SelectTrigger>
-                          <SelectContent>
+                          <SelectContent className="max-h-60">
                             {stores.map((s, i) => (
                               <SelectItem key={i} value={s.name}>
                                 <span>{s.name}</span>
@@ -396,6 +526,19 @@ export default function DraftTrips({ open, onOpenChange, onPublished }: DraftTri
           </div>
         )}
       </DialogContent>
+
+      {/* Zoom overlay */}
+      {zoomedPhoto && (
+        <Dialog open={!!zoomedPhoto} onOpenChange={() => setZoomedPhoto(null)}>
+          <DialogContent className="max-w-[90vw] max-h-[90vh] p-2 flex items-center justify-center">
+            <img
+              src={zoomedPhoto.url}
+              alt=""
+              className="max-w-full max-h-[85vh] object-contain rounded"
+            />
+          </DialogContent>
+        </Dialog>
+      )}
     </Dialog>
   );
 }
