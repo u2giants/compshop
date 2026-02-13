@@ -37,7 +37,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Camera, Calendar, MapPin, Store, Users, CloudOff, Sparkles, Loader2, Download, Images, ArrowRightLeft, PenLine } from "lucide-react";
+import { ArrowLeft, Camera, Calendar, MapPin, Store, Users, CloudOff, Sparkles, Loader2, Download, Images, ArrowRightLeft, PenLine, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import PhotoCard from "@/components/trip/PhotoCard";
 import TripMembers from "@/components/trip/TripMembers";
@@ -289,6 +289,31 @@ export default function TripDetail() {
       title: "Bulk AI detection complete",
       description: `${success} of ${photosWithoutMeta.length} photos updated with detected metadata.`,
     });
+    loadPhotos();
+  }
+
+  async function handleBulkDelete() {
+    if (!confirm(`Delete ${selectedPhotos.size} selected photo(s)? This cannot be undone.`)) return;
+    let deleted = 0;
+    for (const photoId of selectedPhotos) {
+      const photo = photos.find(p => p.id === photoId);
+      if (!photo) continue;
+      try {
+        // Delete grouped children first
+        const children = photos.filter(p => p.group_id === photoId);
+        for (const child of children) {
+          await supabase.storage.from("photos").remove([child.file_path]);
+          await supabase.from("photos").delete().eq("id", child.id);
+        }
+        await supabase.storage.from("photos").remove([photo.file_path]);
+        const { error } = await supabase.from("photos").delete().eq("id", photoId);
+        if (!error) deleted++;
+      } catch (err) {
+        console.error("Failed to delete photo:", photoId, err);
+      }
+    }
+    toast({ title: `Deleted ${deleted} photo(s)` });
+    setSelectedPhotos(new Set());
     loadPhotos();
   }
 
@@ -757,6 +782,9 @@ export default function TripDetail() {
             </Button>
             <Button variant="outline" onClick={() => setShowBulkMove(true)} className="gap-2">
               <ArrowRightLeft className="h-4 w-4" /> Move {selectedPhotos.size} Selected
+            </Button>
+            <Button variant="destructive" onClick={handleBulkDelete} className="gap-2">
+              <Trash2 className="h-4 w-4" /> Delete {selectedPhotos.size} Selected
             </Button>
             <Button variant="ghost" size="sm" onClick={() => setSelectedPhotos(new Set())}>
               Clear Selection

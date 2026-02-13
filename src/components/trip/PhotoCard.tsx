@@ -277,7 +277,7 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
         <div className="relative cursor-pointer" onClick={(e) => { if (selectionMode && onSelect) { onSelect(photo.id, e); return; } setShowDetail(true); }}>
           {onSelect && (
             <button
-              className={`absolute left-2 top-2 z-10 h-5 w-5 rounded border-2 flex items-center justify-center transition-all ${
+              className={`absolute right-2 top-2 z-10 h-5 w-5 rounded border-2 flex items-center justify-center transition-all ${
                 selected ? "bg-primary border-primary text-primary-foreground" : "border-muted-foreground/50 bg-background/80 backdrop-blur-sm opacity-0 group-hover:opacity-100"
               } ${selectionMode ? "!opacity-100" : ""}`}
               onClick={(e) => { e.stopPropagation(); onSelect(photo.id, e); }}
@@ -304,7 +304,7 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
           )}
           {totalImages > 1 && (
             <>
-              <Badge className="absolute right-2 top-2 bg-background/80 text-foreground backdrop-blur-sm">
+              <Badge className="absolute right-2 bottom-2 bg-background/80 text-foreground backdrop-blur-sm">
                 {activeImageIndex + 1}/{totalImages}
               </Badge>
               <Button
