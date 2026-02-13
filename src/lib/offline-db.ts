@@ -106,6 +106,13 @@ export async function getCachedTrips(): Promise<CachedTrip[]> {
   return db.getAll("trips");
 }
 
+export async function clearCachedTrips() {
+  const db = await getDB();
+  const tx = db.transaction("trips", "readwrite");
+  await tx.store.clear();
+  await tx.done;
+}
+
 export async function getCachedTrip(id: string): Promise<CachedTrip | undefined> {
   const db = await getDB();
   return db.get("trips", id);
