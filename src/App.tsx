@@ -5,12 +5,16 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { lazy, Suspense } from "react";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { AppModeProvider } from "@/contexts/AppModeContext";
 import AppShell from "@/components/layout/AppShell";
 
 const Auth = lazy(() => import("@/pages/Auth"));
 const Trips = lazy(() => import("@/pages/Trips"));
 const NewTrip = lazy(() => import("@/pages/NewTrip"));
 const TripDetail = lazy(() => import("@/pages/TripDetail"));
+const ChinaTrips = lazy(() => import("@/pages/ChinaTrips"));
+const NewChinaTrip = lazy(() => import("@/pages/NewChinaTrip"));
+const ChinaTripDetail = lazy(() => import("@/pages/ChinaTripDetail"));
 const Profile = lazy(() => import("@/pages/Profile"));
 const ImportKeep = lazy(() => import("@/pages/ImportKeep"));
 const ImportTeams = lazy(() => import("@/pages/ImportTeams"));
@@ -45,27 +49,32 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
-          <Suspense fallback={<PageLoader />}>
-            <Routes>
-              <Route path="/auth" element={<Auth />} />
-              <Route
-                element={
-                  <ProtectedRoute>
-                    <AppShell />
-                  </ProtectedRoute>
-                }
-              >
-                <Route path="/" element={<Trips />} />
-                <Route path="/trips/new" element={<NewTrip />} />
-                <Route path="/trips/:id" element={<TripDetail />} />
-                <Route path="/search" element={<Navigate to="/" replace />} />
-                <Route path="/profile" element={<Profile />} />
-                <Route path="/import/keep" element={<ImportKeep />} />
-                <Route path="/import/teams" element={<ImportTeams />} />
-              </Route>
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </Suspense>
+          <AppModeProvider>
+            <Suspense fallback={<PageLoader />}>
+              <Routes>
+                <Route path="/auth" element={<Auth />} />
+                <Route
+                  element={
+                    <ProtectedRoute>
+                      <AppShell />
+                    </ProtectedRoute>
+                  }
+                >
+                  <Route path="/" element={<Trips />} />
+                  <Route path="/trips/new" element={<NewTrip />} />
+                  <Route path="/trips/:id" element={<TripDetail />} />
+                  <Route path="/china" element={<ChinaTrips />} />
+                  <Route path="/china/new" element={<NewChinaTrip />} />
+                  <Route path="/china/:id" element={<ChinaTripDetail />} />
+                  <Route path="/search" element={<Navigate to="/" replace />} />
+                  <Route path="/profile" element={<Profile />} />
+                  <Route path="/import/keep" element={<ImportKeep />} />
+                  <Route path="/import/teams" element={<ImportTeams />} />
+                </Route>
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </Suspense>
+          </AppModeProvider>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
