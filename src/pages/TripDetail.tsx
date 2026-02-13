@@ -167,6 +167,65 @@ export default function TripDetail() {
     toast({ title: `Downloaded ${count} photos`, description: "Save them to your camera roll from Downloads." });
   }
 
+  const [bulkAnalyzing, setBulkAnalyzing] = useState(false);
+  const [bulkAnalyzeProgress, setBulkAnalyzeProgress] = useState(0);
+
+  async function handleBulkAiDetect() {
+    const photosWithoutMeta = photos.filter(
+      (p) => !p.product_name && !p.brand && !p.price && p.signed_url
+    );
+    if (photosWithoutMeta.length === 0) {
+      toast({ title: "No photos need detection", description: "All photos already have metadata." });
+      return;
+    }
+    setBulkAnalyzing(true);
+    setBulkAnalyzeProgress(0);
+    let success = 0;
+
+    for (let i = 0; i < photosWithoutMeta.length; i++) {
+      const photo = photosWithoutMeta[i];
+      setBulkAnalyzeProgress(Math.round((i / photosWithoutMeta.length) * 100));
+      try {
+        const res = await fetch(photo.signed_url!);
+        const blob = await res.blob();
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve((reader.result as string).split(",")[1]);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+
+        const { data, error } = await supabase.functions.invoke("analyze-photo", {
+          body: { imageBase64: base64, mimeType: blob.type },
+        });
+        if (error) throw error;
+
+        const updates: Record<string, unknown> = {};
+        if (data.product_name) updates.product_name = data.product_name;
+        if (data.price != null) updates.price = data.price;
+        if (data.dimensions) updates.dimensions = data.dimensions;
+        if (data.brand) updates.brand = data.brand;
+        if (data.material) updates.material = data.material;
+        if (data.country_of_origin) updates.country_of_origin = data.country_of_origin;
+
+        if (Object.keys(updates).length > 0) {
+          await supabase.from("photos").update(updates).eq("id", photo.id);
+          success++;
+        }
+      } catch (err) {
+        console.error("Bulk AI detect failed for:", photo.id, err);
+      }
+    }
+
+    setBulkAnalyzeProgress(100);
+    setBulkAnalyzing(false);
+    toast({
+      title: "Bulk AI detection complete",
+      description: `${success} of ${photosWithoutMeta.length} photos updated with detected metadata.`,
+    });
+    loadPhotos();
+  }
+
   const [formFields, setFormFields] = useState({
     product_name: "",
     category: "",
@@ -419,9 +478,20 @@ export default function TripDetail() {
           <Images className="h-4 w-4" /> Bulk Upload
         </Button>
         {photos.length > 0 && (
-          <Button variant="outline" onClick={handleDownloadAll} disabled={downloading} className="gap-2">
-            <Download className="h-4 w-4" /> {downloading ? "Downloading..." : "Download All"}
-          </Button>
+          <>
+            <Button variant="outline" onClick={handleDownloadAll} disabled={downloading} className="gap-2">
+              <Download className="h-4 w-4" /> {downloading ? "Downloading..." : "Download All"}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleBulkAiDetect}
+              disabled={bulkAnalyzing}
+              className="gap-2"
+            >
+              <Sparkles className="h-4 w-4" />
+              {bulkAnalyzing ? `AI Detecting... ${bulkAnalyzeProgress}%` : "AI Detect All"}
+            </Button>
+          </>
         )}
         <Badge variant="secondary">{photos.length} photos</Badge>
         {pendingPhotos.length > 0 && (
