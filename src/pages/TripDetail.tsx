@@ -19,7 +19,10 @@ import { runSync } from "@/lib/sync-service";
 import { useOnlineStatus } from "@/hooks/use-online-status";
 import { useCountries } from "@/hooks/use-countries";
 import { useRetailers } from "@/hooks/use-retailers";
-import { Pencil } from "lucide-react";
+import { Pencil, CalendarIcon } from "lucide-react";
+import { Calendar as CalendarPicker } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 import AutocompleteInput from "@/components/ui/autocomplete-input";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -583,7 +586,30 @@ export default function TripDetail() {
               <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
             </button>
           )}
-          <span className="flex items-center gap-1"><Calendar className="h-3.5 w-3.5" /> {format(new Date(trip.date), "MMM d, yyyy")}</span>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button className="flex items-center gap-1 group hover:text-foreground transition-colors" title="Click to change date">
+                <Calendar className="h-3.5 w-3.5" /> {format(new Date(trip.date), "MMM d, yyyy")}
+                <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <CalendarPicker
+                mode="single"
+                selected={new Date(trip.date + "T00:00:00")}
+                onSelect={async (date) => {
+                  if (!date) return;
+                  const dateStr = format(date, "yyyy-MM-dd");
+                  const { error } = await supabase.from("shopping_trips").update({ date: dateStr }).eq("id", trip.id);
+                  if (error) { toast({ title: "Failed to update date", variant: "destructive" }); return; }
+                  setTrip({ ...trip, date: dateStr });
+                  toast({ title: "Date updated" });
+                }}
+                initialFocus
+                className={cn("p-3 pointer-events-auto")}
+              />
+            </PopoverContent>
+          </Popover>
           {trip.location && <span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5" /> {trip.location}</span>}
         </div>
         {trip.notes && <p className="mt-2 text-sm text-muted-foreground">{trip.notes}</p>}
