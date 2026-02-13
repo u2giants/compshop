@@ -57,7 +57,21 @@ export default function InviteManager() {
           throw error;
         }
       } else {
-        toast({ title: "Invitation sent!", description: `${email} can now sign up.` });
+        // Send the invitation email via Brevo
+        const { data: profile } = await supabase.from("profiles").select("display_name").eq("id", user.id).single();
+        const inviterName = profile?.display_name || user.email || "Your team";
+        
+        const { error: emailErr } = await supabase.functions.invoke("send-invite-email", {
+          body: { email: email.toLowerCase().trim(), inviterName, appUrl: window.location.origin },
+        });
+        
+        if (emailErr) {
+          console.error("Email send failed:", emailErr);
+          toast({ title: "Invited (email failed)", description: `${email} was added to the invite list, but the email could not be sent. Let them know directly.`, variant: "destructive" });
+        } else {
+          toast({ title: "Invitation sent!", description: `${email} will receive an email with a link to join.` });
+        }
+        
         setEmail("");
         loadInvitations();
       }
