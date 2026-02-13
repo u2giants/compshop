@@ -32,12 +32,11 @@ export async function hashFile(file: File): Promise<string> {
 }
 
 export async function checkDuplicatePhoto(fileHash: string): Promise<boolean> {
-  const { data } = await supabase
-    .from("photos")
-    .select("id")
-    .eq("file_hash", fileHash)
-    .limit(1);
-  return (data?.length ?? 0) > 0;
+  const [{ data: d1 }, { data: d2 }] = await Promise.all([
+    supabase.from("photos").select("id").eq("file_hash", fileHash).limit(1),
+    supabase.from("china_photos").select("id").eq("file_hash", fileHash).limit(1),
+  ]);
+  return (d1?.length ?? 0) > 0 || (d2?.length ?? 0) > 0;
 }
 
 export async function uploadPhoto(file: File, userId: string, tripId: string) {
