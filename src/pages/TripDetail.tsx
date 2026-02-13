@@ -28,7 +28,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Camera, Calendar, MapPin, Store, Users, CloudOff, Sparkles, Loader2 } from "lucide-react";
+import { ArrowLeft, Camera, Calendar, MapPin, Store, Users, CloudOff, Sparkles, Loader2, Download, Images } from "lucide-react";
 import { format } from "date-fns";
 import PhotoCard from "@/components/trip/PhotoCard";
 import TripMembers from "@/components/trip/TripMembers";
@@ -137,6 +137,35 @@ export default function TripDetail() {
     loadPhotos();
   }
 
+  const [downloading, setDownloading] = useState(false);
+
+  async function handleDownloadAll() {
+    if (photos.length === 0) return;
+    setDownloading(true);
+    let count = 0;
+    for (const photo of photos) {
+      try {
+        const url = photo.signed_url;
+        if (!url) continue;
+        const res = await fetch(url);
+        const blob = await res.blob();
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        const ext = photo.file_path.split(".").pop() || "jpg";
+        a.download = `${photo.product_name || "photo"}_${count + 1}.${ext}`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(a.href);
+        count++;
+        await new Promise((r) => setTimeout(r, 300));
+      } catch (err) {
+        console.error("Download failed for:", photo.id, err);
+      }
+    }
+    setDownloading(false);
+    toast({ title: `Downloaded ${count} photos`, description: "Save them to your camera roll from Downloads." });
+  }
 
   const [formFields, setFormFields] = useState({
     product_name: "",
@@ -381,11 +410,19 @@ export default function TripDetail() {
 
       <TripMembers tripId={trip.id} createdBy={trip.created_by} />
 
-      <div className="mb-6 flex items-center gap-3">
+      <div className="mb-6 flex flex-wrap items-center gap-2">
         <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFileSelect} />
         <Button onClick={() => fileInputRef.current?.click()} className="gap-2">
           <Camera className="h-4 w-4" /> Add Photo
         </Button>
+        <Button variant="outline" onClick={() => { fileInputRef.current?.click(); }} className="gap-2">
+          <Images className="h-4 w-4" /> Bulk Upload
+        </Button>
+        {photos.length > 0 && (
+          <Button variant="outline" onClick={handleDownloadAll} disabled={downloading} className="gap-2">
+            <Download className="h-4 w-4" /> {downloading ? "Downloading..." : "Download All"}
+          </Button>
+        )}
         <Badge variant="secondary">{photos.length} photos</Badge>
         {pendingPhotos.length > 0 && (
           <Badge variant="outline" className="gap-1">

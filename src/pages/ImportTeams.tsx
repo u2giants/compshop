@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -8,9 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Upload, Loader2, CheckCircle, MessageSquare } from "lucide-react";
+import { ArrowLeft, Upload, Loader2, CheckCircle, MessageSquare, X, ImagePlus } from "lucide-react";
 
 interface ParsedConversation {
   store: string;
@@ -30,8 +29,8 @@ export default function ImportTeams() {
   const [parsed, setParsed] = useState<ParsedConversation | null>(null);
   const [importing, setImporting] = useState(false);
   const [done, setDone] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
 
-  // Allow manual override after AI parse
   const [store, setStore] = useState("");
   const [date, setDate] = useState("");
   const [notes, setNotes] = useState("");
@@ -41,6 +40,19 @@ export default function ImportTeams() {
       setImages((prev) => [...prev, ...Array.from(e.target.files!)]);
     }
   }
+
+  function removeImage(index: number) {
+    setImages((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDragActive(false);
+    const files = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith("image/"));
+    if (files.length > 0) {
+      setImages((prev) => [...prev, ...files]);
+    }
+  }, []);
 
   async function handleParse() {
     if (!conversationText.trim()) {
@@ -65,8 +77,7 @@ export default function ImportTeams() {
       setNotes(result.notes);
       toast({ title: "Parsed!", description: `Store: ${result.store}, Date: ${result.date}` });
     } catch (err: any) {
-      toast({ title: "Parse failed", description: err.message, variant: "destructive" });
-      // Fallback to manual
+      toast({ title: "Parse failed — fill in manually", description: err.message, variant: "destructive" });
       setStore("Unknown Store");
       setDate(new Date().toISOString().split("T")[0]);
       setNotes(conversationText);
@@ -103,7 +114,7 @@ export default function ImportTeams() {
             trip_id: trip.id,
             user_id: user.id,
             file_path: filePath,
-            notes: `Imported from Teams conversation`,
+            notes: "Imported from Teams conversation",
           });
         } catch (imgErr) {
           console.error("Failed to upload image:", img.name, imgErr);
@@ -143,63 +154,82 @@ export default function ImportTeams() {
         <ArrowLeft className="h-4 w-4" /> Back to Profile
       </button>
 
-      <h1 className="mb-6 font-serif text-2xl">Import from Microsoft Teams</h1>
+      <h1 className="mb-2 font-serif text-2xl">Import from Microsoft Teams</h1>
+      <p className="mb-6 text-sm text-muted-foreground">
+        Teams doesn't bundle text and images together in a single export.
+        You'll need to <strong>copy the conversation text</strong> and <strong>save the images separately</strong> from the chat.
+      </p>
 
       <div className="space-y-6">
-        {/* Step 1: Paste conversation */}
+        {/* Combined: paste text + add images */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg font-serif">Step 1: Paste the conversation</CardTitle>
+            <CardTitle className="text-lg font-serif">Conversation & Photos</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              In Teams, open the conversation → click <strong>"Forward"</strong> or select all messages → copy the text and paste it below.
-            </p>
-            <Textarea
-              value={conversationText}
-              onChange={(e) => setConversationText(e.target.value)}
-              placeholder="Paste the Teams conversation here..."
-              rows={8}
-            />
-            <Button onClick={handleParse} disabled={parsing || !conversationText.trim()} className="w-full gap-2">
-              {parsing ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageSquare className="h-4 w-4" />}
-              {parsing ? "Parsing with AI..." : "Parse Conversation"}
-            </Button>
-          </CardContent>
-        </Card>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label>Conversation text</Label>
+              <p className="text-xs text-muted-foreground">Select all messages in Teams → Copy → Paste here</p>
+              <Textarea
+                value={conversationText}
+                onChange={(e) => setConversationText(e.target.value)}
+                placeholder="Paste the Teams conversation here..."
+                rows={6}
+              />
+            </div>
 
-        {/* Step 2: Upload images */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg font-serif">Step 2: Add photos from the conversation</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Save the images from the Teams conversation, then select them here.
-            </p>
-            <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleImageSelect} />
-            <Button variant="outline" onClick={() => fileInputRef.current?.click()} className="w-full gap-2">
-              <Upload className="h-4 w-4" /> Select Images ({images.length} selected)
-            </Button>
-            {images.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {images.map((img, i) => (
-                  <div key={i} className="relative h-16 w-16 rounded overflow-hidden">
-                    <img src={URL.createObjectURL(img)} alt="" className="h-full w-full object-cover" />
-                  </div>
-                ))}
+            <div className="space-y-2">
+              <Label>Photos</Label>
+              <p className="text-xs text-muted-foreground">Long-press images in Teams → Save → Select them here or drag & drop</p>
+              <div
+                className={`rounded-lg border-2 border-dashed p-4 text-center transition-colors ${dragActive ? "border-primary bg-primary/5" : "border-muted-foreground/25"}`}
+                onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
+                onDragLeave={() => setDragActive(false)}
+                onDrop={handleDrop}
+              >
+                <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleImageSelect} />
+                <ImagePlus className="mx-auto h-8 w-8 text-muted-foreground/50 mb-2" />
+                <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="gap-1">
+                  <Upload className="h-3.5 w-3.5" /> Select Images
+                </Button>
+                <p className="mt-1 text-xs text-muted-foreground">or drag & drop</p>
               </div>
-            )}
+              {images.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {images.map((img, i) => (
+                    <div key={i} className="relative h-16 w-16 rounded overflow-hidden group">
+                      <img src={URL.createObjectURL(img)} alt="" className="h-full w-full object-cover" />
+                      <button
+                        onClick={() => removeImage(i)}
+                        className="absolute inset-0 flex items-center justify-center bg-background/60 opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <Button
+              onClick={handleParse}
+              disabled={parsing || !conversationText.trim()}
+              className="w-full gap-2"
+            >
+              {parsing ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageSquare className="h-4 w-4" />}
+              {parsing ? "AI is parsing..." : "Parse with AI"}
+            </Button>
           </CardContent>
         </Card>
 
-        {/* Step 3: Review & import */}
+        {/* Review & import */}
         {parsed && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg font-serif">Step 3: Review & Import</CardTitle>
+              <CardTitle className="text-lg font-serif">Review & Import</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
+              <p className="text-xs text-muted-foreground">AI extracted these details — edit if needed.</p>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label>Store Name</Label>
@@ -216,7 +246,7 @@ export default function ImportTeams() {
               </div>
               <Button onClick={handleImport} disabled={importing} className="w-full gap-2">
                 {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                {importing ? "Importing..." : `Import Trip with ${images.length} Photos`}
+                {importing ? "Importing..." : `Create Trip with ${images.length} Photo${images.length !== 1 ? "s" : ""}`}
               </Button>
             </CardContent>
           </Card>
