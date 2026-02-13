@@ -252,39 +252,74 @@ export default function ChinaTrips() {
 
       if (cluster.venueType === "canton_fair" && cluster.sessionLabel) {
         // Try to find an existing Canton Fair trip in this session's date range
-        const sKey = sessionKey({ year: 0, phase: "spring", label: "", startDate: "", endDate: "" }); // just for type
-        // Actually search by date range and venue type
         const sessionInfo = getCantonFairSession(cluster.date + "");
         if (sessionInfo) {
           const { data: existing } = await supabase
             .from("china_trips")
-            .select("id, supplier")
+            .select("id, supplier, location")
             .eq("venue_type", "canton_fair")
             .is("deleted_at", null)
             .gte("date", sessionInfo.startDate)
             .lte("date", sessionInfo.endDate);
 
-          // Try to match by location proximity if GPS is available
-          if (existing && existing.length > 0 && cluster.lat == null) {
-            // No GPS - can't distinguish booths, use first match
+          if (existing && existing.length > 0) {
+            if (cluster.lat != null && cluster.lng != null) {
+              // GPS available: try to match an existing trip by proximity
+              for (const ex of existing) {
+                const coordMatch = ex.location?.match(/\(([-\d.]+),\s*([-\d.]+)\)/);
+                if (coordMatch) {
+                  const exLat = parseFloat(coordMatch[1]);
+                  const exLng = parseFloat(coordMatch[2]);
+                  if (distanceKm(cluster.lat, cluster.lng!, exLat, exLng) <= CLUSTER_RADIUS_KM) {
+                    tripId = ex.id;
+                    tripName = ex.supplier;
+                    break;
+                  }
+                }
+              }
+              // If no GPS match, try matching by supplier name (same session)
+              if (!tripId && existing.length === 1) {
+                // Only one trip in this session — likely the same booth
+                tripId = existing[0].id;
+                tripName = existing[0].supplier;
+              }
+            } else {
+              // No GPS — match first trip in the session
+              tripId = existing[0].id;
+              tripName = existing[0].supplier;
+            }
+          }
+        }
+      } else {
+        // Factory visit: try to match by date and GPS proximity
+        const { data: existing } = await supabase
+          .from("china_trips")
+          .select("id, supplier, location")
+          .eq("venue_type", "factory_visit")
+          .eq("date", cluster.date)
+          .is("deleted_at", null);
+
+        if (existing && existing.length > 0) {
+          if (cluster.lat != null && cluster.lng != null) {
+            // Match by GPS proximity
+            for (const ex of existing) {
+              const coordMatch = ex.location?.match(/\(([-\d.]+),\s*([-\d.]+)\)/);
+              if (coordMatch) {
+                const exLat = parseFloat(coordMatch[1]);
+                const exLng = parseFloat(coordMatch[2]);
+                if (distanceKm(cluster.lat, cluster.lng!, exLat, exLng) <= CLUSTER_RADIUS_KM) {
+                  tripId = ex.id;
+                  tripName = ex.supplier;
+                  break;
+                }
+              }
+            }
+          }
+          // Fallback: if only one trip on that date, use it
+          if (!tripId && existing.length === 1) {
             tripId = existing[0].id;
             tripName = existing[0].supplier;
           }
-          // If GPS, we don't match existing (each booth is separate)
-        }
-      } else {
-        // Factory visit: try to match by date
-        const { data: existing } = await supabase
-          .from("china_trips")
-          .select("id, supplier")
-          .eq("venue_type", "factory_visit")
-          .eq("date", cluster.date)
-          .is("deleted_at", null)
-          .limit(1);
-
-        if (existing && existing.length > 0) {
-          tripId = existing[0].id;
-          tripName = existing[0].supplier;
         }
       }
 
