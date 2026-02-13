@@ -161,10 +161,26 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
     }
   }
 
+  // Strip metric portion from dimensions if imperial is also present
+  function displayDimensions(dim: string): string {
+    // If it contains both inches (", in, ') and metric (cm, mm, m), strip the metric part
+    const hasImperial = /["'"]|(\d\s*in\b)/i.test(dim);
+    const hasMetric = /\d\s*(cm|mm|m\b)/i.test(dim);
+    if (hasImperial && hasMetric) {
+      // Remove metric portions like "/ 30.5 x 20.3 cm" or "(77 x 51.5 cm)" or ", 30cm x 20cm"
+      return dim
+        .replace(/\s*[/|]\s*[\d.]+\s*x?\s*[\d.]*\s*(cm|mm|m)\b[^)"]*/gi, "")
+        .replace(/\s*\([\d.\s×x]+\s*(cm|mm|m)\s*\)/gi, "")
+        .replace(/,?\s*[\d.]+\s*(cm|mm|m)\s*x?\s*[\d.]*\s*(cm|mm|m)?\b/gi, "")
+        .trim();
+    }
+    return dim;
+  }
+
   const metaItems = [
     photo.price != null && { icon: DollarSign, text: `${photo.price}` },
     photo.country_of_origin && { icon: MapPin, text: photo.country_of_origin },
-    photo.dimensions && { icon: Ruler, text: photo.dimensions },
+    photo.dimensions && { icon: Ruler, text: displayDimensions(photo.dimensions) },
     photo.material && { icon: Layers, text: photo.material },
     photo.brand && { icon: Tag, text: photo.brand },
   ].filter(Boolean) as { icon: any; text: string }[];
