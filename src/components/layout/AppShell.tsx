@@ -24,7 +24,7 @@ export default function AppShell() {
   const longPressTriggered = useRef(false);
 
   const isChina = mode === "china_trip";
-  const tripsLabel = isChina ? "CN Trips" : "Str Trips";
+  const tripsLabel = isChina ? "Asia Trips" : "Str Trips";
 
   const handleTripsPointerDown = useCallback(() => {
     longPressTriggered.current = false;
@@ -65,7 +65,7 @@ export default function AppShell() {
     navigate(newMode === "china_trip" ? "/china" : "/");
   }
 
-  const modeLabel = isChina ? "China Trip" : "Store Shopping";
+  const modeLabel = isChina ? "Asia Trip" : "Store Shopping";
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -87,7 +87,7 @@ export default function AppShell() {
                   {!isChina && <span className="ml-auto text-xs text-primary">✓</span>}
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => handleModeSwitch("china_trip")} className="gap-2">
-                  <Factory className="h-4 w-4" /> China Trip
+                  <Factory className="h-4 w-4" /> Asia Trip
                   {isChina && <span className="ml-auto text-xs text-primary">✓</span>}
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -177,7 +177,7 @@ export default function AppShell() {
                             onClick={() => handleModeSwitch("china_trip")}
                             className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
                           >
-                            <Factory className="h-4 w-4" /> CN Trips
+                            <Factory className="h-4 w-4" /> Asia Trips
                             {isChina && <span className="ml-auto text-xs text-primary">✓</span>}
                           </button>
                         </div>

@@ -117,7 +117,7 @@ export default function NewChinaTrip() {
 
       await supabase.from("china_trip_members").insert({ trip_id: trip.id, user_id: user.id });
 
-      toast({ title: "China trip created!" });
+      toast({ title: "Asia trip created!" });
       navigate(`/china/${trip.id}`);
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -133,7 +133,7 @@ export default function NewChinaTrip() {
       </button>
       <Card>
         <CardHeader>
-          <CardTitle className="font-sans text-2xl">New China Trip</CardTitle>
+          <CardTitle className="font-sans text-2xl">New Asia Trip</CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
