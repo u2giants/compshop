@@ -9,7 +9,6 @@ import Auth from "@/pages/Auth";
 import Trips from "@/pages/Trips";
 import NewTrip from "@/pages/NewTrip";
 import TripDetail from "@/pages/TripDetail";
-import SearchPage from "@/pages/SearchPage";
 import Profile from "@/pages/Profile";
 import ImportKeep from "@/pages/ImportKeep";
 import ImportTeams from "@/pages/ImportTeams";
@@ -50,7 +49,7 @@ const App = () => (
               <Route path="/" element={<Trips />} />
               <Route path="/trips/new" element={<NewTrip />} />
               <Route path="/trips/:id" element={<TripDetail />} />
-              <Route path="/search" element={<SearchPage />} />
+              <Route path="/search" element={<Navigate to="/" replace />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/import/keep" element={<ImportKeep />} />
               <Route path="/import/teams" element={<ImportTeams />} />

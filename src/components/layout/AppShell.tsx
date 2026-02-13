@@ -1,12 +1,14 @@
+import { useState } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Home, Search, PlusCircle, User, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import SyncStatusIndicator from "@/components/SyncStatusIndicator";
+import SearchOverlay from "./SearchOverlay";
 
 const navItems = [
   { icon: Home, label: "Trips", path: "/" },
-  { icon: Search, label: "Search", path: "/search" },
+  { icon: Search, label: "Search", path: "__search__" },
   { icon: PlusCircle, label: "New Trip", path: "/trips/new" },
   { icon: User, label: "Profile", path: "/profile" },
 ];
@@ -15,15 +17,25 @@ export default function AppShell() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchOpen, setSearchOpen] = useState(false);
 
   if (!user) return null;
+
+  function handleNavClick(path: string) {
+    if (path === "__search__") {
+      setSearchOpen((prev) => !prev);
+    } else {
+      setSearchOpen(false);
+      navigate(path);
+    }
+  }
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
       {/* Top bar - desktop */}
-      <header className="hidden border-b bg-card md:block">
+      <header className="hidden border-b bg-card md:block relative">
         <div className="container flex h-14 items-center justify-between">
-          <button onClick={() => navigate("/")} className="font-sans text-2xl font-semibold text-primary">
+          <button onClick={() => { setSearchOpen(false); navigate("/"); }} className="font-sans text-2xl font-semibold text-primary">
             CompShop
           </button>
           <div className="flex items-center gap-3">
@@ -32,10 +44,10 @@ export default function AppShell() {
               {navItems.map((item) => (
                 <button
                   key={item.path}
-                  onClick={() => navigate(item.path)}
+                  onClick={() => handleNavClick(item.path)}
                   className={cn(
                     "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                    location.pathname === item.path
+                    (item.path === "__search__" && searchOpen) || (item.path !== "__search__" && location.pathname === item.path)
                       ? "bg-primary/10 text-primary"
                       : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   )}
@@ -53,6 +65,7 @@ export default function AppShell() {
             </nav>
           </div>
         </div>
+        <SearchOverlay open={searchOpen} onClose={() => setSearchOpen(false)} />
       </header>
 
       {/* Main content */}
@@ -68,10 +81,10 @@ export default function AppShell() {
             {navItems.map((item) => (
               <button
                 key={item.path}
-                onClick={() => navigate(item.path)}
+                onClick={() => handleNavClick(item.path)}
                 className={cn(
                   "flex flex-col items-center gap-0.5 px-3 py-1 text-xs transition-colors",
-                  location.pathname === item.path
+                  (item.path === "__search__" && searchOpen) || (item.path !== "__search__" && location.pathname === item.path)
                     ? "text-primary"
                     : "text-muted-foreground"
                 )}
@@ -83,6 +96,13 @@ export default function AppShell() {
           </div>
         </div>
       </nav>
+
+      {/* Mobile search overlay */}
+      {searchOpen && (
+        <div className="fixed inset-x-0 top-0 bottom-16 z-40 bg-card overflow-y-auto md:hidden">
+          <SearchOverlay open={searchOpen} onClose={() => setSearchOpen(false)} />
+        </div>
+      )}
     </div>
   );
 }
