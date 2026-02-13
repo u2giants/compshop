@@ -8,6 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { LogOut, Shield } from "lucide-react";
+import InviteManager from "@/components/admin/InviteManager";
+import StorageQuotaManager from "@/components/settings/StorageQuotaManager";
 
 export default function Profile() {
   const { user, isAdmin, signOut } = useAuth();
@@ -46,8 +48,8 @@ export default function Profile() {
   }
 
   return (
-    <div className="container max-w-lg py-6">
-      <h1 className="mb-6 font-serif text-3xl">Profile</h1>
+    <div className="container max-w-lg py-6 space-y-6">
+      <h1 className="font-serif text-3xl">Profile</h1>
 
       <Card>
         <CardHeader>
@@ -84,6 +86,12 @@ export default function Profile() {
           </Button>
         </CardContent>
       </Card>
+
+      {/* Admin: Invite team members */}
+      <InviteManager />
+
+      {/* Storage quota settings */}
+      <StorageQuotaManager />
     </div>
   );
 }
