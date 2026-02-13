@@ -4,8 +4,9 @@ import { getSignedPhotoUrl } from "@/lib/supabase-helpers";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import AutocompleteInput from "@/components/ui/autocomplete-input";
+import { useRetailers } from "@/hooks/use-retailers";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Calendar, MapPin, Loader2, Check, Trash2, FileText, GripHorizontal, ImageIcon } from "lucide-react";
 import { format } from "date-fns";
@@ -42,6 +43,7 @@ interface DraftTripsProps {
 }
 
 export default function DraftTrips({ open, onOpenChange, onPublished }: DraftTripsProps) {
+  const { retailerNames, getLogoUrl } = useRetailers();
   const { toast } = useToast();
   const [drafts, setDrafts] = useState<DraftTrip[]>([]);
   const [loading, setLoading] = useState(false);
@@ -338,11 +340,21 @@ export default function DraftTrips({ open, onOpenChange, onPublished }: DraftTri
                           </SelectContent>
                         </Select>
                       ) : null}
-                      <Input
+                      <AutocompleteInput
                         placeholder="Or type a custom store name"
                         value={currentName}
-                        onChange={(e) => setCustomNames((prev) => new Map(prev).set(draft.id, e.target.value))}
+                        onChange={(v) => setCustomNames((prev) => new Map(prev).set(draft.id, v))}
+                        suggestions={retailerNames}
                         className="text-sm"
+                        renderSuggestion={(name) => {
+                          const logo = getLogoUrl(name);
+                          return (
+                            <span className="flex items-center gap-2">
+                              {logo && <img src={logo} alt="" className="h-4 w-4 object-contain" />}
+                              {name}
+                            </span>
+                          );
+                        }}
                       />
                     </div>
 
