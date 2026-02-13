@@ -48,6 +48,7 @@ export type Database = {
           notes: string | null
           price: number | null
           product_name: string | null
+          section: string | null
           trip_id: string
           updated_at: string
           user_id: string | null
@@ -67,6 +68,7 @@ export type Database = {
           notes?: string | null
           price?: number | null
           product_name?: string | null
+          section?: string | null
           trip_id: string
           updated_at?: string
           user_id?: string | null
@@ -86,6 +88,7 @@ export type Database = {
           notes?: string | null
           price?: number | null
           product_name?: string | null
+          section?: string | null
           trip_id?: string
           updated_at?: string
           user_id?: string | null

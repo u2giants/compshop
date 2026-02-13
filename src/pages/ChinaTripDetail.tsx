@@ -5,16 +5,37 @@ import { useAuth } from "@/contexts/AuthContext";
 import { uploadPhoto, getSignedPhotoUrl, hashFile, checkDuplicatePhoto } from "@/lib/supabase-helpers";
 import { useCategories } from "@/hooks/use-categories";
 import { useCountries } from "@/hooks/use-countries";
+import { useOnlineStatus } from "@/hooks/use-online-status";
+import {
+  getCachedTrip,
+  cacheTrips,
+  getCachedPhotos,
+  cachePhotos,
+  cacheImageBlob,
+  getCachedImageBlob,
+  addPendingUpload,
+  getPendingUploadsByTrip,
+  type CachedPhoto,
+  type PendingUpload,
+} from "@/lib/offline-db";
+import { runSync } from "@/lib/sync-service";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar as CalendarPicker } from "@/components/ui/calendar";
+import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Camera, Calendar, MapPin, Factory, Sparkles, Loader2, Download, Images, ArrowRightLeft, PenLine } from "lucide-react";
+import {
+  ArrowLeft, Camera, Calendar, MapPin, Factory, Sparkles, Loader2, Download,
+  Images, ArrowRightLeft, PenLine, Pencil, CalendarIcon, CloudOff, Plus,
+} from "lucide-react";
 import { format } from "date-fns";
 import PhotoCard from "@/components/trip/PhotoCard";
 import ChinaMoveToTripDialog from "@/components/trip/ChinaMoveToTripDialog";
@@ -48,6 +69,7 @@ interface Photo {
   created_at: string;
   signed_url?: string;
   group_id: string | null;
+  section: string | null;
 }
 
 function groupPhotos(photos: Photo[]): { primary: Photo; extras: Photo[] }[] {
@@ -65,17 +87,40 @@ function groupPhotos(photos: Photo[]): { primary: Photo; extras: Photo[] }[] {
   return primaries.map((p) => ({ primary: p, extras: grouped.get(p.id) || [] }));
 }
 
+/** Group photo cards by section, preserving order */
+function groupBySection(groups: { primary: Photo; extras: Photo[] }[]): { section: string | null; items: { primary: Photo; extras: Photo[] }[] }[] {
+  const sectionOrder: (string | null)[] = [];
+  const map = new Map<string | null, { primary: Photo; extras: Photo[] }[]>();
+  for (const g of groups) {
+    const sec = g.primary.section ?? null;
+    if (!map.has(sec)) {
+      sectionOrder.push(sec);
+      map.set(sec, []);
+    }
+    map.get(sec)!.push(g);
+  }
+  // Put null (unsectioned) first, then named sections
+  const nullIdx = sectionOrder.indexOf(null);
+  if (nullIdx > 0) {
+    sectionOrder.splice(nullIdx, 1);
+    sectionOrder.unshift(null);
+  }
+  return sectionOrder.map((sec) => ({ section: sec, items: map.get(sec)! }));
+}
+
 export default function ChinaTripDetail() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const online = useOnlineStatus();
   const countries = useCountries();
   const categories = useCategories();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [trip, setTrip] = useState<ChinaTrip | null>(null);
   const [photos, setPhotos] = useState<Photo[]>([]);
+  const [pendingPhotos, setPendingPhotos] = useState<PendingUpload[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
@@ -91,6 +136,17 @@ export default function ChinaTripDetail() {
   const [showBulkEdit, setShowBulkEdit] = useState(false);
   const [bulkAnalyzing, setBulkAnalyzing] = useState(false);
   const [bulkAnalyzeProgress, setBulkAnalyzeProgress] = useState(0);
+  const [downloading, setDownloading] = useState(false);
+
+  // Inline editing state
+  const [editingSupplier, setEditingSupplier] = useState(false);
+  const [supplierValue, setSupplierValue] = useState("");
+
+  // Section management
+  const [showAddSection, setShowAddSection] = useState(false);
+  const [newSectionName, setNewSectionName] = useState("");
+
+  const existingSections = [...new Set(photos.filter((p) => p.section).map((p) => p.section!))];
 
   function toggleSelectPhoto(photoId: string) {
     setSelectedPhotos((prev) => {
@@ -100,6 +156,54 @@ export default function ChinaTripDetail() {
     });
   }
 
+  // ── Download All with file renaming ──
+  function buildFileName(photo: Photo, indexInGroup?: number): string {
+    const ext = photo.file_path.split(".").pop() || "jpg";
+    const dateStr = trip?.date || photo.created_at;
+    const d = new Date(dateStr);
+    const yyyymmdd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+    const supplierName = (trip?.supplier || "Supplier").replace(/[^a-zA-Z0-9]/g, "");
+    const desc = (photo.product_name || "Photo").replace(/[^a-zA-Z0-9 ]/g, "").replace(/\s+/g, "");
+    const suffix = indexInGroup && indexInGroup > 1 ? `_${indexInGroup}` : "";
+    return `${yyyymmdd}_${supplierName}_${desc}${suffix}.${ext}`;
+  }
+
+  async function handleDownloadAll() {
+    if (photos.length === 0) return;
+    setDownloading(true);
+    let count = 0;
+    const groups = groupPhotos(photos);
+    const downloadList: { photo: Photo; fileName: string }[] = [];
+    for (const { primary, extras } of groups) {
+      downloadList.push({ photo: primary, fileName: buildFileName(primary, 1) });
+      extras.forEach((ex, i) => {
+        downloadList.push({ photo: ex, fileName: buildFileName(primary, i + 2) });
+      });
+    }
+    for (const { photo, fileName } of downloadList) {
+      try {
+        const url = photo.signed_url;
+        if (!url) continue;
+        const res = await fetch(url);
+        const blob = await res.blob();
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(a.href);
+        count++;
+        await new Promise((r) => setTimeout(r, 300));
+      } catch (err) {
+        console.error("Download failed for:", photo.id, err);
+      }
+    }
+    setDownloading(false);
+    toast({ title: `Downloaded ${count} photos` });
+  }
+
+  // ── Bulk AI Detect ──
   async function handleBulkAiDetect() {
     const photosWithoutMeta = photos.filter(
       (p) => !p.product_name && !p.brand && !p.price && p.signed_url
@@ -111,7 +215,6 @@ export default function ChinaTripDetail() {
     setBulkAnalyzing(true);
     setBulkAnalyzeProgress(0);
     let success = 0;
-
     for (let i = 0; i < photosWithoutMeta.length; i++) {
       const photo = photosWithoutMeta[i];
       setBulkAnalyzeProgress(Math.round((i / photosWithoutMeta.length) * 100));
@@ -144,37 +247,81 @@ export default function ChinaTripDetail() {
         console.error("Bulk AI detect failed for:", photo.id, err);
       }
     }
-
     setBulkAnalyzeProgress(100);
     setBulkAnalyzing(false);
-    toast({
-      title: "Bulk AI detection complete",
-      description: `${success} of ${photosWithoutMeta.length} photos updated with detected metadata.`,
-    });
+    toast({ title: "Bulk AI detection complete", description: `${success} of ${photosWithoutMeta.length} photos updated.` });
     loadPhotos();
   }
 
+  // ── Assign selected photos to a section ──
+  async function handleAssignSection(sectionName: string) {
+    if (selectedPhotos.size === 0) return;
+    const ids = Array.from(selectedPhotos);
+    const { error } = await supabase.from("china_photos").update({ section: sectionName }).in("id", ids);
+    if (error) {
+      toast({ title: "Failed to assign section", variant: "destructive" });
+      return;
+    }
+    toast({ title: `${ids.length} photo(s) moved to "${sectionName}"` });
+    setSelectedPhotos(new Set());
+    loadPhotos();
+  }
+
+  async function handleAddSection() {
+    const name = newSectionName.trim();
+    if (!name) return;
+    if (selectedPhotos.size > 0) {
+      await handleAssignSection(name);
+    }
+    setNewSectionName("");
+    setShowAddSection(false);
+  }
+
+  // ── Data loading with offline support ──
   useEffect(() => {
     if (!id) return;
     loadTrip();
     loadPhotos();
+    loadPendingPhotos();
+
+    if (!online) return;
 
     const channel = supabase
       .channel(`china-trip-${id}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "china_photos", filter: `trip_id=eq.${id}` }, () => loadPhotos())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [id]);
+  }, [id, online]);
 
   async function loadTrip() {
+    // Try cached first
+    const cached = await getCachedTrip(id!);
+    if (cached) { setTrip(cached as any); setLoading(false); }
+    if (!navigator.onLine) { setLoading(false); return; }
     try {
       const { data } = await supabase.from("china_trips").select("*").eq("id", id!).single();
-      if (data) setTrip(data);
+      if (data) {
+        setTrip(data);
+        await cacheTrips([{ id: data.id, name: data.name, store: data.supplier, date: data.date, location: data.location, notes: data.notes, created_by: data.created_by, created_at: data.created_at, updated_at: data.updated_at }]);
+      }
     } catch (err) { console.error("Error loading china trip", err); }
     setLoading(false);
   }
 
   async function loadPhotos() {
+    // Cached photos for offline
+    const cached = await getCachedPhotos(id!);
+    if (cached.length > 0) {
+      const withUrls = await Promise.all(
+        cached.map(async (p) => {
+          if (p.signed_url) return p;
+          const blob = await getCachedImageBlob(p.file_path);
+          return { ...p, signed_url: blob ? URL.createObjectURL(blob) : undefined };
+        })
+      );
+      setPhotos(withUrls as unknown as Photo[]);
+    }
+    if (!navigator.onLine) return;
     try {
       const { data } = await supabase.from("china_photos").select("*").eq("trip_id", id!).order("created_at", { ascending: false });
       if (data) {
@@ -182,15 +329,34 @@ export default function ChinaTripDetail() {
           data.map(async (p) => {
             try {
               const signed_url = await getSignedPhotoUrl(p.file_path);
+              cacheImageInBackground(p.file_path, signed_url);
               return { ...p, signed_url };
             } catch { return { ...p, signed_url: undefined }; }
           })
         );
-        setPhotos(withUrls);
+        setPhotos(withUrls as Photo[]);
+        await cachePhotos(data as unknown as CachedPhoto[]);
       }
     } catch (err) { console.error("Error loading china photos", err); }
   }
 
+  async function cacheImageInBackground(filePath: string, url: string) {
+    try {
+      const existing = await getCachedImageBlob(filePath);
+      if (existing) return;
+      const res = await fetch(url);
+      const blob = await res.blob();
+      await cacheImageBlob(filePath, blob);
+    } catch {}
+  }
+
+  async function loadPendingPhotos() {
+    if (!id) return;
+    const pending = await getPendingUploadsByTrip(id);
+    setPendingPhotos(pending);
+  }
+
+  // ── File handling ──
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -209,18 +375,33 @@ export default function ChinaTripDetail() {
     if (!user || !id) return;
     setUploading(true);
     let successCount = 0;
+    let dupCount = 0;
     for (const file of files) {
       try {
-        const fileHash = await hashFile(file);
-        if (await checkDuplicatePhoto(fileHash)) continue;
-        const filePath = await uploadPhoto(file, user.id, id);
-        await supabase.from("china_photos").insert({ trip_id: id, user_id: user.id, file_path: filePath, file_hash: fileHash });
-        successCount++;
+        if (!navigator.onLine) {
+          const pendingId = crypto.randomUUID();
+          await addPendingUpload({
+            id: pendingId, trip_id: id, file_blob: file, file_name: file.name,
+            metadata: { product_name: null, category: null, price: null, dimensions: null, country_of_origin: null, material: null, brand: null, notes: null },
+            user_id: user.id, created_at: new Date().toISOString(), status: "pending", retry_count: 0,
+          });
+          successCount++;
+        } else {
+          const fileHash = await hashFile(file);
+          if (await checkDuplicatePhoto(fileHash)) { dupCount++; continue; }
+          const filePath = await uploadPhoto(file, user.id, id);
+          await supabase.from("china_photos").insert({ trip_id: id, user_id: user.id, file_path: filePath, file_hash: fileHash });
+          successCount++;
+        }
       } catch {}
     }
     setUploading(false);
-    toast({ title: `${successCount} photo${successCount !== 1 ? "s" : ""} uploaded` });
+    toast({
+      title: `Bulk upload complete`,
+      description: `${successCount} uploaded${dupCount > 0 ? `, ${dupCount} duplicates skipped` : ""}.`,
+    });
     loadPhotos();
+    loadPendingPhotos();
   }
 
   async function handleAnalyze() {
@@ -255,24 +436,40 @@ export default function ChinaTripDetail() {
     e.preventDefault();
     if (!selectedFile || !user || !id) return;
     setUploading(true);
+
+    const metadata = {
+      product_name: formFields.product_name || null,
+      category: formFields.category || null,
+      price: formFields.price ? parseFloat(formFields.price) : null,
+      brand: formFields.brand || null,
+      dimensions: formFields.dimensions || null,
+      material: formFields.material || null,
+      notes: formFields.notes || null,
+      country_of_origin: countryValue || null,
+    };
+
+    if (!navigator.onLine) {
+      const pendingId = crypto.randomUUID();
+      await addPendingUpload({
+        id: pendingId, trip_id: id, file_blob: selectedFile, file_name: selectedFile.name,
+        metadata, user_id: user.id, created_at: new Date().toISOString(), status: "pending", retry_count: 0,
+      });
+      toast({ title: "Saved offline", description: "Photo will upload when you're back online." });
+      setShowUploadDialog(false); setSelectedFile(null); setPreviewUrl(null); setUploading(false);
+      loadPendingPhotos();
+      return;
+    }
+
     try {
       const fileHash = await hashFile(selectedFile);
       if (await checkDuplicatePhoto(fileHash)) {
-        toast({ title: "Duplicate photo", description: "This photo has already been uploaded.", variant: "destructive" });
+        toast({ title: "Duplicate photo", description: "Already uploaded.", variant: "destructive" });
         setUploading(false);
         return;
       }
       const filePath = await uploadPhoto(selectedFile, user.id, id);
       await supabase.from("china_photos").insert({
-        trip_id: id, user_id: user.id, file_path: filePath, file_hash: fileHash,
-        product_name: formFields.product_name || null,
-        category: formFields.category || null,
-        price: formFields.price ? parseFloat(formFields.price) : null,
-        brand: formFields.brand || null,
-        dimensions: formFields.dimensions || null,
-        material: formFields.material || null,
-        notes: formFields.notes || null,
-        country_of_origin: countryValue || null,
+        trip_id: id, user_id: user.id, file_path: filePath, file_hash: fileHash, ...metadata,
       });
       toast({ title: "Photo uploaded!" });
       setShowUploadDialog(false);
@@ -280,7 +477,15 @@ export default function ChinaTripDetail() {
       setPreviewUrl(null);
       loadPhotos();
     } catch (err: any) {
-      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+      // Save offline on failure
+      const pendingId = crypto.randomUUID();
+      await addPendingUpload({
+        id: pendingId, trip_id: id, file_blob: selectedFile, file_name: selectedFile.name,
+        metadata, user_id: user.id, created_at: new Date().toISOString(), status: "pending", retry_count: 0,
+      });
+      toast({ title: "Saved for later sync", description: "Upload failed, photo saved locally." });
+      setShowUploadDialog(false); setSelectedFile(null); setPreviewUrl(null);
+      loadPendingPhotos();
     }
     setUploading(false);
   }
@@ -307,6 +512,7 @@ export default function ChinaTripDetail() {
   }
 
   const groups = groupPhotos(photos);
+  const sectionedGroups = groupBySection(groups);
 
   if (loading) {
     return (
@@ -323,28 +529,83 @@ export default function ChinaTripDetail() {
     return (
       <div className="container py-6 text-center">
         <p className="text-muted-foreground">Trip not found</p>
-        <Button onClick={() => navigate("/")} className="mt-4">Back to Trips</Button>
+        <Button onClick={() => navigate("/china")} className="mt-4">Back to China Trips</Button>
       </div>
     );
   }
 
   return (
     <div className="container py-6">
-      <button onClick={() => navigate("/")} className="mb-4 flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="h-4 w-4" /> Back
+      <button onClick={() => navigate("/china")} className="mb-4 flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+        <ArrowLeft className="h-4 w-4" /> Back to China Trips
       </button>
 
-      {/* Trip header */}
+      {/* Trip header with inline editing */}
       <div className="mb-6">
         <div className="flex items-center gap-3">
           <Factory className="h-6 w-6 text-primary shrink-0" />
-          <h1 className="font-sans text-2xl md:text-3xl font-semibold">{trip.supplier}</h1>
+          {editingSupplier ? (
+            <div className="flex items-center gap-2">
+              <Input
+                value={supplierValue}
+                onChange={(e) => setSupplierValue(e.target.value)}
+                className="text-lg font-semibold"
+                autoFocus
+              />
+              <Button size="sm" onClick={async () => {
+                if (!supplierValue.trim()) return;
+                const { error } = await supabase.from("china_trips").update({ supplier: supplierValue.trim(), name: supplierValue.trim() }).eq("id", trip.id);
+                if (error) { toast({ title: "Failed to update", variant: "destructive" }); return; }
+                setTrip({ ...trip, supplier: supplierValue.trim(), name: supplierValue.trim() });
+                setEditingSupplier(false);
+                toast({ title: "Supplier updated" });
+              }}>Save</Button>
+              <Button size="sm" variant="ghost" onClick={() => setEditingSupplier(false)}>Cancel</Button>
+            </div>
+          ) : (
+            <button
+              onClick={() => { setSupplierValue(trip.supplier); setEditingSupplier(true); }}
+              className="flex items-center gap-1 group"
+              title="Click to edit supplier"
+            >
+              <h1 className="font-sans text-2xl md:text-3xl font-semibold">{trip.supplier}</h1>
+              <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+            </button>
+          )}
           <Badge variant="outline">{trip.venue_type === "canton_fair" ? "Canton Fair" : "Factory Visit"}</Badge>
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-          <span className="flex items-center gap-1"><Calendar className="h-4 w-4" />{format(new Date(trip.date), "MMMM d, yyyy")}</span>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button className="flex items-center gap-1 group hover:text-foreground transition-colors" title="Click to change date">
+                <Calendar className="h-4 w-4" /> {format(new Date(trip.date), "MMMM d, yyyy")}
+                <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <CalendarPicker
+                mode="single"
+                selected={new Date(trip.date + "T00:00:00")}
+                onSelect={async (date) => {
+                  if (!date) return;
+                  const dateStr = format(date, "yyyy-MM-dd");
+                  const { error } = await supabase.from("china_trips").update({ date: dateStr }).eq("id", trip.id);
+                  if (error) { toast({ title: "Failed to update date", variant: "destructive" }); return; }
+                  setTrip({ ...trip, date: dateStr });
+                  toast({ title: "Date updated" });
+                }}
+                initialFocus
+                className={cn("p-3 pointer-events-auto")}
+              />
+            </PopoverContent>
+          </Popover>
           {trip.location && <span className="flex items-center gap-1"><MapPin className="h-4 w-4" />{trip.location}</span>}
           <span>{photos.length} photos</span>
+          {!online && (
+            <Badge variant="outline" className="gap-1">
+              <CloudOff className="h-3 w-3" /> Offline
+            </Badge>
+          )}
         </div>
       </div>
 
@@ -355,17 +616,15 @@ export default function ChinaTripDetail() {
           {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
           {uploading ? "Uploading..." : "Add Photos"}
         </Button>
-        <Button variant="outline" onClick={() => { fileInputRef.current?.click(); }} className="gap-2">
+        <Button variant="outline" onClick={() => fileInputRef.current?.click()} className="gap-2">
           <Images className="h-4 w-4" /> Bulk Upload
         </Button>
         {photos.length > 0 && (
           <>
-            <Button
-              variant="outline"
-              onClick={handleBulkAiDetect}
-              disabled={bulkAnalyzing}
-              className="gap-2"
-            >
+            <Button variant="outline" onClick={handleDownloadAll} disabled={downloading} className="gap-2">
+              <Download className="h-4 w-4" /> {downloading ? "Downloading..." : "Download All"}
+            </Button>
+            <Button variant="outline" onClick={handleBulkAiDetect} disabled={bulkAnalyzing} className="gap-2">
               <Sparkles className="h-4 w-4" />
               {bulkAnalyzing ? `AI Detecting... ${bulkAnalyzeProgress}%` : "AI Detect All"}
             </Button>
@@ -374,20 +633,64 @@ export default function ChinaTripDetail() {
         {selectedPhotos.size > 0 && (
           <>
             <Button variant="outline" onClick={() => setShowBulkEdit(true)} className="gap-2">
-              <PenLine className="h-4 w-4" /> Edit {selectedPhotos.size} Selected
+              <PenLine className="h-4 w-4" /> Edit {selectedPhotos.size}
             </Button>
             <Button variant="outline" onClick={() => setShowBulkMove(true)} className="gap-2">
-              <ArrowRightLeft className="h-4 w-4" /> Move {selectedPhotos.size} Selected
+              <ArrowRightLeft className="h-4 w-4" /> Move {selectedPhotos.size}
+            </Button>
+            {/* Section assignment */}
+            {existingSections.length > 0 && (
+              <Select onValueChange={(v) => handleAssignSection(v)}>
+                <SelectTrigger className="w-auto gap-1 h-9 text-sm">
+                  <SelectValue placeholder="Assign section" />
+                </SelectTrigger>
+                <SelectContent>
+                  {existingSections.map((s) => (
+                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <Button variant="outline" size="sm" onClick={() => setShowAddSection(true)} className="gap-1">
+              <Plus className="h-3.5 w-3.5" /> New Section
             </Button>
             <Button variant="ghost" size="sm" onClick={() => setSelectedPhotos(new Set())}>
-              Clear Selection
+              Clear
             </Button>
           </>
         )}
+        {pendingPhotos.length > 0 && (
+          <Badge variant="outline" className="gap-1">
+            <CloudOff className="h-3 w-3" /> {pendingPhotos.length} pending
+          </Badge>
+        )}
       </div>
 
-      {/* Photos grid */}
-      {groups.length === 0 ? (
+      {/* Pending uploads */}
+      {pendingPhotos.length > 0 && (
+        <div className="mb-4">
+          <p className="mb-2 text-xs font-medium text-muted-foreground flex items-center gap-1">
+            <CloudOff className="h-3 w-3" /> Pending uploads (will sync when online)
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {pendingPhotos.map((p) => {
+              const blobUrl = URL.createObjectURL(p.file_blob);
+              return (
+                <Card key={p.id} className="overflow-hidden border-dashed opacity-75">
+                  <img src={blobUrl} alt="Pending" className="h-40 w-full object-cover" />
+                  <CardContent className="p-3">
+                    <p className="text-sm font-medium">{p.metadata.product_name || "Untitled"}</p>
+                    <Badge variant="outline" className="mt-1 text-xs">{p.status}</Badge>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Photos grid — grouped by section */}
+      {groups.length === 0 && pendingPhotos.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
             <Camera className="mb-4 h-12 w-12 text-muted-foreground/50" />
@@ -396,32 +699,45 @@ export default function ChinaTripDetail() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {groups.map(({ primary, extras }) => (
-            <PhotoCard
-              key={primary.id}
-              photo={primary}
-              extraPhotos={extras}
-              tripId={id}
-              onUpdated={loadPhotos}
-              onGroupPhoto={handleGroupPhoto}
-              chinaMode
-              selected={selectedPhotos.has(primary.id)}
-              onSelect={toggleSelectPhoto}
-              selectionMode={selectedPhotos.size > 0}
-              onFileDrop={(files, targetId) => {
-                if (!user || !id) return;
-                files.forEach(async (file) => {
-                  const fileHash = await hashFile(file);
-                  if (await checkDuplicatePhoto(fileHash)) return;
-                  const filePath = await uploadPhoto(file, user.id, id);
-                  await supabase.from("china_photos").insert({
-                    trip_id: id, user_id: user.id, file_path: filePath, file_hash: fileHash, group_id: targetId,
-                  });
-                });
-                setTimeout(loadPhotos, 1000);
-              }}
-            />
+        <div className="space-y-6">
+          {sectionedGroups.map(({ section, items }, sIdx) => (
+            <div key={section ?? "__unsectioned__"}>
+              {section && (
+                <div className="mb-3">
+                  {sIdx > 0 && <Separator className="mb-4" />}
+                  <h3 className="font-sans text-lg font-semibold text-foreground">{section}</h3>
+                </div>
+              )}
+              {!section && sIdx > 0 && <Separator className="mb-4" />}
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {items.map(({ primary, extras }) => (
+                  <PhotoCard
+                    key={primary.id}
+                    photo={primary}
+                    extraPhotos={extras}
+                    tripId={id}
+                    onUpdated={loadPhotos}
+                    onGroupPhoto={handleGroupPhoto}
+                    chinaMode
+                    selected={selectedPhotos.has(primary.id)}
+                    onSelect={toggleSelectPhoto}
+                    selectionMode={selectedPhotos.size > 0}
+                    onFileDrop={(files, targetId) => {
+                      if (!user || !id) return;
+                      files.forEach(async (file) => {
+                        const fileHash = await hashFile(file);
+                        if (await checkDuplicatePhoto(fileHash)) return;
+                        const filePath = await uploadPhoto(file, user.id, id);
+                        await supabase.from("china_photos").insert({
+                          trip_id: id, user_id: user.id, file_path: filePath, file_hash: fileHash, group_id: targetId,
+                        });
+                      });
+                      setTimeout(loadPhotos, 1000);
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
           ))}
         </div>
       )}
@@ -431,15 +747,24 @@ export default function ChinaTripDetail() {
         <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="font-sans">Add Photo</DialogTitle>
+            {!online && (
+              <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+                <CloudOff className="h-3 w-3" /> Offline — photo will sync when connected
+              </p>
+            )}
           </DialogHeader>
           <form onSubmit={handleUpload} className="space-y-4">
             {previewUrl && (
-              <img src={previewUrl} alt="Preview" className="w-full rounded-md object-contain" style={{ maxHeight: "40vh" }} />
+              <div className="relative">
+                <img src={previewUrl} alt="Preview" className="w-full rounded-md object-contain" style={{ maxHeight: "40vh" }} />
+                {online && (
+                  <Button type="button" size="sm" variant="secondary" className="absolute bottom-2 right-2 gap-1 text-xs" onClick={handleAnalyze} disabled={analyzing}>
+                    {analyzing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                    {analyzing ? "Detecting..." : "AI Detect"}
+                  </Button>
+                )}
+              </div>
             )}
-            <Button type="button" variant="outline" onClick={handleAnalyze} disabled={analyzing} className="w-full gap-2">
-              {analyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-              {analyzing ? "Detecting..." : "AI Detect"}
-            </Button>
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs">Product Name</Label>
@@ -478,9 +803,31 @@ export default function ChinaTripDetail() {
               <Textarea value={formFields.notes} onChange={(e) => setFormFields((f) => ({ ...f, notes: e.target.value }))} rows={2} />
             </div>
             <Button type="submit" className="w-full" disabled={uploading}>
-              {uploading ? "Uploading..." : "Upload Photo"}
+              {uploading ? "Saving..." : online ? "Upload Photo" : "Save Offline"}
             </Button>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Section dialog */}
+      <Dialog open={showAddSection} onOpenChange={setShowAddSection}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="font-sans">New Section</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Label className="text-sm">Section / Booth Name</Label>
+            <Input
+              value={newSectionName}
+              onChange={(e) => setNewSectionName(e.target.value)}
+              placeholder="e.g. Booth A23, Factory B"
+              autoFocus
+              onKeyDown={(e) => { if (e.key === "Enter") handleAddSection(); }}
+            />
+            <Button onClick={handleAddSection} className="w-full" disabled={!newSectionName.trim()}>
+              {selectedPhotos.size > 0 ? `Create & Assign ${selectedPhotos.size} Photo(s)` : "Create Section"}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 
