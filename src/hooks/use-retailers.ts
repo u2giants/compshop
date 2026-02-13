@@ -15,8 +15,13 @@ export function useRetailers() {
       .then(({ data }) => { if (data) setRetailers(data); });
   }, []);
 
+  function normalize(s: string): string {
+    return s.toLowerCase().replace(/[^a-z0-9]/g, "");
+  }
+
   function getLogoUrl(name: string): string | null {
-    const r = retailers.find((r) => r.name.toLowerCase() === name.toLowerCase());
+    const norm = normalize(name);
+    const r = retailers.find((r) => normalize(r.name) === norm);
     if (!r?.logo_path) return null;
     const { data } = supabase.storage.from("retailer-logos").getPublicUrl(r.logo_path);
     return data.publicUrl;
