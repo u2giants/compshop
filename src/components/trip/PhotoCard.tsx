@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DollarSign, MapPin, Ruler, Layers, Tag, MessageSquare, Trash2, Sparkles, Loader2, ImageIcon, ArrowRightLeft } from "lucide-react";
 import MoveToTripDialog from "./MoveToTripDialog";
+import ChinaMoveToTripDialog from "./ChinaMoveToTripDialog";
 import { useToast } from "@/hooks/use-toast";
 import PhotoComments from "./PhotoComments";
 
@@ -46,9 +47,10 @@ interface Props {
   selected?: boolean;
   onSelect?: (photoId: string) => void;
   selectionMode?: boolean;
+  chinaMode?: boolean;
 }
 
-export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, onGroupPhoto, onFileDrop, selected, onSelect, selectionMode }: Props) {
+export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, onGroupPhoto, onFileDrop, selected, onSelect, selectionMode, chinaMode }: Props) {
   const { user, isAdmin } = useAuth();
   const { toast } = useToast();
   const countries = useCountries();
@@ -532,8 +534,17 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
         </DialogContent>
       </Dialog>
 
-      {tripId && (
+      {tripId && !chinaMode && (
         <MoveToTripDialog
+          open={showMoveDialog}
+          onOpenChange={setShowMoveDialog}
+          photoIds={[photo.id, ...extraPhotos.map((p) => p.id)]}
+          currentTripId={tripId}
+          onMoved={onUpdated}
+        />
+      )}
+      {tripId && chinaMode && (
+        <ChinaMoveToTripDialog
           open={showMoveDialog}
           onOpenChange={setShowMoveDialog}
           photoIds={[photo.id, ...extraPhotos.map((p) => p.id)]}

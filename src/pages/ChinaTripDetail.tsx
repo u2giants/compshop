@@ -307,6 +307,7 @@ export default function ChinaTripDetail() {
               tripId={id}
               onUpdated={loadPhotos}
               onGroupPhoto={handleGroupPhoto}
+              chinaMode
               onFileDrop={(files, targetId) => {
                 if (!user || !id) return;
                 files.forEach(async (file) => {
