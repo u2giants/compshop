@@ -509,7 +509,7 @@ export default function Trips() {
                     )}
                     <span className="font-sans font-medium truncate">{trip.store}</span>
                     <span className="text-muted-foreground shrink-0">·</span>
-                    <span className="text-muted-foreground shrink-0">{format(new Date(trip.date), "MMM d")}</span>
+                    <span className="text-muted-foreground shrink-0">{format(new Date(trip.date), "MMM d, yyyy")}</span>
                     <span className="text-muted-foreground shrink-0">·</span>
                     <span className="text-muted-foreground shrink-0">{trip.photo_count ?? 0} photos</span>
                   </div>
