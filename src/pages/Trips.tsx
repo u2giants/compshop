@@ -12,11 +12,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Calendar, MapPin, Store, Plus, Users, Filter, X, Upload, Loader2 } from "lucide-react";
+import { Calendar, MapPin, Store, Plus, Users, Filter, X, Upload, Loader2, Trash2, CheckSquare } from "lucide-react";
 import { format } from "date-fns";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import RecycleBin from "@/components/trip/RecycleBin";
 
 interface TripWithCover extends CachedTrip {
   cover_url?: string;
@@ -38,6 +40,12 @@ export default function Trips() {
   const [showSmartResults, setShowSmartResults] = useState(false);
   const [smartResults, setSmartResults] = useState<{ tripName: string; count: number; isNew: boolean }[]>([]);
 
+  // Multi-select & delete state
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [recycleBinOpen, setRecycleBinOpen] = useState(false);
+  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     if (!user) return;
     loadTrips();
@@ -55,7 +63,7 @@ export default function Trips() {
   async function loadTrips() {
     const cached = await getCachedTrips();
     if (cached.length > 0) {
-      setTrips(cached.sort((a, b) => b.date.localeCompare(a.date)));
+      setTrips(cached.filter(t => !(t as any).deleted_at).sort((a, b) => b.date.localeCompare(a.date)));
       setLoading(false);
     }
 
@@ -68,6 +76,7 @@ export default function Trips() {
       const { data } = await supabase
         .from("shopping_trips")
         .select("*")
+        .is("deleted_at", null)
         .order("date", { ascending: false });
 
       if (data) {
@@ -94,6 +103,64 @@ export default function Trips() {
       console.error("[Trips] Network error, using cache", err);
     }
     setLoading(false);
+  }
+
+  function toggleSelect(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function exitSelectMode() {
+    setSelectMode(false);
+    setSelected(new Set());
+  }
+
+  async function handleBulkDelete() {
+    if (selected.size === 0) return;
+    const ids = Array.from(selected);
+    const now = new Date().toISOString();
+
+    // Soft delete
+    const { error } = await supabase
+      .from("shopping_trips")
+      .update({ deleted_at: now })
+      .in("id", ids);
+
+    if (error) {
+      toast({ title: "Error", description: "Failed to delete trips", variant: "destructive" });
+      return;
+    }
+
+    const deletedCount = ids.length;
+    setTrips((prev) => prev.filter((t) => !ids.includes(t.id)));
+    exitSelectMode();
+
+    // Undo toast
+    const { dismiss } = toast({
+      title: `${deletedCount} trip${deletedCount > 1 ? "s" : ""} deleted`,
+      description: "Moved to recycling bin",
+      action: (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={async () => {
+            await supabase
+              .from("shopping_trips")
+              .update({ deleted_at: null })
+              .in("id", ids);
+            dismiss();
+            loadTrips();
+          }}
+        >
+          Undo
+        </Button>
+      ),
+      duration: 8000,
+    });
   }
 
   async function handleSmartUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -201,15 +268,35 @@ export default function Trips() {
           <p className="mt-1 text-muted-foreground">Your team's comparison shopping intel</p>
         </div>
         <div className="flex items-center gap-2">
-          <input ref={smartUploadRef} type="file" accept="image/*" multiple className="hidden" onChange={handleSmartUpload} />
-          <Button variant="outline" onClick={() => smartUploadRef.current?.click()} disabled={smartUploading} className="gap-2">
-            {smartUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-            {smartUploading ? `${smartProgress}%` : "Smart Upload"}
-          </Button>
-          <Button onClick={() => navigate("/trips/new")} className="gap-2">
-            <Plus className="h-4 w-4" />
-            <span className="hidden sm:inline">New Trip</span>
-          </Button>
+          {selectMode ? (
+            <>
+              <span className="text-sm text-muted-foreground">{selected.size} selected</span>
+              <Button variant="destructive" size="sm" disabled={selected.size === 0} onClick={handleBulkDelete} className="gap-1">
+                <Trash2 className="h-4 w-4" /> Delete
+              </Button>
+              <Button variant="ghost" size="sm" onClick={exitSelectMode}>Cancel</Button>
+            </>
+          ) : (
+            <>
+              <Button variant="ghost" size="icon" onClick={() => setRecycleBinOpen(true)} title="Recycling Bin">
+                <Trash2 className="h-4 w-4" />
+              </Button>
+              {trips.length > 0 && (
+                <Button variant="outline" size="sm" onClick={() => setSelectMode(true)} className="gap-1">
+                  <CheckSquare className="h-4 w-4" /> Select
+                </Button>
+              )}
+              <input ref={smartUploadRef} type="file" accept="image/*" multiple className="hidden" onChange={handleSmartUpload} />
+              <Button variant="outline" onClick={() => smartUploadRef.current?.click()} disabled={smartUploading} className="gap-2">
+                {smartUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                {smartUploading ? `${smartProgress}%` : "Smart Upload"}
+              </Button>
+              <Button onClick={() => navigate("/trips/new")} className="gap-2">
+                <Plus className="h-4 w-4" />
+                <span className="hidden sm:inline">New Trip</span>
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
@@ -309,21 +396,38 @@ export default function Trips() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filteredTrips.map((trip) => {
             const logoUrl = getLogoUrl(trip.store);
+            const isSelected = selected.has(trip.id);
             return (
               <Card
                 key={trip.id}
-                className="cursor-pointer overflow-hidden transition-shadow hover:shadow-md"
-                onClick={() => navigate(`/trips/${trip.id}`)}
+                className={`cursor-pointer overflow-hidden transition-shadow hover:shadow-md ${selectMode && isSelected ? "ring-2 ring-primary" : ""}`}
+                onClick={() => {
+                  if (selectMode) {
+                    toggleSelect(trip.id);
+                  } else {
+                    navigate(`/trips/${trip.id}`);
+                  }
+                }}
               >
                 {/* Cover image */}
                 {trip.cover_url ? (
                   <div className="relative h-36 w-full">
                     <img src={trip.cover_url} alt="" className="h-full w-full object-cover" loading="lazy" />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
+                    {selectMode && (
+                      <div className="absolute top-2 left-2">
+                        <Checkbox checked={isSelected} className="h-5 w-5 border-white bg-black/30 data-[state=checked]:bg-primary" />
+                      </div>
+                    )}
                   </div>
                 ) : (
-                  <div className="flex h-24 items-center justify-center bg-muted">
+                  <div className="relative flex h-24 items-center justify-center bg-muted">
                     <Store className="h-8 w-8 text-muted-foreground/30" />
+                    {selectMode && (
+                      <div className="absolute top-2 left-2">
+                        <Checkbox checked={isSelected} className="h-5 w-5 data-[state=checked]:bg-primary" />
+                      </div>
+                    )}
                   </div>
                 )}
                 <CardContent className="p-4">
@@ -357,6 +461,8 @@ export default function Trips() {
           })}
         </div>
       )}
+
+      <RecycleBin open={recycleBinOpen} onOpenChange={setRecycleBinOpen} onRestored={loadTrips} />
     </div>
   );
 }
