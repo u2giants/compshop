@@ -165,10 +165,11 @@ export default function ChinaTripDetail() {
         reader.readAsDataURL(selectedFile);
       });
       const { data, error } = await supabase.functions.invoke("analyze-photo", {
-        body: { imageBase64: base64, mimeType: selectedFile.type },
+        body: { imageBase64: base64, mimeType: selectedFile.type, categories },
       });
       if (error) throw error;
       if (data.product_name) setFormFields((f) => ({ ...f, product_name: data.product_name }));
+      if (data.category) setFormFields((f) => ({ ...f, category: data.category }));
       if (data.price != null) setFormFields((f) => ({ ...f, price: String(data.price) }));
       if (data.dimensions) setFormFields((f) => ({ ...f, dimensions: data.dimensions }));
       if (data.brand) setFormFields((f) => ({ ...f, brand: data.brand }));

@@ -54,7 +54,7 @@ export default function Profile() {
   }
 
   return (
-    <div className="container max-w-lg py-6 space-y-6">
+    <div className="container py-6 space-y-6">
       <h1 className="font-sans text-3xl font-semibold">Profile</h1>
 
       <Card>
@@ -111,11 +111,15 @@ export default function Profile() {
       </Card>
 
       {/* Admin panels */}
-      <InviteManager />
-      <RetailerManager />
-      <CountryManager />
-      <ImageTypeManager />
-      <CategoryManager />
+      {isAdmin && (
+        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+          <InviteManager />
+          <RetailerManager />
+          <CountryManager />
+          <ImageTypeManager />
+          <CategoryManager />
+        </div>
+      )}
 
       {/* Storage quota settings */}
       <StorageQuotaManager />
