@@ -2,7 +2,7 @@ import { useState, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { uploadPhoto } from "@/lib/supabase-helpers";
+import { uploadPhoto, hashFile, checkDuplicatePhoto } from "@/lib/supabase-helpers";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -109,11 +109,14 @@ export default function ImportTeams() {
 
       for (const img of images) {
         try {
+          const fileHash = await hashFile(img);
+          if (await checkDuplicatePhoto(fileHash)) continue;
           const filePath = await uploadPhoto(img, user.id, trip.id);
           await supabase.from("photos").insert({
             trip_id: trip.id,
             user_id: user.id,
             file_path: filePath,
+            file_hash: fileHash,
             notes: "Imported from Teams conversation",
           });
         } catch (imgErr) {

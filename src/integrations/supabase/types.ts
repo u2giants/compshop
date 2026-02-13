@@ -133,6 +133,7 @@ export type Database = {
           country_of_origin: string | null
           created_at: string
           dimensions: string | null
+          file_hash: string | null
           file_path: string
           group_id: string | null
           id: string
@@ -151,6 +152,7 @@ export type Database = {
           country_of_origin?: string | null
           created_at?: string
           dimensions?: string | null
+          file_hash?: string | null
           file_path: string
           group_id?: string | null
           id?: string
@@ -169,6 +171,7 @@ export type Database = {
           country_of_origin?: string | null
           created_at?: string
           dimensions?: string | null
+          file_hash?: string | null
           file_path?: string
           group_id?: string | null
           id?: string
