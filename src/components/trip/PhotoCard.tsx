@@ -1,7 +1,8 @@
 import { useState, useRef, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { PRODUCT_CATEGORIES, IMAGE_TYPES } from "@/lib/supabase-helpers";
+import { PRODUCT_CATEGORIES } from "@/lib/supabase-helpers";
+import { useImageTypes } from "@/hooks/use-image-types";
 import { useCountries } from "@/hooks/use-countries";
 import AutocompleteInput from "@/components/ui/autocomplete-input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -46,6 +47,7 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
   const { user, isAdmin } = useAuth();
   const { toast } = useToast();
   const countries = useCountries();
+  const IMAGE_TYPES = useImageTypes();
   const [showDetail, setShowDetail] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [saving, setSaving] = useState(false);

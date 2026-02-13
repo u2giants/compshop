@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { getSignedPhotoUrl, PRODUCT_CATEGORIES, IMAGE_TYPES } from "@/lib/supabase-helpers";
+import { getSignedPhotoUrl, PRODUCT_CATEGORIES } from "@/lib/supabase-helpers";
+import { useImageTypes } from "@/hooks/use-image-types";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -27,6 +28,7 @@ interface Photo {
 }
 
 export default function SearchPage() {
+  const IMAGE_TYPES = useImageTypes();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<string>("");
   const [imageType, setImageType] = useState<string>("");
