@@ -823,6 +823,7 @@ export default function TripDetail() {
               selected={selectedPhotos.has(primary.id)}
               onSelect={toggleSelectPhoto}
               selectionMode={selectedPhotos.size > 0}
+              userName={primary.user_id ? userProfiles[primary.user_id] : undefined}
             />
           ))}
         </div>

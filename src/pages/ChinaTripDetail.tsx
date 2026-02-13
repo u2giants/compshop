@@ -733,6 +733,7 @@ export default function ChinaTripDetail() {
                     selected={selectedPhotos.has(primary.id)}
                     onSelect={toggleSelectPhoto}
                     selectionMode={selectedPhotos.size > 0}
+                    userName={primary.user_id ? userProfiles[primary.user_id] : undefined}
                     onFileDrop={(files, targetId) => {
                       if (!user || !id) return;
                       files.forEach(async (file) => {
