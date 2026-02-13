@@ -36,19 +36,33 @@ export default function SearchPage() {
   const [loading, setLoading] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
 
+  function escapeLikePattern(input: string): string {
+    return input
+      .replace(/\\/g, '\\\\')
+      .replace(/%/g, '\\%')
+      .replace(/_/g, '\\_');
+  }
+
   async function handleSearch(e?: React.FormEvent) {
     e?.preventDefault();
+    if (query.length > 200) {
+      return;
+    }
     setLoading(true);
     setSearched(true);
 
     let q = supabase.from("photos").select("*").order("created_at", { ascending: false }).limit(50);
 
     if (query.trim()) {
-      q = q.or(`product_name.ilike.%${query}%,brand.ilike.%${query}%,notes.ilike.%${query}%,material.ilike.%${query}%`);
+      const escaped = escapeLikePattern(query.trim());
+      q = q.or(`product_name.ilike.%${escaped}%,brand.ilike.%${escaped}%,notes.ilike.%${escaped}%,material.ilike.%${escaped}%`);
     }
     if (category) q = q.eq("category", category);
     if (maxPrice) q = q.lte("price", Number(maxPrice));
-    if (country.trim()) q = q.ilike("country_of_origin", `%${country}%`);
+    if (country.trim()) {
+      const escaped = escapeLikePattern(country.trim());
+      q = q.ilike("country_of_origin", `%${escaped}%`);
+    }
 
     const { data } = await q;
 
