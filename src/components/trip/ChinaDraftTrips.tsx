@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { getSignedPhotoUrl } from "@/lib/supabase-helpers";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -10,6 +10,7 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Calendar, MapPin, Loader2, Check, Trash2, FileText, GripHorizontal, ImageIcon } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+import { useDragAutoScroll } from "@/hooks/use-drag-autoscroll";
 
 interface DraftPhoto {
   id: string;
@@ -36,6 +37,7 @@ interface ChinaDraftTripsProps {
 
 export default function ChinaDraftTrips({ open, onOpenChange, onPublished }: ChinaDraftTripsProps) {
   const { toast } = useToast();
+  const { scrollRef, handleDragOverScroll, stopAutoScroll } = useDragAutoScroll();
   const [drafts, setDrafts] = useState<ChinaDraft[]>([]);
   const [loading, setLoading] = useState(false);
   const [supplierNames, setSupplierNames] = useState<Map<string, string>>(new Map());
@@ -215,7 +217,13 @@ export default function ChinaDraftTrips({ open, onOpenChange, onPublished }: Chi
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent
+        className="max-h-[85vh] overflow-y-auto sm:max-w-2xl"
+        ref={(el) => { scrollRef.current = el; }}
+        onDragOver={handleDragOverScroll}
+        onDragLeave={stopAutoScroll}
+        onDrop={stopAutoScroll}
+      >
         <DialogHeader>
           <DialogTitle className="font-sans flex items-center gap-2">
             <FileText className="h-5 w-5" /> China Draft Trips
