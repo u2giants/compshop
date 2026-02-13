@@ -45,6 +45,7 @@ export default function Trips() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [recycleBinOpen, setRecycleBinOpen] = useState(false);
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSelectedRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -105,13 +106,30 @@ export default function Trips() {
     setLoading(false);
   }
 
-  function toggleSelect(id: string) {
+  function toggleSelect(id: string, shiftKey: boolean) {
+    if (shiftKey && lastSelectedRef.current && lastSelectedRef.current !== id) {
+      // Range select
+      const ids = filteredTrips.map((t) => t.id);
+      const lastIdx = ids.indexOf(lastSelectedRef.current);
+      const currIdx = ids.indexOf(id);
+      if (lastIdx !== -1 && currIdx !== -1) {
+        const start = Math.min(lastIdx, currIdx);
+        const end = Math.max(lastIdx, currIdx);
+        setSelected((prev) => {
+          const next = new Set(prev);
+          for (let i = start; i <= end; i++) next.add(ids[i]);
+          return next;
+        });
+        return;
+      }
+    }
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
+    lastSelectedRef.current = id;
   }
 
   function exitSelectMode() {
@@ -172,17 +190,55 @@ export default function Trips() {
     const fileArray = Array.from(files);
     const results: Map<string, { tripId: string; tripName: string; count: number; isNew: boolean }> = new Map();
 
-    // Parse location from trip data (simple lat/lng from location string isn't available,
-    // so we match by date only, or create new trips)
+    // Step 1: Extract EXIF from all files first
+    const filesMeta: { file: File; date: string; lat: number | null; lng: number | null }[] = [];
     for (let i = 0; i < fileArray.length; i++) {
-      const file = fileArray[i];
-      setSmartProgress(Math.round((i / fileArray.length) * 100));
+      setSmartProgress(Math.round((i / fileArray.length) * 40));
+      const exif = await extractExif(fileArray[i]);
+      filesMeta.push({
+        file: fileArray[i],
+        date: exif.dateTime || new Date().toISOString().split("T")[0],
+        lat: exif.latitude,
+        lng: exif.longitude,
+      });
+    }
 
-      const exif = await extractExif(file);
-      const photoDate = exif.dateTime || new Date().toISOString().split("T")[0];
+    // Step 2: Cluster by date + location (within 1km = same store)
+    const CLUSTER_RADIUS_KM = 1;
+    interface Cluster { date: string; lat: number | null; lng: number | null; indices: number[]; tripId?: string; tripName?: string; isNew?: boolean }
+    const clusters: Cluster[] = [];
 
-      // Try to find an existing trip with matching date
-      let matchedTrip = trips.find((t) => t.date === photoDate);
+    for (let i = 0; i < filesMeta.length; i++) {
+      const fm = filesMeta[i];
+      let matched = false;
+      for (const c of clusters) {
+        if (c.date !== fm.date) continue;
+        // If both have GPS, check distance
+        if (c.lat != null && c.lng != null && fm.lat != null && fm.lng != null) {
+          if (distanceKm(c.lat, c.lng, fm.lat, fm.lng) <= CLUSTER_RADIUS_KM) {
+            c.indices.push(i);
+            matched = true;
+            break;
+          }
+        } else if (c.lat == null && fm.lat == null) {
+          // Both missing GPS, group by date only
+          c.indices.push(i);
+          matched = true;
+          break;
+        }
+      }
+      if (!matched) {
+        clusters.push({ date: fm.date, lat: fm.lat, lng: fm.lng, indices: [i] });
+      }
+    }
+
+    // Step 3: For each cluster, find or create a trip, then upload
+    let uploaded = 0;
+    const totalFiles = fileArray.length;
+
+    for (const cluster of clusters) {
+      // Try to match an existing trip by date (and roughly same location if GPS available)
+      let matchedTrip = trips.find((t) => t.date === cluster.date);
 
       let tripId: string;
       let tripName: string;
@@ -192,14 +248,14 @@ export default function Trips() {
         tripId = matchedTrip.id;
         tripName = matchedTrip.store;
       } else {
-        // Create a new trip
-        const storeName = `Auto-import ${format(new Date(photoDate), "MMM d, yyyy")}`;
+        const locationLabel = cluster.lat != null ? ` (${cluster.lat.toFixed(3)}, ${cluster.lng!.toFixed(3)})` : "";
+        const storeName = `Auto-import ${format(new Date(cluster.date), "MMM d, yyyy")}${locationLabel}`;
         const { data: newTrip, error } = await supabase
           .from("shopping_trips")
           .insert({
             name: storeName,
             store: storeName,
-            date: photoDate,
+            date: cluster.date,
             created_by: user.id,
           })
           .select()
@@ -214,27 +270,31 @@ export default function Trips() {
         tripId = newTrip.id;
         tripName = storeName;
         isNew = true;
-        // Add to local trips so subsequent photos on same date match
         matchedTrip = { ...newTrip, photo_count: 0, member_count: 1 } as TripWithCover;
         setTrips((prev) => [matchedTrip!, ...prev]);
       }
 
-      try {
-        const filePath = await uploadPhoto(file, user.id, tripId);
-        await supabase.from("photos").insert({
-          trip_id: tripId,
-          user_id: user.id,
-          file_path: filePath,
-        });
+      for (const idx of cluster.indices) {
+        const file = filesMeta[idx].file;
+        uploaded++;
+        setSmartProgress(40 + Math.round((uploaded / totalFiles) * 60));
+        try {
+          const filePath = await uploadPhoto(file, user.id, tripId);
+          await supabase.from("photos").insert({
+            trip_id: tripId,
+            user_id: user.id,
+            file_path: filePath,
+          });
 
-        const existing = results.get(tripId);
-        if (existing) {
-          existing.count++;
-        } else {
-          results.set(tripId, { tripId, tripName, count: 1, isNew });
+          const existing = results.get(tripId);
+          if (existing) {
+            existing.count++;
+          } else {
+            results.set(tripId, { tripId, tripName, count: 1, isNew });
+          }
+        } catch (err) {
+          console.error("Upload failed for:", file.name, err);
         }
-      } catch (err) {
-        console.error("Upload failed for:", file.name, err);
       }
     }
 
@@ -401,9 +461,9 @@ export default function Trips() {
               <Card
                 key={trip.id}
                 className={`cursor-pointer overflow-hidden transition-shadow hover:shadow-md ${selectMode && isSelected ? "ring-2 ring-primary" : ""}`}
-                onClick={() => {
+                onClick={(e) => {
                   if (selectMode) {
-                    toggleSelect(trip.id);
+                    toggleSelect(trip.id, e.shiftKey);
                   } else {
                     navigate(`/trips/${trip.id}`);
                   }
