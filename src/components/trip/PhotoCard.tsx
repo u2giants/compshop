@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { PRODUCT_CATEGORIES } from "@/lib/supabase-helpers";
@@ -52,6 +52,22 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
   const [dragOver, setDragOver] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [imageZoomed, setImageZoomed] = useState(false);
+  const [zoomScale, setZoomScale] = useState(1);
+  const imgContainerRef = useRef<HTMLDivElement>(null);
+
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setZoomScale((prev) => {
+      const next = prev - e.deltaY * 0.002;
+      return Math.min(Math.max(next, 0.5), 5);
+    });
+  }, []);
+
+  const resetZoom = useCallback(() => {
+    setZoomScale(1);
+    setImageZoomed(false);
+  }, []);
 
   const allImages = [photo, ...extraPhotos];
   const totalImages = allImages.length;
@@ -286,7 +302,7 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
       </Card>
 
       {/* Full detail / edit dialog */}
-      <Dialog open={showDetail} onOpenChange={(open) => { setShowDetail(open); if (!open) setImageZoomed(false); }}>
+      <Dialog open={showDetail} onOpenChange={(open) => { setShowDetail(open); if (!open) { setImageZoomed(false); setZoomScale(1); } }}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <div className="flex items-center justify-between gap-2">
@@ -308,18 +324,28 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
             </div>
           </DialogHeader>
 
-          {/* Image with max height so fields are always visible – click to zoom */}
+          {/* Image with scroll-wheel zoom – double-click to reset */}
           {totalImages > 1 ? (
             <div className="relative">
-              <div className={`overflow-auto touch-pan-x touch-pan-y ${imageZoomed ? "max-h-[70vh]" : ""}`}>
+              <div
+                ref={imgContainerRef}
+                className="overflow-auto max-h-[50vh] touch-pan-x touch-pan-y cursor-grab active:cursor-grabbing"
+                onWheel={handleWheel}
+              >
                 <img
                   src={allImages[activeImageIndex]?.signed_url || ""}
                   alt={photo.product_name || "Photo"}
-                  className={`w-full rounded-lg origin-center transition-all duration-200 ${imageZoomed ? "max-h-none cursor-zoom-out" : "max-h-[40vh] object-contain cursor-zoom-in"}`}
-                  style={{ touchAction: "pinch-zoom" }}
-                  onClick={() => setImageZoomed((z) => !z)}
+                  className="w-full rounded-lg origin-top-left transition-transform duration-100"
+                  style={{ transform: `scale(${zoomScale})`, touchAction: "pinch-zoom" }}
+                  onDoubleClick={resetZoom}
+                  draggable={false}
                 />
               </div>
+              {zoomScale !== 1 && (
+                <Badge className="absolute top-2 left-1/2 -translate-x-1/2 bg-background/80 text-foreground backdrop-blur-sm text-xs">
+                  {Math.round(zoomScale * 100)}% — double-click to reset
+                </Badge>
+              )}
               <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
                 {allImages.map((_, i) => (
                   <button
@@ -347,14 +373,23 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
               </Button>
             </div>
           ) : photo.signed_url ? (
-            <div className={`overflow-auto touch-pan-x touch-pan-y ${imageZoomed ? "max-h-[70vh]" : ""}`}>
+            <div
+              className="overflow-auto max-h-[50vh] touch-pan-x touch-pan-y cursor-grab active:cursor-grabbing relative"
+              onWheel={handleWheel}
+            >
               <img
                 src={photo.signed_url}
                 alt={photo.product_name || "Photo"}
-                className={`w-full rounded-lg origin-center transition-all duration-200 ${imageZoomed ? "max-h-none cursor-zoom-out" : "max-h-[40vh] object-contain cursor-zoom-in"}`}
-                style={{ touchAction: "pinch-zoom" }}
-                onClick={() => setImageZoomed((z) => !z)}
+                className="w-full rounded-lg origin-top-left transition-transform duration-100"
+                style={{ transform: `scale(${zoomScale})`, touchAction: "pinch-zoom" }}
+                onDoubleClick={resetZoom}
+                draggable={false}
               />
+              {zoomScale !== 1 && (
+                <Badge className="absolute top-2 left-1/2 -translate-x-1/2 bg-background/80 text-foreground backdrop-blur-sm text-xs z-10">
+                  {Math.round(zoomScale * 100)}% — double-click to reset
+                </Badge>
+              )}
             </div>
           ) : null}
 
