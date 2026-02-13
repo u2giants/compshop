@@ -48,9 +48,10 @@ interface Props {
   onSelect?: (photoId: string) => void;
   selectionMode?: boolean;
   chinaMode?: boolean;
+  userName?: string;
 }
 
-export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, onGroupPhoto, onFileDrop, selected, onSelect, selectionMode, chinaMode }: Props) {
+export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, onGroupPhoto, onFileDrop, selected, onSelect, selectionMode, chinaMode, userName }: Props) {
   const { user, isAdmin } = useAuth();
   const { toast } = useToast();
   const countries = useCountries();
@@ -338,7 +339,10 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
               ))}
             </div>
           )}
-          <div className="mt-3 flex items-center gap-2">
+          {userName && (
+            <p className="mt-1 text-[10px] text-muted-foreground/70 truncate">by {userName}</p>
+          )}
+          <div className="mt-2 flex items-center gap-2">
             <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={(e) => { e.stopPropagation(); setShowComments(true); }}>
               <MessageSquare className="h-3 w-3" /> Comment
             </Button>

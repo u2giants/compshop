@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAppMode, type AppMode } from "@/contexts/AppModeContext";
@@ -19,15 +19,34 @@ export default function AppShell() {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchOpen, setSearchOpen] = useState(false);
+  const [showModeMenu, setShowModeMenu] = useState(false);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressTriggered = useRef(false);
+
+  const isChina = mode === "china_trip";
+  const tripsLabel = isChina ? "CN Trips" : "Str Trips";
+
+  const handleTripsPointerDown = useCallback(() => {
+    longPressTriggered.current = false;
+    longPressTimer.current = setTimeout(() => {
+      longPressTriggered.current = true;
+      setShowModeMenu(true);
+    }, 500);
+  }, []);
+
+  const handleTripsPointerUp = useCallback(() => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  }, []);
 
   if (!user) return null;
 
-  const isChina = mode === "china_trip";
-
   const navItems = [
-    { icon: Home, label: isChina ? "China Trips" : "Trips", path: isChina ? "/china" : "/" },
+    { icon: Home, label: tripsLabel, path: isChina ? "/china" : "/", isTrips: true },
     { icon: Search, label: "Search", path: "__search__" },
-    { icon: PlusCircle, label: isChina ? "New Trip" : "New Trip", path: isChina ? "/china/new" : "/trips/new" },
+    { icon: PlusCircle, label: "New", path: isChina ? "/china/new" : "/trips/new" },
     { icon: User, label: "Profile", path: "/profile" },
   ];
 
@@ -42,6 +61,7 @@ export default function AppShell() {
 
   function handleModeSwitch(newMode: AppMode) {
     setMode(newMode);
+    setShowModeMenu(false);
     navigate(newMode === "china_trip" ? "/china" : "/");
   }
 
@@ -112,42 +132,75 @@ export default function AppShell() {
       <nav className="fixed bottom-0 left-0 right-0 z-50 border-t bg-card md:hidden">
         <div className="flex flex-col">
           <SyncStatusIndicator />
-          {/* Mode switcher strip */}
-          <div className="flex items-center justify-center border-b px-4 py-1.5">
-            <DropdownMenu>
-              <DropdownMenuTrigger className="flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium text-muted-foreground hover:text-foreground">
-                {isChina ? <Factory className="h-3 w-3" /> : <Store className="h-3 w-3" />}
-                {modeLabel}
-                <ChevronDown className="h-3 w-3" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="center" className="bg-popover">
-                <DropdownMenuItem onClick={() => handleModeSwitch("store_shopping")} className="gap-2">
-                  <Store className="h-4 w-4" /> Store Shopping
-                  {!isChina && <span className="ml-auto text-xs text-primary">✓</span>}
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleModeSwitch("china_trip")} className="gap-2">
-                  <Factory className="h-4 w-4" /> China Trip
-                  {isChina && <span className="ml-auto text-xs text-primary">✓</span>}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
           <div className="flex h-16 items-center justify-around">
-            {navItems.map((item) => (
-              <button
-                key={item.path}
-                onClick={() => handleNavClick(item.path)}
-                className={cn(
-                  "flex flex-col items-center gap-0.5 px-3 py-1 text-xs transition-colors",
-                  (item.path === "__search__" && searchOpen) || (item.path !== "__search__" && location.pathname === item.path)
-                    ? "text-primary"
-                    : "text-muted-foreground"
-                )}
-              >
-                <item.icon className="h-5 w-5" />
-                {item.label}
-              </button>
-            ))}
+            {navItems.map((item) => {
+              const isTrips = (item as any).isTrips;
+              const isActive = (item.path === "__search__" && searchOpen) || (item.path !== "__search__" && location.pathname === item.path);
+
+              if (isTrips) {
+                return (
+                  <div key={item.path} className="relative">
+                    <button
+                      onPointerDown={handleTripsPointerDown}
+                      onPointerUp={(e) => {
+                        handleTripsPointerUp();
+                        if (!longPressTriggered.current) {
+                          handleNavClick(item.path);
+                        }
+                      }}
+                      onPointerCancel={handleTripsPointerUp}
+                      onContextMenu={(e) => e.preventDefault()}
+                      className={cn(
+                        "flex flex-col items-center gap-0.5 px-3 py-1 text-xs transition-colors select-none",
+                        isActive ? "text-primary" : "text-muted-foreground"
+                      )}
+                    >
+                      <item.icon className="h-5 w-5" />
+                      <span className="flex items-center gap-0.5">
+                        {item.label}
+                        <ChevronDown className="h-2.5 w-2.5" />
+                      </span>
+                    </button>
+                    {/* Long-press mode menu */}
+                    {showModeMenu && (
+                      <>
+                        <div className="fixed inset-0 z-50" onClick={() => setShowModeMenu(false)} />
+                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 min-w-[160px] rounded-md border bg-popover p-1 shadow-md">
+                          <button
+                            onClick={() => handleModeSwitch("store_shopping")}
+                            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
+                          >
+                            <Store className="h-4 w-4" /> Str Trips
+                            {!isChina && <span className="ml-auto text-xs text-primary">✓</span>}
+                          </button>
+                          <button
+                            onClick={() => handleModeSwitch("china_trip")}
+                            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
+                          >
+                            <Factory className="h-4 w-4" /> CN Trips
+                            {isChina && <span className="ml-auto text-xs text-primary">✓</span>}
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              }
+
+              return (
+                <button
+                  key={item.path}
+                  onClick={() => handleNavClick(item.path)}
+                  className={cn(
+                    "flex flex-col items-center gap-0.5 px-3 py-1 text-xs transition-colors",
+                    isActive ? "text-primary" : "text-muted-foreground"
+                  )}
+                >
+                  <item.icon className="h-5 w-5" />
+                  {item.label}
+                </button>
+              );
+            })}
           </div>
         </div>
       </nav>
