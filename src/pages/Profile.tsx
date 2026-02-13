@@ -9,6 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { LogOut, Shield } from "lucide-react";
 import InviteManager from "@/components/admin/InviteManager";
+import RetailerManager from "@/components/admin/RetailerManager";
+import CountryManager from "@/components/admin/CountryManager";
 import StorageQuotaManager from "@/components/settings/StorageQuotaManager";
 
 export default function Profile() {
@@ -87,8 +89,10 @@ export default function Profile() {
         </CardContent>
       </Card>
 
-      {/* Admin: Invite team members */}
+      {/* Admin panels */}
       <InviteManager />
+      <RetailerManager />
+      <CountryManager />
 
       {/* Storage quota settings */}
       <StorageQuotaManager />
