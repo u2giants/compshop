@@ -51,6 +51,7 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
   const [analyzing, setAnalyzing] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [imageZoomed, setImageZoomed] = useState(false);
 
   const allImages = [photo, ...extraPhotos];
   const totalImages = allImages.length;
@@ -285,7 +286,7 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
       </Card>
 
       {/* Full detail / edit dialog */}
-      <Dialog open={showDetail} onOpenChange={setShowDetail}>
+      <Dialog open={showDetail} onOpenChange={(open) => { setShowDetail(open); if (!open) setImageZoomed(false); }}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <div className="flex items-center justify-between gap-2">
@@ -307,15 +308,16 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
             </div>
           </DialogHeader>
 
-          {/* Image with max height so fields are always visible */}
+          {/* Image with max height so fields are always visible – click to zoom */}
           {totalImages > 1 ? (
             <div className="relative">
-              <div className="overflow-auto touch-pan-x touch-pan-y">
+              <div className={`overflow-auto touch-pan-x touch-pan-y ${imageZoomed ? "max-h-[70vh]" : ""}`}>
                 <img
                   src={allImages[activeImageIndex]?.signed_url || ""}
                   alt={photo.product_name || "Photo"}
-                  className="w-full max-h-[40vh] object-contain rounded-lg origin-center"
+                  className={`w-full rounded-lg origin-center transition-all duration-200 ${imageZoomed ? "max-h-none cursor-zoom-out" : "max-h-[40vh] object-contain cursor-zoom-in"}`}
                   style={{ touchAction: "pinch-zoom" }}
+                  onClick={() => setImageZoomed((z) => !z)}
                 />
               </div>
               <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
@@ -345,8 +347,14 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
               </Button>
             </div>
           ) : photo.signed_url ? (
-            <div className="overflow-auto touch-pan-x touch-pan-y">
-              <img src={photo.signed_url} alt={photo.product_name || "Photo"} className="w-full max-h-[40vh] object-contain rounded-lg origin-center" style={{ touchAction: "pinch-zoom" }} />
+            <div className={`overflow-auto touch-pan-x touch-pan-y ${imageZoomed ? "max-h-[70vh]" : ""}`}>
+              <img
+                src={photo.signed_url}
+                alt={photo.product_name || "Photo"}
+                className={`w-full rounded-lg origin-center transition-all duration-200 ${imageZoomed ? "max-h-none cursor-zoom-out" : "max-h-[40vh] object-contain cursor-zoom-in"}`}
+                style={{ touchAction: "pinch-zoom" }}
+                onClick={() => setImageZoomed((z) => !z)}
+              />
             </div>
           ) : null}
 
