@@ -32,6 +32,155 @@ export type Database = {
         }
         Relationships: []
       }
+      china_photos: {
+        Row: {
+          brand: string | null
+          category: string | null
+          country_of_origin: string | null
+          created_at: string
+          dimensions: string | null
+          file_hash: string | null
+          file_path: string
+          group_id: string | null
+          id: string
+          image_type: string | null
+          material: string | null
+          notes: string | null
+          price: number | null
+          product_name: string | null
+          trip_id: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          brand?: string | null
+          category?: string | null
+          country_of_origin?: string | null
+          created_at?: string
+          dimensions?: string | null
+          file_hash?: string | null
+          file_path: string
+          group_id?: string | null
+          id?: string
+          image_type?: string | null
+          material?: string | null
+          notes?: string | null
+          price?: number | null
+          product_name?: string | null
+          trip_id: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          brand?: string | null
+          category?: string | null
+          country_of_origin?: string | null
+          created_at?: string
+          dimensions?: string | null
+          file_hash?: string | null
+          file_path?: string
+          group_id?: string | null
+          id?: string
+          image_type?: string | null
+          material?: string | null
+          notes?: string | null
+          price?: number | null
+          product_name?: string | null
+          trip_id?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "china_photos_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "china_photos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "china_photos_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "china_trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      china_trip_members: {
+        Row: {
+          added_at: string
+          id: string
+          trip_id: string
+          user_id: string
+        }
+        Insert: {
+          added_at?: string
+          id?: string
+          trip_id: string
+          user_id: string
+        }
+        Update: {
+          added_at?: string
+          id?: string
+          trip_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "china_trip_members_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "china_trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      china_trips: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          date: string
+          deleted_at: string | null
+          id: string
+          is_draft: boolean
+          location: string | null
+          name: string
+          notes: string | null
+          supplier: string
+          updated_at: string
+          venue_type: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          date?: string
+          deleted_at?: string | null
+          id?: string
+          is_draft?: boolean
+          location?: string | null
+          name: string
+          notes?: string | null
+          supplier: string
+          updated_at?: string
+          venue_type?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          date?: string
+          deleted_at?: string | null
+          id?: string
+          is_draft?: boolean
+          location?: string | null
+          name?: string
+          notes?: string | null
+          supplier?: string
+          updated_at?: string
+          venue_type?: string
+        }
+        Relationships: []
+      }
       comments: {
         Row: {
           content: string
@@ -390,6 +539,7 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: never; Returns: boolean }
+      is_china_trip_member: { Args: { _trip_id: string }; Returns: boolean }
       is_email_invited: { Args: { _email: string }; Returns: boolean }
       is_trip_member: { Args: { _trip_id: string }; Returns: boolean }
     }
