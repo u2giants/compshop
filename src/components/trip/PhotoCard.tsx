@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { PRODUCT_CATEGORIES } from "@/lib/supabase-helpers";
+import { useCategories } from "@/hooks/use-categories";
 import { useImageTypes } from "@/hooks/use-image-types";
 import { useCountries } from "@/hooks/use-countries";
 import AutocompleteInput from "@/components/ui/autocomplete-input";
@@ -53,6 +53,7 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
   const { toast } = useToast();
   const countries = useCountries();
   const IMAGE_TYPES = useImageTypes();
+  const categories = useCategories();
   const [showDetail, setShowDetail] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -490,7 +491,7 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
                 <Select value={editData.category} onValueChange={(v) => setEditData((d) => ({ ...d, category: v }))} disabled={!canEdit}>
                   <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
                   <SelectContent>
-                    {PRODUCT_CATEGORIES.map((c) => (
+                    {categories.map((c) => (
                       <SelectItem key={c} value={c}>{c}</SelectItem>
                     ))}
                   </SelectContent>

@@ -13,6 +13,7 @@ import InviteManager from "@/components/admin/InviteManager";
 import RetailerManager from "@/components/admin/RetailerManager";
 import CountryManager from "@/components/admin/CountryManager";
 import ImageTypeManager from "@/components/admin/ImageTypeManager";
+import CategoryManager from "@/components/admin/CategoryManager";
 import StorageQuotaManager from "@/components/settings/StorageQuotaManager";
 
 export default function Profile() {
@@ -114,6 +115,7 @@ export default function Profile() {
       <RetailerManager />
       <CountryManager />
       <ImageTypeManager />
+      <CategoryManager />
 
       {/* Storage quota settings */}
       <StorageQuotaManager />
