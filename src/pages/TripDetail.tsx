@@ -492,7 +492,7 @@ export default function TripDetail() {
             return logoUrl ? (
               <img src={logoUrl} alt={trip.store} className="h-6 object-contain" title={trip.store} />
             ) : (
-              <span className="flex items-center gap-1"><Store className="h-3.5 w-3.5" /> {trip.store}</span>
+              <span className="flex items-center gap-1 font-sans text-base"><Store className="h-3.5 w-3.5" /> {trip.store}</span>
             );
           })()}
           <span className="flex items-center gap-1"><Calendar className="h-3.5 w-3.5" /> {format(new Date(trip.date), "MMM d, yyyy")}</span>
