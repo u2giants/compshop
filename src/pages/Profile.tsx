@@ -12,6 +12,7 @@ import { LogOut, Shield, FileDown } from "lucide-react";
 import InviteManager from "@/components/admin/InviteManager";
 import RetailerManager from "@/components/admin/RetailerManager";
 import CountryManager from "@/components/admin/CountryManager";
+import ImageTypeManager from "@/components/admin/ImageTypeManager";
 import StorageQuotaManager from "@/components/settings/StorageQuotaManager";
 
 export default function Profile() {
@@ -112,6 +113,7 @@ export default function Profile() {
       <InviteManager />
       <RetailerManager />
       <CountryManager />
+      <ImageTypeManager />
 
       {/* Storage quota settings */}
       <StorageQuotaManager />

@@ -76,6 +76,7 @@ export const PRODUCT_CATEGORIES = [
   "Garden",
 ] as const;
 
+/** @deprecated Use useImageTypes() hook instead */
 export const IMAGE_TYPES = [
   "Product Format",
   "Design Idea",
