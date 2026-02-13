@@ -48,11 +48,11 @@ export default function TripMembers({ tripId, createdBy }: Props) {
     setAdding(true);
 
     try {
-      // Find user by email
+      // Find user by email (case-insensitive)
       const { data: profile } = await supabase
         .from("profiles")
         .select("id")
-        .eq("email", email.trim())
+        .ilike("email", email.trim())
         .single();
 
       if (!profile) {
