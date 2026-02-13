@@ -2,3 +2,6 @@ project_id = "aqbyrzknbhyshjzlfsyv"
 
 [functions.send-invite-email]
 verify_jwt = false
+
+[functions.nearby-stores]
+verify_jwt = false
