@@ -336,7 +336,7 @@ export default function Trips() {
           <h1 className="font-sans text-3xl md:text-4xl">Shopping Trips</h1>
           <p className="mt-1 text-muted-foreground hidden md:block">Your team's comparison shopping intel</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 justify-end">
           {selectMode ? (
             <>
               <span className="text-sm text-muted-foreground">{selected.size} selected</span>
@@ -347,17 +347,6 @@ export default function Trips() {
             </>
           ) : (
             <>
-              <Button variant="ghost" size="icon" onClick={() => setDraftsOpen(true)} title="Draft Trips">
-                <FileText className="h-4 w-4" />
-              </Button>
-              <Button variant="ghost" size="icon" onClick={() => setRecycleBinOpen(true)} title="Recycling Bin">
-                <Trash2 className="h-4 w-4" />
-              </Button>
-              {trips.length > 0 && (
-                <Button variant="outline" size="sm" onClick={() => setSelectMode(true)} className="gap-1">
-                  <CheckSquare className="h-4 w-4" /> Select
-                </Button>
-              )}
               <input ref={smartUploadRef} type="file" accept="image/*" multiple className="hidden" onChange={handleSmartUpload} />
               <Button variant="outline" onClick={() => smartUploadRef.current?.click()} disabled={smartUploading} className="gap-2">
                 {smartUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
@@ -367,6 +356,17 @@ export default function Trips() {
                 <Plus className="h-4 w-4" />
                 <span className="hidden sm:inline">New Trip</span>
               </Button>
+              <Button variant="ghost" size="icon" onClick={() => setDraftsOpen(true)} title="Draft Trips">
+                <FileText className="h-4 w-4" />
+              </Button>
+              <Button variant="ghost" size="icon" onClick={() => setRecycleBinOpen(true)} title="Recycling Bin" className="hidden md:inline-flex">
+                <Trash2 className="h-4 w-4" />
+              </Button>
+              {trips.length > 0 && (
+                <Button variant="outline" size="sm" onClick={() => setSelectMode(true)} className="gap-1">
+                  <CheckSquare className="h-4 w-4" /> Select
+                </Button>
+              )}
             </>
           )}
         </div>
