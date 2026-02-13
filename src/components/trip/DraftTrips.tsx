@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from "react";
+import { useDragAutoScroll } from "@/hooks/use-drag-autoscroll";
 import { supabase } from "@/integrations/supabase/client";
 import { getSignedPhotoUrl } from "@/lib/supabase-helpers";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -45,6 +46,7 @@ interface DraftTripsProps {
 export default function DraftTrips({ open, onOpenChange, onPublished }: DraftTripsProps) {
   const { retailerNames, getLogoUrl } = useRetailers();
   const { toast } = useToast();
+  const { scrollRef, handleDragOverScroll, stopAutoScroll } = useDragAutoScroll();
   const [drafts, setDrafts] = useState<DraftTrip[]>([]);
   const [loading, setLoading] = useState(false);
   const [storeOptions, setStoreOptions] = useState<Map<string, NearbyStore[]>>(new Map());
@@ -232,7 +234,13 @@ export default function DraftTrips({ open, onOpenChange, onPublished }: DraftTri
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent
+        className="max-h-[85vh] overflow-y-auto sm:max-w-2xl"
+        ref={(el) => { scrollRef.current = el; }}
+        onDragOver={handleDragOverScroll}
+        onDragLeave={stopAutoScroll}
+        onDrop={stopAutoScroll}
+      >
         <DialogHeader>
           <DialogTitle className="font-sans flex items-center gap-2">
             <FileText className="h-5 w-5" /> Draft Trips
