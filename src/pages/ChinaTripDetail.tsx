@@ -146,8 +146,12 @@ export default function ChinaTripDetail() {
   // Section management
   const [showAddSection, setShowAddSection] = useState(false);
   const [newSectionName, setNewSectionName] = useState("");
+  const [emptySections, setEmptySections] = useState<string[]>([]);
 
-  const existingSections = [...new Set(photos.filter((p) => p.section).map((p) => p.section!))];
+  const existingSections = [...new Set([
+    ...photos.filter((p) => p.section).map((p) => p.section!),
+    ...emptySections,
+  ])];
 
   function toggleSelectPhoto(photoId: string) {
     setSelectedPhotos((prev) => {
@@ -273,6 +277,10 @@ export default function ChinaTripDetail() {
     if (!name) return;
     if (selectedPhotos.size > 0) {
       await handleAssignSection(name);
+    } else {
+      // Add empty section placeholder so it appears as a drop target
+      setEmptySections((prev) => prev.includes(name) ? prev : [...prev, name]);
+      toast({ title: `Section "${name}" created`, description: "Drag photos into it to organize." });
     }
     setNewSectionName("");
     setShowAddSection(false);
@@ -523,7 +531,13 @@ export default function ChinaTripDetail() {
   }
 
   const groups = groupPhotos(photos);
-  const sectionedGroups = groupBySection(groups);
+  const sectionedGroups = (() => {
+    const base = groupBySection(groups);
+    // Add empty sections that don't have photos yet
+    const existingInGroups = new Set(base.map(g => g.section));
+    const emptyOnes = emptySections.filter(s => !existingInGroups.has(s));
+    return [...base, ...emptyOnes.map(s => ({ section: s, items: [] as { primary: Photo; extras: Photo[] }[] }))];
+  })();
 
   if (loading) {
     return (
@@ -662,14 +676,14 @@ export default function ChinaTripDetail() {
                 </SelectContent>
               </Select>
             )}
-            <Button variant="outline" size="sm" onClick={() => setShowAddSection(true)} className="gap-1">
-              <Plus className="h-3.5 w-3.5" /> New Section
-            </Button>
             <Button variant="ghost" size="sm" onClick={() => setSelectedPhotos(new Set())}>
               Clear
             </Button>
           </>
         )}
+        <Button variant="outline" size="sm" onClick={() => setShowAddSection(true)} className="gap-1">
+          <Plus className="h-3.5 w-3.5" /> New Section
+        </Button>
         {pendingPhotos.length > 0 && (
           <Badge variant="outline" className="gap-1">
             <CloudOff className="h-3 w-3" /> {pendingPhotos.length} pending
@@ -712,14 +726,36 @@ export default function ChinaTripDetail() {
       ) : (
         <div className="space-y-6">
           {sectionedGroups.map(({ section, items }, sIdx) => (
-            <div key={section ?? "__unsectioned__"}>
+            <div
+              key={section ?? "__unsectioned__"}
+              onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
+              onDrop={(e) => {
+                e.preventDefault();
+                const draggedId = e.dataTransfer.getData("text/plain");
+                if (draggedId) {
+                  // Move photo to this section
+                  supabase.from("china_photos").update({ section: section ?? null }).eq("id", draggedId)
+                    .then(({ error }) => {
+                      if (!error) {
+                        toast({ title: section ? `Moved to "${section}"` : "Moved to unsectioned" });
+                        loadPhotos();
+                      }
+                    });
+                }
+              }}
+            >
               {section && (
                 <div className="mb-3">
                   {sIdx > 0 && <Separator className="mb-4" />}
-                  <h3 className="font-sans text-lg font-semibold text-foreground">{section}</h3>
+                  <h3 className="font-sans text-lg font-semibold text-foreground rounded px-2 py-1 -mx-2 transition-colors hover:bg-muted/50">{section}</h3>
                 </div>
               )}
               {!section && sIdx > 0 && <Separator className="mb-4" />}
+              {items.length === 0 ? (
+                <div className="rounded-lg border-2 border-dashed border-muted-foreground/25 p-8 text-center text-sm text-muted-foreground">
+                  Drag photos here
+                </div>
+              ) : (
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 {items.map(({ primary, extras }) => (
                   <PhotoCard
@@ -749,6 +785,7 @@ export default function ChinaTripDetail() {
                   />
                 ))}
               </div>
+              )}
             </div>
           ))}
         </div>

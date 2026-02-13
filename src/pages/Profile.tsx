@@ -57,58 +57,63 @@ export default function Profile() {
     <div className="container py-6 space-y-6">
       <h1 className="font-sans text-3xl font-semibold">Profile</h1>
 
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-lg">Your Account</CardTitle>
-            {isAdmin && (
-              <Badge className="gap-1 bg-primary/10 text-primary">
-                <Shield className="h-3 w-3" /> Admin
-              </Badge>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSave} className="space-y-4">
-            <div className="space-y-2">
-              <Label>Email</Label>
-              <Input value={user?.email || ""} disabled />
+      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg">Your Account</CardTitle>
+              {isAdmin && (
+                <Badge className="gap-1 bg-primary/10 text-primary">
+                  <Shield className="h-3 w-3" /> Admin
+                </Badge>
+              )}
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="displayName">Display Name</Label>
-              <Input
-                id="displayName"
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                placeholder="Your name"
-              />
-            </div>
-            <Button type="submit" disabled={saving} className="w-full">
-              {saving ? "Saving..." : "Save Changes"}
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSave} className="space-y-4">
+              <div className="space-y-2">
+                <Label>Email</Label>
+                <Input value={user?.email || ""} disabled />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="displayName">Display Name</Label>
+                <Input
+                  id="displayName"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  placeholder="Your name"
+                />
+              </div>
+              <Button type="submit" disabled={saving} className="w-full">
+                {saving ? "Saving..." : "Save Changes"}
+              </Button>
+            </form>
+            <Button variant="outline" className="mt-4 w-full gap-2" onClick={signOut}>
+              <LogOut className="h-4 w-4" /> Sign Out
             </Button>
-          </form>
-          <Button variant="outline" className="mt-4 w-full gap-2" onClick={signOut}>
-            <LogOut className="h-4 w-4" /> Sign Out
-          </Button>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
 
-      {/* Data import */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 font-sans text-lg">
-            <FileDown className="h-5 w-5" /> Import Data
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <Button variant="outline" className="w-full gap-2" onClick={() => navigate("/import/keep")}>
-            Import from Google Keep
-          </Button>
-          <Button variant="outline" className="w-full gap-2" onClick={() => navigate("/import/teams")}>
-            Import from Microsoft Teams
-          </Button>
-        </CardContent>
-      </Card>
+        {/* Data import */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 font-sans text-lg">
+              <FileDown className="h-5 w-5" /> Import Data
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <Button variant="outline" className="w-full gap-2" onClick={() => navigate("/import/keep")}>
+              Import from Google Keep
+            </Button>
+            <Button variant="outline" className="w-full gap-2" onClick={() => navigate("/import/teams")}>
+              Import from Microsoft Teams
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Storage quota settings */}
+        <StorageQuotaManager />
+      </div>
 
       {/* Admin panels */}
       {isAdmin && (
@@ -120,9 +125,6 @@ export default function Profile() {
           <CategoryManager />
         </div>
       )}
-
-      {/* Storage quota settings */}
-      <StorageQuotaManager />
     </div>
   );
 }
