@@ -390,6 +390,42 @@ export default function TripDetail() {
     loadPendingPhotos();
   }
 
+  async function handleFileDropOnCard(files: File[], targetPhotoId: string) {
+    if (!user || !id) return;
+    setUploading(true);
+    let successCount = 0;
+
+    for (const file of files) {
+      try {
+        if (!navigator.onLine) {
+          const pendingId = crypto.randomUUID();
+          await addPendingUpload({
+            id: pendingId, trip_id: id, file_blob: file, file_name: file.name,
+            metadata: { product_name: null, category: null, price: null, dimensions: null, country_of_origin: null, material: null, brand: null, notes: null },
+            user_id: user.id, created_at: new Date().toISOString(), status: "pending", retry_count: 0,
+          });
+          successCount++;
+        } else {
+          const filePath = await uploadPhoto(file, user.id, id);
+          const { error } = await supabase.from("photos").insert({
+            trip_id: id, user_id: user.id, file_path: filePath, group_id: targetPhotoId,
+          });
+          if (error) throw error;
+          successCount++;
+        }
+      } catch {
+        console.error("File drop upload failed");
+      }
+    }
+
+    setUploading(false);
+    toast({
+      title: `${successCount} photo${successCount !== 1 ? "s" : ""} added to card`,
+    });
+    loadPhotos();
+    loadPendingPhotos();
+  }
+
   async function handleAnalyze() {
     if (!selectedFile) return;
     setAnalyzing(true);
@@ -663,6 +699,7 @@ export default function TripDetail() {
               extraPhotos={extras}
               onUpdated={loadPhotos}
               onGroupPhoto={handleGroupPhoto}
+              onFileDrop={handleFileDropOnCard}
             />
           ))}
         </div>
