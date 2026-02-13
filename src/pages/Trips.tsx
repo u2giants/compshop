@@ -244,9 +244,26 @@ export default function Trips() {
     let uploaded = 0;
     const totalFiles = fileArray.length;
 
+    // Pre-fetch GPS coordinates for existing trips (use first photo with GPS per trip)
+    const sameDateTrips = trips.filter((t) => clusters.some((c) => c.date === t.date));
+    const tripGps = new Map<string, { lat: number; lng: number }>();
+    if (sameDateTrips.length > 0) {
+      const { data: tripPhotos } = await supabase
+        .from("photos")
+        .select("trip_id, id")
+        .in("trip_id", sameDateTrips.map((t) => t.id))
+        .limit(500);
+      // We don't have GPS on photos table, so we can't match by location against existing trips.
+      // Only match existing trips if cluster has NO GPS (date-only fallback).
+    }
+
     for (const cluster of clusters) {
-      // Try to match an existing trip by date (and roughly same location if GPS available)
-      let matchedTrip = trips.find((t) => t.date === cluster.date);
+      // Only merge into an existing trip if the cluster has NO GPS data (date-only match)
+      // If the cluster has GPS, always create a new draft so the user can review & assign a store
+      let matchedTrip: typeof trips[0] | undefined;
+      if (cluster.lat == null) {
+        matchedTrip = trips.find((t) => t.date === cluster.date);
+      }
 
       let tripId: string;
       let tripName: string;
@@ -279,7 +296,6 @@ export default function Trips() {
         tripId = newTrip.id;
         tripName = draftName;
         isNew = true;
-        // Don't add drafts to the main trips list
       }
 
       for (const idx of cluster.indices) {
