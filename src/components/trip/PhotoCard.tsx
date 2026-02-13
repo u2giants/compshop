@@ -54,6 +54,7 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
   const [imageZoomed, setImageZoomed] = useState(false);
   const [zoomScale, setZoomScale] = useState(1);
   const imgContainerRef = useRef<HTMLDivElement>(null);
+  const dragState = useRef<{ isDragging: boolean; startX: number; startY: number; scrollLeft: number; scrollTop: number }>({ isDragging: false, startX: 0, startY: 0, scrollLeft: 0, scrollTop: 0 });
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
@@ -67,6 +68,25 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
   const resetZoom = useCallback(() => {
     setZoomScale(1);
     setImageZoomed(false);
+  }, []);
+
+  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    dragState.current = { isDragging: true, startX: e.clientX, startY: e.clientY, scrollLeft: el.scrollLeft, scrollTop: el.scrollTop };
+    el.setPointerCapture(e.pointerId);
+  }, []);
+
+  const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragState.current.isDragging) return;
+    const dx = e.clientX - dragState.current.startX;
+    const dy = e.clientY - dragState.current.startY;
+    e.currentTarget.scrollLeft = dragState.current.scrollLeft - dx;
+    e.currentTarget.scrollTop = dragState.current.scrollTop - dy;
+  }, []);
+
+  const handlePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    dragState.current.isDragging = false;
+    e.currentTarget.releasePointerCapture(e.pointerId);
   }, []);
 
   const allImages = [photo, ...extraPhotos];
@@ -329,8 +349,12 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
             <div className="relative">
               <div
                 ref={imgContainerRef}
-                className="overflow-auto max-h-[50vh] touch-pan-x touch-pan-y cursor-grab active:cursor-grabbing"
+                className="overflow-auto max-h-[50vh] touch-pan-x touch-pan-y cursor-grab active:cursor-grabbing select-none"
                 onWheel={handleWheel}
+                onPointerDown={handlePointerDown}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp}
+                onPointerCancel={handlePointerUp}
               >
                 <img
                   src={allImages[activeImageIndex]?.signed_url || ""}
@@ -374,8 +398,12 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
             </div>
           ) : photo.signed_url ? (
             <div
-              className="overflow-auto max-h-[50vh] touch-pan-x touch-pan-y cursor-grab active:cursor-grabbing relative"
+              className="overflow-auto max-h-[50vh] touch-pan-x touch-pan-y cursor-grab active:cursor-grabbing relative select-none"
               onWheel={handleWheel}
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerUp}
             >
               <img
                 src={photo.signed_url}
