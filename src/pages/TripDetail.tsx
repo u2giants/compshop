@@ -125,6 +125,7 @@ export default function TripDetail() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [countryValue, setCountryValue] = useState("");
+  const [userProfiles, setUserProfiles] = useState<Record<string, string>>({});
 
   const [lastGroupAction, setLastGroupAction] = useState<{ photoId: string; previousGroupId: string | null } | null>(null);
 
@@ -337,6 +338,16 @@ export default function TripDetail() {
         );
         setPhotos(withUrls);
         await cachePhotos(data as unknown as CachedPhoto[]);
+        // Fetch user profiles for attribution
+        const userIds = [...new Set(data.map(p => p.user_id).filter(Boolean))] as string[];
+        if (userIds.length > 0) {
+          const { data: profiles } = await supabase.from("profiles").select("id, display_name, email").in("id", userIds);
+          if (profiles) {
+            const map: Record<string, string> = {};
+            profiles.forEach(p => { map[p.id] = p.display_name || p.email || "Unknown"; });
+            setUserProfiles(prev => ({ ...prev, ...map }));
+          }
+        }
       }
     } catch (err) { console.error("[TripDetail] Network error loading photos", err); }
   }
