@@ -139,6 +139,7 @@ export default function PhotoCard({ photo, extraPhotos = [], onUpdated, onGroupP
         .eq("id", photo.id);
       if (error) throw error;
       toast({ title: "Photo updated!" });
+      setShowDetail(false);
       onUpdated();
     } catch (err: any) {
       toast({ title: "Update failed", description: err.message, variant: "destructive" });
