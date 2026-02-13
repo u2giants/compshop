@@ -46,6 +46,30 @@ export type Database = {
           },
         ]
       }
+      invitations: {
+        Row: {
+          accepted_at: string | null
+          created_at: string
+          email: string
+          id: string
+          invited_by: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          created_at?: string
+          email: string
+          id?: string
+          invited_by: string
+        }
+        Update: {
+          accepted_at?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          invited_by?: string
+        }
+        Relationships: []
+      }
       photo_annotations: {
         Row: {
           annotation_data: Json
@@ -263,6 +287,7 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: never; Returns: boolean }
+      is_email_invited: { Args: { _email: string }; Returns: boolean }
       is_trip_member: { Args: { _trip_id: string }; Returns: boolean }
     }
     Enums: {

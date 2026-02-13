@@ -1,4 +1,5 @@
 import { openDB, DBSchema, IDBPDatabase } from "idb";
+import { getStorageQuotaMB } from "@/components/settings/StorageQuotaManager";
 
 export interface CachedTrip {
   id: string;
@@ -63,7 +64,7 @@ interface CompShopDB extends DBSchema {
     indexes: { "by-trip": string };
   };
   image_blobs: {
-    key: string; // file_path
+    key: string;
     value: { file_path: string; blob: Blob; cached_at: number };
   };
   pending_uploads: {
@@ -80,12 +81,9 @@ function getDB() {
     dbPromise = openDB<CompShopDB>("compshop-offline", 1, {
       upgrade(db) {
         db.createObjectStore("trips", { keyPath: "id" });
-
         const photoStore = db.createObjectStore("photos", { keyPath: "id" });
         photoStore.createIndex("by-trip", "trip_id");
-
         db.createObjectStore("image_blobs", { keyPath: "file_path" });
-
         const pendingStore = db.createObjectStore("pending_uploads", { keyPath: "id" });
         pendingStore.createIndex("by-trip", "trip_id");
         pendingStore.createIndex("by-status", "status");
@@ -126,9 +124,13 @@ export async function getCachedPhotos(tripId: string): Promise<CachedPhoto[]> {
   return db.getAllFromIndex("photos", "by-trip", tripId);
 }
 
-// --- Image blobs ---
+// --- Image blobs (with quota enforcement) ---
 export async function cacheImageBlob(filePath: string, blob: Blob) {
   const db = await getDB();
+
+  // Check quota before caching
+  await enforceStorageQuota(db, blob.size);
+
   await db.put("image_blobs", { file_path: filePath, blob, cached_at: Date.now() });
 }
 
@@ -136,6 +138,27 @@ export async function getCachedImageBlob(filePath: string): Promise<Blob | undef
   const db = await getDB();
   const entry = await db.get("image_blobs", filePath);
   return entry?.blob;
+}
+
+async function enforceStorageQuota(db: IDBPDatabase<CompShopDB>, incomingBytes: number) {
+  const quotaBytes = getStorageQuotaMB() * 1024 * 1024;
+
+  // Estimate current cache size
+  const allBlobs = await db.getAll("image_blobs");
+  let totalSize = allBlobs.reduce((sum, entry) => sum + (entry.blob?.size || 0), 0);
+
+  if (totalSize + incomingBytes <= quotaBytes) return; // within quota
+
+  // Sort by oldest first, prune until under quota
+  allBlobs.sort((a, b) => a.cached_at - b.cached_at);
+
+  const tx = db.transaction("image_blobs", "readwrite");
+  for (const entry of allBlobs) {
+    if (totalSize + incomingBytes <= quotaBytes) break;
+    totalSize -= entry.blob?.size || 0;
+    await tx.store.delete(entry.file_path);
+  }
+  await tx.done;
 }
 
 // --- Pending uploads ---
