@@ -94,7 +94,7 @@ export default function InviteManager() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 font-serif text-lg">
+        <CardTitle className="flex items-center gap-2 font-sans text-lg">
           <UserPlus className="h-5 w-5" /> Invite Team Members
         </CardTitle>
       </CardHeader>

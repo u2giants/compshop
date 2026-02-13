@@ -90,7 +90,7 @@ export default function SearchPage() {
 
   return (
     <div className="container py-6">
-      <h1 className="mb-6 font-serif text-3xl">Search</h1>
+      <h1 className="mb-6 font-sans text-3xl font-semibold">Search</h1>
 
       <form onSubmit={handleSearch} className="space-y-4">
         <div className="flex gap-2">

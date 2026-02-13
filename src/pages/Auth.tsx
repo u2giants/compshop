@@ -86,7 +86,7 @@ export default function Auth() {
           <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
             <ShoppingBag className="h-6 w-6 text-primary" />
           </div>
-          <CardTitle className="font-serif text-3xl">CompShop</CardTitle>
+          <CardTitle className="font-sans text-3xl font-semibold">CompShop</CardTitle>
           <CardDescription>
             {isLogin ? "Sign in to your team account" : "Create your team account"}
           </CardDescription>

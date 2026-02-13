@@ -99,7 +99,7 @@ export default function TripMembers({ tripId, createdBy }: Props) {
         </DialogTrigger>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="font-serif">Trip Members</DialogTitle>
+            <DialogTitle className="font-sans">Trip Members</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             {members.map((m) => (

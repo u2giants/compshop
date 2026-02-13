@@ -135,7 +135,7 @@ export default function ImportTeams() {
       <div className="container max-w-2xl py-6">
         <div className="flex flex-col items-center py-12 text-center space-y-4">
           <CheckCircle className="h-12 w-12 text-primary" />
-          <h2 className="font-serif text-xl">Import Complete</h2>
+          <h2 className="font-sans text-xl font-semibold">Import Complete</h2>
           <p className="text-sm text-muted-foreground">Your Teams conversation has been imported as a shopping trip.</p>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => { setDone(false); setParsed(null); setConversationText(""); setImages([]); }}>
@@ -154,7 +154,7 @@ export default function ImportTeams() {
         <ArrowLeft className="h-4 w-4" /> Back to Profile
       </button>
 
-      <h1 className="mb-2 font-serif text-2xl">Import from Microsoft Teams</h1>
+      <h1 className="mb-2 font-sans text-2xl font-semibold">Import from Microsoft Teams</h1>
       <p className="mb-6 text-sm text-muted-foreground">
         Teams doesn't bundle text and images together in a single export.
         You'll need to <strong>copy the conversation text</strong> and <strong>save the images separately</strong> from the chat.
@@ -164,7 +164,7 @@ export default function ImportTeams() {
         {/* Combined: paste text + add images */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg font-serif">Conversation & Photos</CardTitle>
+            <CardTitle className="text-lg font-sans">Conversation & Photos</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
@@ -226,7 +226,7 @@ export default function ImportTeams() {
         {parsed && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg font-serif">Review & Import</CardTitle>
+              <CardTitle className="text-lg font-sans">Review & Import</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <p className="text-xs text-muted-foreground">AI extracted these details — edit if needed.</p>

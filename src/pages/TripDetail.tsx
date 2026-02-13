@@ -485,7 +485,7 @@ export default function TripDetail() {
       </button>
 
       <div className="mb-6">
-        <h1 className="font-serif text-2xl md:text-3xl">{trip.name}</h1>
+        <h1 className="font-sans text-2xl md:text-3xl font-semibold">{trip.name}</h1>
         <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
           {(() => {
             const logoUrl = getLogoUrl(trip.store);
@@ -544,7 +544,7 @@ export default function TripDetail() {
       <Dialog open={showUploadDialog} onOpenChange={setShowUploadDialog}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle className="font-serif">Add Photo Details</DialogTitle>
+            <DialogTitle className="font-sans">Add Photo Details</DialogTitle>
             {!online && (
               <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
                 <CloudOff className="h-3 w-3" /> Offline — photo will sync when connected

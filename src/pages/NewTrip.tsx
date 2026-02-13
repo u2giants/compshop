@@ -129,7 +129,7 @@ export default function NewTrip() {
       </button>
       <Card>
         <CardHeader>
-          <CardTitle className="font-serif text-2xl">New Shopping Trip</CardTitle>
+          <CardTitle className="font-sans text-2xl">New Shopping Trip</CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">

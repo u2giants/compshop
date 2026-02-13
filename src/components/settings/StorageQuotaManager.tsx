@@ -69,7 +69,7 @@ export default function StorageQuotaManager() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 font-serif text-lg">
+        <CardTitle className="flex items-center gap-2 font-sans text-lg">
           <HardDrive className="h-5 w-5" /> Offline Storage
         </CardTitle>
       </CardHeader>

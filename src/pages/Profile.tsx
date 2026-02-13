@@ -53,7 +53,7 @@ export default function Profile() {
 
   return (
     <div className="container max-w-lg py-6 space-y-6">
-      <h1 className="font-serif text-3xl">Profile</h1>
+      <h1 className="font-sans text-3xl font-semibold">Profile</h1>
 
       <Card>
         <CardHeader>
@@ -94,7 +94,7 @@ export default function Profile() {
       {/* Data import */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 font-serif text-lg">
+          <CardTitle className="flex items-center gap-2 font-sans text-lg">
             <FileDown className="h-5 w-5" /> Import Data
           </CardTitle>
         </CardHeader>
