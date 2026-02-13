@@ -151,7 +151,11 @@ export default function DraftTrips({ open, onOpenChange, onPublished }: DraftTri
     if (error) {
       toast({ title: "Failed to publish", variant: "destructive" });
     } else {
-      setDrafts((prev) => prev.filter((d) => d.id !== tripId));
+      setDrafts((prev) => {
+        const remaining = prev.filter((d) => d.id !== tripId);
+        if (remaining.length === 0) setSelectedPhotos(new Set());
+        return remaining;
+      });
       toast({ title: "Trip published!" });
       onPublished();
     }
