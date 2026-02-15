@@ -14,6 +14,7 @@ import RetailerManager from "@/components/admin/RetailerManager";
 import CountryManager from "@/components/admin/CountryManager";
 import ImageTypeManager from "@/components/admin/ImageTypeManager";
 import CategoryManager from "@/components/admin/CategoryManager";
+import DefaultModeManager from "@/components/admin/DefaultModeManager";
 import StorageQuotaManager from "@/components/settings/StorageQuotaManager";
 
 export default function Profile() {
@@ -123,6 +124,7 @@ export default function Profile() {
           <CountryManager />
           <ImageTypeManager />
           <CategoryManager />
+          <DefaultModeManager />
         </div>
       )}
     </div>
