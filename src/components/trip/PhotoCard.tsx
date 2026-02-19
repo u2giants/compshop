@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useCategories } from "@/hooks/use-categories";
 import { useImageTypes } from "@/hooks/use-image-types";
 import { useCountries } from "@/hooks/use-countries";
+import { useIsMobile } from "@/hooks/use-mobile";
 import AutocompleteInput from "@/components/ui/autocomplete-input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -13,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DollarSign, MapPin, Ruler, Layers, Tag, MessageSquare, Trash2, Sparkles, Loader2, ImageIcon, ArrowRightLeft, Crop } from "lucide-react";
+import { DollarSign, MapPin, Ruler, Layers, Tag, MessageSquare, Trash2, Sparkles, Loader2, ImageIcon, ArrowRightLeft, Crop, Camera, Plus, Link2 } from "lucide-react";
 import PhotoCropDialog from "./PhotoCropDialog";
 import MoveToTripDialog from "./MoveToTripDialog";
 import ChinaMoveToTripDialog from "./ChinaMoveToTripDialog";
@@ -45,6 +46,7 @@ interface Props {
   onUpdated: () => void;
   onGroupPhoto?: (draggedId: string, targetId: string) => void;
   onFileDrop?: (files: File[], targetPhotoId: string) => void;
+  onMobileLinkRequest?: (sourcePhotoId: string) => void;
   selected?: boolean;
   onSelect?: (photoId: string, event?: React.MouseEvent) => void;
   selectionMode?: boolean;
@@ -52,12 +54,13 @@ interface Props {
   userName?: string;
 }
 
-export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, onGroupPhoto, onFileDrop, selected, onSelect, selectionMode, chinaMode, userName }: Props) {
+export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, onGroupPhoto, onFileDrop, onMobileLinkRequest, selected, onSelect, selectionMode, chinaMode, userName }: Props) {
   const { user, isAdmin } = useAuth();
   const { toast } = useToast();
   const countries = useCountries();
   const IMAGE_TYPES = useImageTypes();
   const categories = useCategories();
+  const isMobile = useIsMobile();
   const [showDetail, setShowDetail] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -69,6 +72,8 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
   const [imageZoomed, setImageZoomed] = useState(false);
   const [zoomScale, setZoomScale] = useState(1);
   const imgContainerRef = useRef<HTMLDivElement>(null);
+  const addPhotoInputRef = useRef<HTMLInputElement>(null);
+  const addPhotoCameraRef = useRef<HTMLInputElement>(null);
   const dragState = useRef<{ isDragging: boolean; startX: number; startY: number; scrollLeft: number; scrollTop: number }>({ isDragging: false, startX: 0, startY: 0, scrollLeft: 0, scrollTop: 0 });
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
@@ -139,41 +144,98 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
   const canEdit = isAdmin || photo.user_id === user?.id;
   const canDelete = canEdit;
 
+  // Multi-image AI detect: analyzes all images in the group and merges results
   async function handleAnalyze() {
-    if (!photo.signed_url) return;
+    const imagesToAnalyze = allImages.filter(img => img.signed_url);
+    if (imagesToAnalyze.length === 0) return;
     setAnalyzing(true);
     try {
-      const res = await fetch(photo.signed_url);
-      const blob = await res.blob();
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve((reader.result as string).split(",")[1]);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
+      // Analyze all images (or just the first if single)
+      const results: Record<string, any>[] = [];
+      
+      for (const img of imagesToAnalyze) {
+        try {
+          const res = await fetch(img.signed_url!);
+          const blob = await res.blob();
+          const base64 = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve((reader.result as string).split(",")[1]);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
 
-      const { data, error } = await supabase.functions.invoke("analyze-photo", {
-        body: { imageBase64: base64, mimeType: blob.type, categories },
-      });
+          const { data, error } = await supabase.functions.invoke("analyze-photo", {
+            body: { imageBase64: base64, mimeType: blob.type, categories },
+          });
 
-      if (error) throw error;
+          if (error) {
+            console.error("AI analysis error for image:", img.id, error);
+            continue;
+          }
+          results.push(data);
+        } catch (err) {
+          console.error("Failed to analyze image:", img.id, err);
+        }
+      }
+
+      if (results.length === 0) {
+        throw new Error("All image analyses failed");
+      }
+
+      // Merge results: pick first non-null value for each field across all results
+      const merged = {
+        product_name: null as string | null,
+        category: null as string | null,
+        price: null as number | null,
+        dimensions: null as string | null,
+        brand: null as string | null,
+        material: null as string | null,
+        country_of_origin: null as string | null,
+      };
+
+      for (const r of results) {
+        if (!merged.product_name && r.product_name) merged.product_name = r.product_name;
+        if (!merged.category && r.category) merged.category = r.category;
+        if (merged.price == null && r.price != null) merged.price = r.price;
+        if (!merged.dimensions && r.dimensions) merged.dimensions = r.dimensions;
+        if (!merged.brand && r.brand) merged.brand = r.brand;
+        if (!merged.material && r.material) merged.material = r.material;
+        if (!merged.country_of_origin && r.country_of_origin) merged.country_of_origin = r.country_of_origin;
+      }
 
       setEditData((d) => ({
         ...d,
-        product_name: data.product_name || d.product_name,
-        category: (data.category ? (categories.find((c) => c.toLowerCase() === data.category.toLowerCase()) || data.category) : null) || d.category,
-        price: data.price != null ? String(data.price) : d.price,
-        dimensions: data.dimensions || d.dimensions,
-        brand: data.brand || d.brand,
-        material: data.material || d.material,
-        country_of_origin: data.country_of_origin || d.country_of_origin,
+        product_name: merged.product_name || d.product_name,
+        category: (merged.category ? (categories.find((c) => c.toLowerCase() === merged.category!.toLowerCase()) || merged.category) : null) || d.category,
+        price: merged.price != null ? String(merged.price) : d.price,
+        dimensions: merged.dimensions || d.dimensions,
+        brand: merged.brand || d.brand,
+        material: merged.material || d.material,
+        country_of_origin: merged.country_of_origin || d.country_of_origin,
       }));
-      toast({ title: "AI analysis complete", description: "Fields have been pre-filled." });
+      toast({ 
+        title: "AI analysis complete", 
+        description: results.length > 1 
+          ? `Analyzed ${results.length} images and merged results.` 
+          : "Fields have been pre-filled." 
+      });
     } catch (err: any) {
       toast({ title: "Analysis failed", description: err.message, variant: "destructive" });
     } finally {
       setAnalyzing(false);
     }
+  }
+
+  // Handle adding more photos to this card
+  async function handleAddPhotoToCard(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files;
+    if (!files || files.length === 0 || !onFileDrop) return;
+    const imageFiles = Array.from(files).filter(f => f.type.startsWith("image/"));
+    if (imageFiles.length > 0) {
+      onFileDrop(imageFiles, photo.id);
+    }
+    // Reset input so same file can be selected again
+    e.target.value = "";
   }
 
   async function handleSave() {
@@ -221,11 +283,9 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
 
   // Strip metric portion from dimensions if imperial is also present
   function displayDimensions(dim: string): string {
-    // If it contains both inches (", in, ') and metric (cm, mm, m), strip the metric part
     const hasImperial = /["'"]|(\d\s*in\b)/i.test(dim);
     const hasMetric = /\d\s*(cm|mm|m\b)/i.test(dim);
     if (hasImperial && hasMetric) {
-      // Remove metric portions like "/ 30.5 x 20.3 cm" or "(77 x 51.5 cm)" or ", 30cm x 20cm"
       return dim
         .replace(/\s*[/|]\s*[\d.]+\s*x?\s*[\d.]*\s*(cm|mm|m)\b[^)"]*/gi, "")
         .replace(/\s*\([\d.\s×x]+\s*(cm|mm|m)\s*\)/gi, "")
@@ -246,7 +306,6 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
       <Card
         className={`group overflow-hidden transition-shadow hover:shadow-md md:cursor-default cursor-pointer ${dragOver ? "ring-2 ring-primary ring-offset-2" : ""} ${selected ? "ring-2 ring-primary" : ""}`}
         onClick={() => {
-          // On mobile, clicking anywhere on the card opens detail
           if (window.innerWidth < 768) setShowDetail(true);
         }}
         draggable
@@ -358,9 +417,20 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
                 <Trash2 className="h-3 w-3" />
               </Button>
             )}
+            {isMobile && onMobileLinkRequest && (
+              <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={(e) => { e.stopPropagation(); onMobileLinkRequest(photo.id); }}>
+                <Link2 className="h-3 w-3" /> Link
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
+
+      {/* Hidden inputs for adding photos to this card */}
+      <input ref={addPhotoInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleAddPhotoToCard} />
+      {isMobile && (
+        <input ref={addPhotoCameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleAddPhotoToCard} />
+      )}
 
       {/* Full detail / edit dialog */}
       <Dialog open={showDetail} onOpenChange={(open) => { setShowDetail(open); if (!open) { setImageZoomed(false); setZoomScale(1); } }}>
@@ -369,26 +439,62 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
             <div className="flex items-center justify-between gap-2">
               <DialogTitle className="font-sans">{editData.product_name || "Photo Details"}</DialogTitle>
               <div className="flex items-center gap-1">
-                {canEdit && photo.signed_url && (
+                {canEdit && (
                   <>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-1"
-                      onClick={() => setShowCropDialog(true)}
-                    >
-                      <Crop className="h-3.5 w-3.5" /> Crop
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-1"
-                      onClick={handleAnalyze}
-                      disabled={analyzing}
-                    >
-                      {analyzing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-                      {analyzing ? "Analyzing..." : "AI Detect"}
-                    </Button>
+                    {/* Add photo to this card */}
+                    {onFileDrop && (
+                      isMobile ? (
+                        <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-1"
+                            onClick={() => addPhotoCameraRef.current?.click()}
+                          >
+                            <Camera className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-1"
+                            onClick={() => addPhotoInputRef.current?.click()}
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                          </Button>
+                        </>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1"
+                          onClick={() => addPhotoInputRef.current?.click()}
+                        >
+                          <Plus className="h-3.5 w-3.5" /> Add Photo
+                        </Button>
+                      )
+                    )}
+                    {photo.signed_url && (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1"
+                          onClick={() => setShowCropDialog(true)}
+                        >
+                          <Crop className="h-3.5 w-3.5" /> Crop
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1"
+                          onClick={handleAnalyze}
+                          disabled={analyzing}
+                        >
+                          {analyzing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                          {analyzing ? "Analyzing..." : "AI Detect"}
+                        </Button>
+                      </>
+                    )}
                   </>
                 )}
               </div>

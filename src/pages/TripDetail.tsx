@@ -44,6 +44,7 @@ import PhotoCard from "@/components/trip/PhotoCard";
 import TripMembers from "@/components/trip/TripMembers";
 import MoveToTripDialog from "@/components/trip/MoveToTripDialog";
 import BulkEditDialog from "@/components/trip/BulkEditDialog";
+import LinkToCardDialog from "@/components/trip/LinkToCardDialog";
 
 interface Trip {
   id: string;
@@ -113,6 +114,8 @@ export default function TripDetail() {
   const [selectedPhotos, setSelectedPhotos] = useState<Set<string>>(new Set());
   const [showBulkMove, setShowBulkMove] = useState(false);
   const [showBulkEdit, setShowBulkEdit] = useState(false);
+  const [showLinkDialog, setShowLinkDialog] = useState(false);
+  const [linkSourcePhotoId, setLinkSourcePhotoId] = useState<string | null>(null);
   const lastSelectedPhotoRef = useRef<string | null>(null);
   function getFlatPrimaryIds() { return groupPhotos(photos).map(g => g.primary.id); }
   function toggleSelectPhoto(photoId: string, event?: React.MouseEvent) {
@@ -151,6 +154,11 @@ export default function TripDetail() {
   const [userProfiles, setUserProfiles] = useState<Record<string, string>>({});
 
   const [lastGroupAction, setLastGroupAction] = useState<{ photoId: string; previousGroupId: string | null } | null>(null);
+
+  function handleMobileLinkRequest(sourcePhotoId: string) {
+    setLinkSourcePhotoId(sourcePhotoId);
+    setShowLinkDialog(true);
+  }
 
   async function handleGroupPhoto(draggedId: string, targetId: string) {
     if (draggedId === targetId) return;
@@ -1038,6 +1046,7 @@ export default function TripDetail() {
               onUpdated={loadPhotos}
               onGroupPhoto={handleGroupPhoto}
               onFileDrop={handleFileDropOnCard}
+              onMobileLinkRequest={handleMobileLinkRequest}
               selected={selectedPhotos.has(primary.id)}
               onSelect={toggleSelectPhoto}
               selectionMode={selectedPhotos.size > 0}
@@ -1062,6 +1071,20 @@ export default function TripDetail() {
         photos={photos.map((p) => ({ id: p.id, product_name: p.product_name }))}
         onApplied={() => { setSelectedPhotos(new Set()); loadPhotos(); }}
       />
+
+      {linkSourcePhotoId && (
+        <LinkToCardDialog
+          open={showLinkDialog}
+          onOpenChange={(open) => { setShowLinkDialog(open); if (!open) setLinkSourcePhotoId(null); }}
+          sourcePhotoId={linkSourcePhotoId}
+          photos={groupPhotos(photos).map(g => ({
+            id: g.primary.id,
+            product_name: g.primary.product_name,
+            signed_url: g.primary.signed_url,
+          }))}
+          onLink={handleGroupPhoto}
+        />
+      )}
     </div>
   );
 }
