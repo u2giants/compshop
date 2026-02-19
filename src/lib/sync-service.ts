@@ -73,8 +73,21 @@ export async function runSync() {
   setStatus("syncing");
   let allOk = true;
 
-  for (const upload of pending) {
-    if (upload.retry_count >= 5) continue; // skip permanently failed
+  const retryable = pending.filter((u) => u.retry_count < 10);
+  const abandoned = pending.filter((u) => u.retry_count >= 10);
+
+  // Remove permanently failed uploads so they stop blocking status
+  for (const u of abandoned) {
+    console.warn("[Sync] Removing permanently failed upload", u.id);
+    await removePendingUpload(u.id);
+  }
+
+  if (retryable.length === 0) {
+    setStatus("idle");
+    return;
+  }
+
+  for (const upload of retryable) {
     const ok = await syncOne(upload);
     if (!ok) allOk = false;
   }
