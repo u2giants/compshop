@@ -47,6 +47,7 @@ interface Props {
   onGroupPhoto?: (draggedId: string, targetId: string) => void;
   onFileDrop?: (files: File[], targetPhotoId: string) => void;
   onMobileLinkRequest?: (sourcePhotoId: string) => void;
+  onUnlinkPhoto?: (photoId: string) => void;
   selected?: boolean;
   onSelect?: (photoId: string, event?: React.MouseEvent) => void;
   selectionMode?: boolean;
@@ -54,7 +55,7 @@ interface Props {
   userName?: string;
 }
 
-export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, onGroupPhoto, onFileDrop, onMobileLinkRequest, selected, onSelect, selectionMode, chinaMode, userName }: Props) {
+export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, onGroupPhoto, onFileDrop, onMobileLinkRequest, onUnlinkPhoto, selected, onSelect, selectionMode, chinaMode, userName }: Props) {
   const { user, isAdmin } = useAuth();
   const { toast } = useToast();
   const countries = useCountries();
@@ -527,14 +528,32 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
                   {Math.round(zoomScale * 100)}% — double-click to reset
                 </Badge>
               )}
-              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
-                {allImages.map((_, i) => (
-                  <button
-                    key={i}
-                    className={`h-2 w-2 rounded-full transition-colors ${i === activeImageIndex ? "bg-primary" : "bg-primary/30"}`}
-                    onClick={() => setActiveImageIndex(i)}
-                  />
-                ))}
+              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-2">
+                <div className="flex gap-1">
+                  {allImages.map((_, i) => (
+                    <button
+                      key={i}
+                      className={`h-2 w-2 rounded-full transition-colors ${i === activeImageIndex ? "bg-primary" : "bg-primary/30"}`}
+                      onClick={() => setActiveImageIndex(i)}
+                    />
+                  ))}
+                </div>
+                {activeImageIndex > 0 && onUnlinkPhoto && canEdit && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    className="h-6 text-[10px] px-2 gap-1"
+                    onClick={() => {
+                      const imgToUnlink = allImages[activeImageIndex];
+                      if (imgToUnlink && confirm("Unlink this photo from the card? It will become its own card.")) {
+                        onUnlinkPhoto(imgToUnlink.id);
+                        setActiveImageIndex(0);
+                      }
+                    }}
+                  >
+                    <Link2 className="h-3 w-3" /> Unlink
+                  </Button>
+                )}
               </div>
               <Button
                 variant="outline"

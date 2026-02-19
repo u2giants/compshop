@@ -193,6 +193,19 @@ export default function TripDetail() {
     loadPhotos();
   }
 
+  async function handleUnlinkPhoto(photoId: string) {
+    const { error } = await supabase
+      .from("photos")
+      .update({ group_id: null })
+      .eq("id", photoId);
+    if (error) {
+      toast({ title: "Unlink failed", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Photo unlinked", description: "Photo is now its own card." });
+    loadPhotos();
+  }
+
   const [downloading, setDownloading] = useState(false);
 
   function buildFileName(photo: Photo, indexInGroup?: number): string {
@@ -445,6 +458,26 @@ export default function TripDetail() {
   const [showGeoWarning, setShowGeoWarning] = useState(false);
   const [geoWarningType, setGeoWarningType] = useState<"single" | "bulk">("single");
 
+  // Cache device GPS so we only prompt once per session
+  const deviceGpsRef = useRef<{ latitude: number; longitude: number } | null>(null);
+
+  /** Try to get the device's current GPS position (timeout 10s) */
+  function getDeviceGps(): Promise<{ latitude: number; longitude: number } | null> {
+    if (deviceGpsRef.current) return Promise.resolve(deviceGpsRef.current);
+    if (!navigator.geolocation) return Promise.resolve(null);
+    return new Promise((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const loc = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+          deviceGpsRef.current = loc;
+          resolve(loc);
+        },
+        () => resolve(null),
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+      );
+    });
+  }
+
   async function checkGeoFence(files: File[]): Promise<{ ok: File[]; warned: File[] }> {
     const ok: File[] = [];
     const warned: File[] = [];
@@ -528,6 +561,9 @@ export default function TripDetail() {
     let dupCount = 0;
     let pendingCount = 0;
 
+    // Try to get device GPS for photos missing EXIF coordinates
+    const deviceGps = await getDeviceGps();
+
     for (const file of files) {
       try {
         const fileHash = await hashFile(file);
@@ -535,8 +571,16 @@ export default function TripDetail() {
           dupCount++;
           continue;
         }
+        // Check if EXIF has GPS; if not, use device GPS
+        const exif = await extractExif(file);
+        const lat = exif.latitude ?? deviceGps?.latitude ?? null;
+        const lng = exif.longitude ?? deviceGps?.longitude ?? null;
+
         const filePath = await uploadPhoto(file, user.id, id);
-        const { error } = await supabase.from("photos").insert({ trip_id: id, user_id: user.id, file_path: filePath, file_hash: fileHash });
+        const { error } = await supabase.from("photos").insert({
+          trip_id: id, user_id: user.id, file_path: filePath, file_hash: fileHash,
+          ...(lat != null && lng != null ? { latitude: lat, longitude: lng } : {}),
+        });
         if (error) throw error;
         successCount++;
       } catch {
@@ -672,8 +716,17 @@ export default function TripDetail() {
         setUploading(false);
         return;
       }
+      // Get GPS from EXIF or device
+      const exif = await extractExif(selectedFile);
+      const deviceGps = await getDeviceGps();
+      const lat = exif.latitude ?? deviceGps?.latitude ?? null;
+      const lng = exif.longitude ?? deviceGps?.longitude ?? null;
+
       const filePath = await uploadPhoto(selectedFile, user.id, id);
-      const { error } = await supabase.from("photos").insert({ trip_id: id, user_id: user.id, file_path: filePath, file_hash: fileHash, ...metadata });
+      const { error } = await supabase.from("photos").insert({
+        trip_id: id, user_id: user.id, file_path: filePath, file_hash: fileHash, ...metadata,
+        ...(lat != null && lng != null ? { latitude: lat, longitude: lng } : {}),
+      });
       if (error) throw error;
       toast({ title: "Photo uploaded!" });
       setShowUploadDialog(false); setSelectedFile(null); setPreviewUrl(null);
@@ -1047,6 +1100,7 @@ export default function TripDetail() {
               onGroupPhoto={handleGroupPhoto}
               onFileDrop={handleFileDropOnCard}
               onMobileLinkRequest={handleMobileLinkRequest}
+              onUnlinkPhoto={handleUnlinkPhoto}
               selected={selectedPhotos.has(primary.id)}
               onSelect={toggleSelectPhoto}
               selectionMode={selectedPhotos.size > 0}
