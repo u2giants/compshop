@@ -69,6 +69,8 @@ export default function AppShell() {
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
+      {/* iPhone PWA safe-area spacer */}
+      <div className="w-full bg-card md:bg-transparent" style={{ height: 'env(safe-area-inset-top, 0px)' }} />
       {/* Top bar - desktop */}
       <header className="hidden border-b bg-card md:block relative">
         <div className="container flex h-14 items-center justify-between">
