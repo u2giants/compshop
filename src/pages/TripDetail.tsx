@@ -1,10 +1,11 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { uploadPhoto, getSignedPhotoUrl, hashFile, checkDuplicatePhoto } from "@/lib/supabase-helpers";
 import { extractExif } from "@/lib/exif-utils";
 import { isInAsia } from "@/lib/geo-utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { useCategories } from "@/hooks/use-categories";
 import {
   getCachedTrip,
@@ -37,7 +38,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Camera, Calendar, MapPin, Store, Users, CloudOff, Sparkles, Loader2, Download, Images, ArrowRightLeft, PenLine, Trash2 } from "lucide-react";
+import { ArrowLeft, Camera, Calendar, MapPin, Store, Users, CloudOff, Sparkles, Loader2, Download, Images, ArrowRightLeft, PenLine, Trash2, Upload } from "lucide-react";
 import { format } from "date-fns";
 import PhotoCard from "@/components/trip/PhotoCard";
 import TripMembers from "@/components/trip/TripMembers";
@@ -102,9 +103,12 @@ export default function TripDetail() {
   const countries = useCountries();
   const categories = useCategories();
   const { retailerNames, getLogoUrl } = useRetailers();
+  const isMobile = useIsMobile();
   const [editingStore, setEditingStore] = useState(false);
   const [storeValue, setStoreValue] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const dragCounterRef = useRef(0);
   const [selectedPhotos, setSelectedPhotos] = useState<Set<string>>(new Set());
   const [showBulkMove, setShowBulkMove] = useState(false);
   const [showBulkEdit, setShowBulkEdit] = useState(false);
@@ -326,6 +330,22 @@ export default function TripDetail() {
     material: "",
     notes: "",
   });
+
+  // Auto-join user as trip member if not already
+  useEffect(() => {
+    if (!id || !user) return;
+    (async () => {
+      const { data } = await supabase
+        .from("trip_members")
+        .select("id")
+        .eq("trip_id", id)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (!data) {
+        await supabase.from("trip_members").insert({ trip_id: id, user_id: user.id });
+      }
+    })();
+  }, [id, user]);
 
   useEffect(() => {
     if (!id) return;
@@ -663,11 +683,66 @@ export default function TripDetail() {
     }
   }
 
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current++;
+    if (e.dataTransfer.types.includes("Files")) {
+      setDragOver(true);
+    }
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current--;
+    if (dragCounterRef.current === 0) {
+      setDragOver(false);
+    }
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current = 0;
+    setDragOver(false);
+    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith("image/"));
+    if (files.length === 0) return;
+    if (files.length === 1) {
+      openSingleUpload(files[0]);
+    } else {
+      handleBulkUpload(files);
+    }
+  }, [user, id]);
+
   if (loading) return <div className="container py-6"><div className="h-8 w-48 animate-pulse rounded bg-muted" /></div>;
   if (!trip) return <div className="container py-6">Trip not found</div>;
 
   return (
-    <div className="container py-6">
+    <div
+      className="container py-6 relative"
+      {...(!isMobile ? {
+        onDragOver: handleDragOver,
+        onDragEnter: handleDragEnter,
+        onDragLeave: handleDragLeave,
+        onDrop: handleDrop,
+      } : {})}
+    >
+      {/* Desktop drag overlay */}
+      {dragOver && !isMobile && (
+        <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-primary/10 backdrop-blur-sm">
+          <div className="rounded-xl border-2 border-dashed border-primary bg-card/90 px-12 py-10 text-center shadow-lg">
+            <Upload className="mx-auto mb-3 h-10 w-10 text-primary" />
+            <p className="text-lg font-semibold text-primary">Drop photos here</p>
+            <p className="mt-1 text-sm text-muted-foreground">Files will be uploaded to this trip</p>
+          </div>
+        </div>
+      )}
       <button onClick={() => navigate("/")} className="mb-4 flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-4 w-4" /> All Trips
       </button>
