@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { uploadPhoto, getSignedPhotoUrl, hashFile, checkDuplicatePhoto } from "@/lib/supabase-helpers";
-import { extractExif } from "@/lib/exif-utils";
+import { extractExif, distanceKm } from "@/lib/exif-utils";
 import { isInAsia } from "@/lib/geo-utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useCategories } from "@/hooks/use-categories";
@@ -458,24 +458,71 @@ export default function TripDetail() {
   const [showGeoWarning, setShowGeoWarning] = useState(false);
   const [geoWarningType, setGeoWarningType] = useState<"single" | "bulk">("single");
 
-  // Cache device GPS so we only prompt once per session
-  const deviceGpsRef = useRef<{ latitude: number; longitude: number } | null>(null);
+  // GPS interpolation state
+  const [gpsInterpolationCandidates, setGpsInterpolationCandidates] = useState<
+    { photoId: string; latitude: number; longitude: number }[]
+  >([]);
+  const [showGpsConfirm, setShowGpsConfirm] = useState(false);
 
-  /** Try to get the device's current GPS position (timeout 10s) */
-  function getDeviceGps(): Promise<{ latitude: number; longitude: number } | null> {
-    if (deviceGpsRef.current) return Promise.resolve(deviceGpsRef.current);
-    if (!navigator.geolocation) return Promise.resolve(null);
-    return new Promise((resolve) => {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const loc = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
-          deviceGpsRef.current = loc;
-          resolve(loc);
-        },
-        () => resolve(null),
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
-      );
+  /**
+   * After upload, scan trip photos by created_at order.
+   * If a photo lacks GPS but its immediate neighbors both have GPS
+   * within 150m of each other, inherit that location.
+   */
+  async function runGpsInterpolation() {
+    if (!id) return;
+    const { data: allPhotos } = await supabase
+      .from("photos")
+      .select("id, latitude, longitude, created_at")
+      .eq("trip_id", id)
+      .order("created_at", { ascending: true });
+    if (!allPhotos || allPhotos.length < 3) return;
+
+    const candidates: { photoId: string; latitude: number; longitude: number }[] = [];
+    for (let i = 1; i < allPhotos.length - 1; i++) {
+      const curr = allPhotos[i];
+      if (curr.latitude != null && curr.longitude != null) continue; // already has GPS
+      const prev = allPhotos[i - 1];
+      const next = allPhotos[i + 1];
+      if (
+        prev.latitude != null && prev.longitude != null &&
+        next.latitude != null && next.longitude != null
+      ) {
+        const dist = distanceKm(prev.latitude, prev.longitude, next.latitude, next.longitude);
+        if (dist <= 0.15) {
+          // Neighbors are within 150m — use average
+          candidates.push({
+            photoId: curr.id,
+            latitude: (prev.latitude + next.latitude) / 2,
+            longitude: (prev.longitude + next.longitude) / 2,
+          });
+        }
+      }
+    }
+    if (candidates.length > 0) {
+      setGpsInterpolationCandidates(candidates);
+      setShowGpsConfirm(true);
+    }
+  }
+
+  async function applyGpsInterpolation() {
+    for (const c of gpsInterpolationCandidates) {
+      await supabase
+        .from("photos")
+        .update({ latitude: c.latitude, longitude: c.longitude })
+        .eq("id", c.photoId);
+    }
+    toast({
+      title: `GPS applied to ${gpsInterpolationCandidates.length} photo(s)`,
+      description: "Coordinates inherited from neighboring photos.",
     });
+    setShowGpsConfirm(false);
+    setGpsInterpolationCandidates([]);
+  }
+
+  function dismissGpsInterpolation() {
+    setShowGpsConfirm(false);
+    setGpsInterpolationCandidates([]);
   }
 
   async function checkGeoFence(files: File[]): Promise<{ ok: File[]; warned: File[] }> {
@@ -561,9 +608,6 @@ export default function TripDetail() {
     let dupCount = 0;
     let pendingCount = 0;
 
-    // Try to get device GPS for photos missing EXIF coordinates
-    const deviceGps = await getDeviceGps();
-
     for (const file of files) {
       try {
         const fileHash = await hashFile(file);
@@ -571,10 +615,9 @@ export default function TripDetail() {
           dupCount++;
           continue;
         }
-        // Check if EXIF has GPS; if not, use device GPS
         const exif = await extractExif(file);
-        const lat = exif.latitude ?? deviceGps?.latitude ?? null;
-        const lng = exif.longitude ?? deviceGps?.longitude ?? null;
+        const lat = exif.latitude ?? null;
+        const lng = exif.longitude ?? null;
 
         const filePath = await uploadPhoto(file, user.id, id);
         const { error } = await supabase.from("photos").insert({
@@ -609,6 +652,8 @@ export default function TripDetail() {
     loadPendingPhotos();
     // Trigger sync immediately for any queued items
     if (pendingCount > 0) runSync();
+    // Check for GPS interpolation after upload
+    runGpsInterpolation();
   }
 
   async function handleFileDropOnCard(files: File[], targetPhotoId: string) {
@@ -716,11 +761,9 @@ export default function TripDetail() {
         setUploading(false);
         return;
       }
-      // Get GPS from EXIF or device
       const exif = await extractExif(selectedFile);
-      const deviceGps = await getDeviceGps();
-      const lat = exif.latitude ?? deviceGps?.latitude ?? null;
-      const lng = exif.longitude ?? deviceGps?.longitude ?? null;
+      const lat = exif.latitude ?? null;
+      const lng = exif.longitude ?? null;
 
       const filePath = await uploadPhoto(selectedFile, user.id, id);
       const { error } = await supabase.from("photos").insert({
@@ -731,6 +774,8 @@ export default function TripDetail() {
       toast({ title: "Photo uploaded!" });
       setShowUploadDialog(false); setSelectedFile(null); setPreviewUrl(null);
       loadPhotos();
+      // Run GPS interpolation after upload
+      runGpsInterpolation();
     } catch (err: any) {
       const pendingId = crypto.randomUUID();
       await addPendingUpload({
@@ -1054,6 +1099,22 @@ export default function TripDetail() {
           <AlertDialogFooter>
             <AlertDialogCancel onClick={handleGeoWarningCancel}>Cancel Upload</AlertDialogCancel>
             <AlertDialogAction onClick={handleGeoWarningContinue}>Upload Anyway</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* GPS interpolation confirmation */}
+      <AlertDialog open={showGpsConfirm} onOpenChange={setShowGpsConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Apply GPS from nearby photos?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {gpsInterpolationCandidates.length} photo{gpsInterpolationCandidates.length !== 1 ? "s" : ""} had no GPS data, but the photos taken before and after were at the same location. Apply those coordinates?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={dismissGpsInterpolation}>No thanks</AlertDialogCancel>
+            <AlertDialogAction onClick={applyGpsInterpolation}>Apply GPS</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
