@@ -63,7 +63,8 @@ async function syncOne(upload: PendingUpload): Promise<boolean> {
 }
 
 export async function runSync() {
-  if (!navigator.onLine) return;
+  // Don't rely on navigator.onLine — it's unreliable on iOS
+  // Instead, just try to sync and let individual uploads fail gracefully
   const pending = await getPendingUploads();
   if (pending.length === 0) {
     setStatus("idle");
@@ -73,8 +74,8 @@ export async function runSync() {
   setStatus("syncing");
   let allOk = true;
 
-  const retryable = pending.filter((u) => u.retry_count < 10);
-  const abandoned = pending.filter((u) => u.retry_count >= 10);
+  const retryable = pending.filter((u) => u.retry_count < 5);
+  const abandoned = pending.filter((u) => u.retry_count >= 5);
 
   // Remove permanently failed uploads so they stop blocking status
   for (const u of abandoned) {

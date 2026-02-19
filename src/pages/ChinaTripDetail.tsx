@@ -313,6 +313,22 @@ export default function ChinaTripDetail() {
     setShowAddSection(false);
   }
 
+  // Auto-join user as china trip member if not already
+  useEffect(() => {
+    if (!id || !user) return;
+    (async () => {
+      const { data } = await supabase
+        .from("china_trip_members")
+        .select("id")
+        .eq("trip_id", id)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (!data) {
+        await supabase.from("china_trip_members").insert({ trip_id: id, user_id: user.id });
+      }
+    })();
+  }, [id, user]);
+
   // ── Data loading with offline support ──
   useEffect(() => {
     if (!id) return;
