@@ -107,6 +107,7 @@ export default function TripDetail() {
   const [editingStore, setEditingStore] = useState(false);
   const [storeValue, setStoreValue] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
   const dragCounterRef = useRef(0);
   const [selectedPhotos, setSelectedPhotos] = useState<Set<string>>(new Set());
@@ -828,12 +829,28 @@ export default function TripDetail() {
 
       <div className="mb-6 flex flex-wrap items-center gap-2">
         <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFileSelect} />
-        <Button onClick={() => fileInputRef.current?.click()} className="gap-2">
-          <Camera className="h-4 w-4" /> Add Photo
-        </Button>
-        <Button variant="outline" onClick={() => { fileInputRef.current?.click(); }} className="gap-2">
-          <Images className="h-4 w-4" /> Bulk Upload
-        </Button>
+        {isMobile && (
+          <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileSelect} />
+        )}
+        {isMobile ? (
+          <>
+            <Button onClick={() => cameraInputRef.current?.click()} className="gap-2">
+              <Camera className="h-4 w-4" /> Take Photo
+            </Button>
+            <Button variant="outline" onClick={() => fileInputRef.current?.click()} className="gap-2">
+              <Images className="h-4 w-4" /> Upload
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button onClick={() => fileInputRef.current?.click()} className="gap-2">
+              <Camera className="h-4 w-4" /> Add Photo
+            </Button>
+            <Button variant="outline" onClick={() => fileInputRef.current?.click()} className="gap-2">
+              <Images className="h-4 w-4" /> Bulk Upload
+            </Button>
+          </>
+        )}
         {photos.length > 0 && (
           <>
             <Button variant="outline" onClick={handleDownloadAll} disabled={downloading} className="gap-2">
