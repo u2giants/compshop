@@ -483,32 +483,36 @@ export default function ChinaTripDetail() {
     setUploading(true);
     let successCount = 0;
     let dupCount = 0;
+    let pendingCount = 0;
     for (const file of files) {
       try {
-        if (!navigator.onLine) {
-          const pendingId = crypto.randomUUID();
-          await addPendingUpload({
-            id: pendingId, trip_id: id, file_blob: file, file_name: file.name,
-            metadata: { product_name: null, category: null, price: null, dimensions: null, country_of_origin: null, material: null, brand: null, notes: null },
-            user_id: user.id, created_at: new Date().toISOString(), status: "pending", retry_count: 0,
-          });
-          successCount++;
-        } else {
-          const fileHash = await hashFile(file);
-          if (await checkDuplicatePhoto(fileHash)) { dupCount++; continue; }
-          const filePath = await uploadPhoto(file, user.id, id);
-          await supabase.from("china_photos").insert({ trip_id: id, user_id: user.id, file_path: filePath, file_hash: fileHash });
-          successCount++;
-        }
-      } catch {}
+        const fileHash = await hashFile(file);
+        if (await checkDuplicatePhoto(fileHash)) { dupCount++; continue; }
+        const filePath = await uploadPhoto(file, user.id, id);
+        await supabase.from("china_photos").insert({ trip_id: id, user_id: user.id, file_path: filePath, file_hash: fileHash });
+        successCount++;
+      } catch {
+        const pendingId = crypto.randomUUID();
+        await addPendingUpload({
+          id: pendingId, trip_id: id, file_blob: file, file_name: file.name,
+          metadata: { product_name: null, category: null, price: null, dimensions: null, country_of_origin: null, material: null, brand: null, notes: null },
+          user_id: user.id, created_at: new Date().toISOString(), status: "pending", retry_count: 0,
+        });
+        pendingCount++;
+      }
     }
     setUploading(false);
+    const parts: string[] = [];
+    if (successCount > 0) parts.push(`${successCount} uploaded`);
+    if (dupCount > 0) parts.push(`${dupCount} duplicates skipped`);
+    if (pendingCount > 0) parts.push(`${pendingCount} queued for sync`);
     toast({
       title: `Bulk upload complete`,
-      description: `${successCount} uploaded${dupCount > 0 ? `, ${dupCount} duplicates skipped` : ""}.`,
+      description: `${parts.join(", ")}.`,
     });
     loadPhotos();
     loadPendingPhotos();
+    if (pendingCount > 0) runSync();
   }
 
   async function handleAnalyze() {
@@ -868,7 +872,7 @@ export default function ChinaTripDetail() {
       {pendingPhotos.length > 0 && (
         <div className="mb-4">
           <p className="mb-2 text-xs font-medium text-muted-foreground flex items-center gap-1">
-            <CloudOff className="h-3 w-3" /> Pending uploads (will sync when online)
+            <CloudOff className="h-3 w-3" /> {pendingPhotos.length} pending upload{pendingPhotos.length !== 1 ? "s" : ""} — will sync automatically
           </p>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {pendingPhotos.map((p) => {
