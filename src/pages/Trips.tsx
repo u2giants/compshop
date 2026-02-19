@@ -258,10 +258,38 @@ export default function Trips() {
     }
 
     for (const cluster of clusters) {
-      // Only merge into an existing trip if the cluster has NO GPS data (date-only match)
-      // If the cluster has GPS, always create a new draft so the user can review & assign a store
+      // Try to match into an existing trip
       let matchedTrip: typeof trips[0] | undefined;
-      if (cluster.lat == null) {
+
+      if (cluster.lat != null && cluster.lng != null) {
+        // GPS cluster: resolve store name via nearby-stores, then match by store+date
+        try {
+          const { data: sessionData } = await supabase.auth.getSession();
+          const token = sessionData?.session?.access_token;
+          if (token) {
+            const resp = await supabase.functions.invoke("nearby-stores", {
+              body: { latitude: cluster.lat, longitude: cluster.lng, radius: 150 },
+            });
+            const stores: { name: string }[] = resp.data?.stores || [];
+            if (stores.length > 0) {
+              // Try to find an existing trip matching any nearby store name + same date
+              const normalizeStr = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+              for (const store of stores) {
+                const storeNorm = normalizeStr(store.name);
+                matchedTrip = trips.find((t) => {
+                  if (t.date !== cluster.date) return false;
+                  const tripNorm = normalizeStr(t.store);
+                  return tripNorm === storeNorm || tripNorm.includes(storeNorm) || storeNorm.includes(tripNorm);
+                });
+                if (matchedTrip) break;
+              }
+            }
+          }
+        } catch (err) {
+          console.warn("[SmartUpload] nearby-stores lookup failed, creating draft", err);
+        }
+      } else {
+        // No GPS: match by date only
         matchedTrip = trips.find((t) => t.date === cluster.date);
       }
 
