@@ -497,40 +497,45 @@ export default function TripDetail() {
     let successCount = 0;
     let failCount = 0;
     let dupCount = 0;
+    let pendingCount = 0;
 
     for (const file of files) {
       try {
-        if (!navigator.onLine) {
-          const pendingId = crypto.randomUUID();
-          await addPendingUpload({
-            id: pendingId, trip_id: id, file_blob: file, file_name: file.name,
-            metadata: { product_name: null, category: null, price: null, dimensions: null, country_of_origin: null, material: null, brand: null, notes: null },
-            user_id: user.id, created_at: new Date().toISOString(), status: "pending", retry_count: 0,
-          });
-          successCount++;
-        } else {
-          const fileHash = await hashFile(file);
-          if (await checkDuplicatePhoto(fileHash)) {
-            dupCount++;
-            continue;
-          }
-          const filePath = await uploadPhoto(file, user.id, id);
-          const { error } = await supabase.from("photos").insert({ trip_id: id, user_id: user.id, file_path: filePath, file_hash: fileHash });
-          if (error) throw error;
-          successCount++;
+        const fileHash = await hashFile(file);
+        if (await checkDuplicatePhoto(fileHash)) {
+          dupCount++;
+          continue;
         }
+        const filePath = await uploadPhoto(file, user.id, id);
+        const { error } = await supabase.from("photos").insert({ trip_id: id, user_id: user.id, file_path: filePath, file_hash: fileHash });
+        if (error) throw error;
+        successCount++;
       } catch {
-        failCount++;
+        // Queue for background sync on any failure (network, timeout, etc.)
+        const pendingId = crypto.randomUUID();
+        await addPendingUpload({
+          id: pendingId, trip_id: id, file_blob: file, file_name: file.name,
+          metadata: { product_name: null, category: null, price: null, dimensions: null, country_of_origin: null, material: null, brand: null, notes: null },
+          user_id: user.id, created_at: new Date().toISOString(), status: "pending", retry_count: 0,
+        });
+        pendingCount++;
       }
     }
 
     setUploading(false);
+    const parts: string[] = [];
+    if (successCount > 0) parts.push(`${successCount} uploaded`);
+    if (dupCount > 0) parts.push(`${dupCount} duplicate${dupCount > 1 ? "s" : ""} skipped`);
+    if (pendingCount > 0) parts.push(`${pendingCount} queued for sync`);
+    if (failCount > 0) parts.push(`${failCount} failed`);
     toast({
       title: `Bulk upload complete`,
-      description: `${successCount} uploaded${dupCount > 0 ? `, ${dupCount} duplicate${dupCount > 1 ? "s" : ""} skipped` : ""}${failCount > 0 ? `, ${failCount} failed` : ""}. You can add details to each photo individually.`,
+      description: `${parts.join(", ")}. You can add details to each photo individually.`,
     });
     loadPhotos();
     loadPendingPhotos();
+    // Trigger sync immediately for any queued items
+    if (pendingCount > 0) runSync();
   }
 
   async function handleFileDropOnCard(files: File[], targetPhotoId: string) {
@@ -540,26 +545,21 @@ export default function TripDetail() {
 
     for (const file of files) {
       try {
-        if (!navigator.onLine) {
-          const pendingId = crypto.randomUUID();
-          await addPendingUpload({
-            id: pendingId, trip_id: id, file_blob: file, file_name: file.name,
-            metadata: { product_name: null, category: null, price: null, dimensions: null, country_of_origin: null, material: null, brand: null, notes: null },
-            user_id: user.id, created_at: new Date().toISOString(), status: "pending", retry_count: 0,
-          });
-          successCount++;
-        } else {
-          const fileHash = await hashFile(file);
-          if (await checkDuplicatePhoto(fileHash)) continue;
-          const filePath = await uploadPhoto(file, user.id, id);
-          const { error } = await supabase.from("photos").insert({
-            trip_id: id, user_id: user.id, file_path: filePath, group_id: targetPhotoId, file_hash: fileHash,
-          });
-          if (error) throw error;
-          successCount++;
-        }
+        const fileHash = await hashFile(file);
+        if (await checkDuplicatePhoto(fileHash)) continue;
+        const filePath = await uploadPhoto(file, user.id, id);
+        const { error } = await supabase.from("photos").insert({
+          trip_id: id, user_id: user.id, file_path: filePath, group_id: targetPhotoId, file_hash: fileHash,
+        });
+        if (error) throw error;
+        successCount++;
       } catch {
-        console.error("File drop upload failed");
+        const pendingId = crypto.randomUUID();
+        await addPendingUpload({
+          id: pendingId, trip_id: id, file_blob: file, file_name: file.name,
+          metadata: { product_name: null, category: null, price: null, dimensions: null, country_of_origin: null, material: null, brand: null, notes: null },
+          user_id: user.id, created_at: new Date().toISOString(), status: "pending", retry_count: 0,
+        });
       }
     }
 
@@ -908,7 +908,7 @@ export default function TripDetail() {
       {pendingPhotos.length > 0 && (
         <div className="mb-4">
           <p className="mb-2 text-xs font-medium text-muted-foreground flex items-center gap-1">
-            <CloudOff className="h-3 w-3" /> Pending uploads (will sync when online)
+            <CloudOff className="h-3 w-3" /> {pendingPhotos.length} pending upload{pendingPhotos.length !== 1 ? "s" : ""} — will sync automatically
           </p>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {pendingPhotos.map((p) => {
