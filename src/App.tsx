@@ -18,6 +18,7 @@ const ChinaTripDetail = lazy(() => import("@/pages/ChinaTripDetail"));
 const Profile = lazy(() => import("@/pages/Profile"));
 const ImportKeep = lazy(() => import("@/pages/ImportKeep"));
 const ImportTeams = lazy(() => import("@/pages/ImportTeams"));
+const ResetPassword = lazy(() => import("@/pages/ResetPassword"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
 
 const queryClient = new QueryClient();
@@ -53,6 +54,7 @@ const App = () => (
             <Suspense fallback={<PageLoader />}>
               <Routes>
                 <Route path="/auth" element={<Auth />} />
+                <Route path="/reset-password" element={<ResetPassword />} />
                 <Route
                   element={
                     <ProtectedRoute>
