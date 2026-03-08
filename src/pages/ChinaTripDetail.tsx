@@ -833,6 +833,11 @@ export default function ChinaTripDetail() {
             <CloudOff className="h-3 w-3" /> {pendingPhotos.length} pending
           </Badge>
         )}
+        {undoAction && (
+          <Button variant="outline" size="sm" onClick={() => performUndo(loadPhotos)} disabled={undoing} className="gap-1 text-xs">
+            <Undo2 className="h-3.5 w-3.5" /> {undoing ? "Undoing..." : `Undo ${undoAction.label}`}
+          </Button>
+        )}
       </div>
 
       {/* Pending uploads */}
