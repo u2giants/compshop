@@ -9,7 +9,6 @@ import { extractExif } from "@/lib/exif-utils";
 import { isInAmericas } from "@/lib/geo-utils";
 import { useCategories } from "@/hooks/use-categories";
 import { useCountries } from "@/hooks/use-countries";
-import { useCountries } from "@/hooks/use-countries";
 import { useOnlineStatus } from "@/hooks/use-online-status";
 import {
   getCachedTrip,
