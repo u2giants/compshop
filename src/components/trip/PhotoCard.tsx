@@ -423,6 +423,24 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
                 <Link2 className="h-3 w-3" /> Link
               </Button>
             )}
+            {totalImages > 1 && onUnlinkPhoto && canEdit && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1 text-xs text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const imgToUnlink = allImages[activeImageIndex];
+                  const target = activeImageIndex > 0 ? imgToUnlink : allImages[1];
+                  if (target && confirm(`Unlink ${activeImageIndex > 0 ? "this" : "the next"} photo from the card? It will become its own card.`)) {
+                    onUnlinkPhoto(target.id);
+                    if (activeImageIndex > 0) setActiveImageIndex(0);
+                  }
+                }}
+              >
+                <Link2 className="h-3 w-3" /> Unlink
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
