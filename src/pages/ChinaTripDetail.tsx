@@ -81,6 +81,7 @@ export default function ChinaTripDetail() {
   const lastSelectedPhotoRef = useRef<string | null>(null);
   const [bulkAnalyzeProgress, setBulkAnalyzeProgress] = useState(0);
   const [downloading, setDownloading] = useState(false);
+  const [viewAllMode, setViewAllMode] = useState(false);
 
   // Inline editing state
   const [editingSupplier, setEditingSupplier] = useState(false);
