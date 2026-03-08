@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { getSignedPhotoUrl } from "@/lib/supabase-helpers";
+import { batchSignedUrls } from "@/lib/photo-utils";
+import type { Photo } from "@/types/models";
 import { useCategories } from "@/hooks/use-categories";
 import { useImageTypes } from "@/hooks/use-image-types";
 import { Input } from "@/components/ui/input";
@@ -10,22 +11,29 @@ import { Label } from "@/components/ui/label";
 import { Search, ChevronUp, ChevronDown } from "lucide-react";
 import PhotoCard from "@/components/trip/PhotoCard";
 
-interface Photo {
-  id: string;
-  file_path: string;
-  product_name: string | null;
-  category: string | null;
-  price: number | null;
-  dimensions: string | null;
-  country_of_origin: string | null;
-  material: string | null;
-  brand: string | null;
-  notes: string | null;
-  image_type: string | null;
-  user_id: string | null;
-  created_at: string;
-  signed_url?: string;
-  trip?: { name: string; store: string };
+function escapeLikePattern(input: string): string {
+  return input
+    .replace(/\\/g, '\\\\')
+    .replace(/%/g, '\\%')
+    .replace(/_/g, '\\_');
+}
+
+function applyFilters(
+  q: any,
+  { query, category, imageType, maxPrice, country, brand, material, dimensions }: Record<string, string>
+) {
+  if (query.trim()) {
+    const escaped = escapeLikePattern(query.trim());
+    q = q.or(`product_name.ilike.%${escaped}%,brand.ilike.%${escaped}%,notes.ilike.%${escaped}%,material.ilike.%${escaped}%`);
+  }
+  if (category) q = q.eq("category", category);
+  if (imageType) q = q.eq("image_type", imageType);
+  if (maxPrice) q = q.lte("price", Number(maxPrice));
+  if (country.trim()) q = q.ilike("country_of_origin", `%${escapeLikePattern(country.trim())}%`);
+  if (brand.trim()) q = q.ilike("brand", `%${escapeLikePattern(brand.trim())}%`);
+  if (material.trim()) q = q.ilike("material", `%${escapeLikePattern(material.trim())}%`);
+  if (dimensions.trim()) q = q.ilike("dimensions", `%${escapeLikePattern(dimensions.trim())}%`);
+  return q;
 }
 
 export default function SearchPage() {
@@ -44,59 +52,30 @@ export default function SearchPage() {
   const [loading, setLoading] = useState(false);
   const [panelOpen, setPanelOpen] = useState(true);
 
-  function escapeLikePattern(input: string): string {
-    return input
-      .replace(/\\/g, '\\\\')
-      .replace(/%/g, '\\%')
-      .replace(/_/g, '\\_');
-  }
-
   async function handleSearch(e?: React.FormEvent) {
     e?.preventDefault();
     if (query.length > 200) return;
     setLoading(true);
     setSearched(true);
 
-    let q = supabase.from("photos").select("*").order("created_at", { ascending: false }).limit(50);
+    const filters = { query, category, imageType, maxPrice, country, brand, material, dimensions };
 
-    if (query.trim()) {
-      const escaped = escapeLikePattern(query.trim());
-      q = q.or(`product_name.ilike.%${escaped}%,brand.ilike.%${escaped}%,notes.ilike.%${escaped}%,material.ilike.%${escaped}%`);
-    }
-    if (category) q = q.eq("category", category);
-    if (imageType) q = q.eq("image_type", imageType);
-    if (maxPrice) q = q.lte("price", Number(maxPrice));
-    if (country.trim()) {
-      const escaped = escapeLikePattern(country.trim());
-      q = q.ilike("country_of_origin", `%${escaped}%`);
-    }
-    if (brand.trim()) {
-      const escaped = escapeLikePattern(brand.trim());
-      q = q.ilike("brand", `%${escaped}%`);
-    }
-    if (material.trim()) {
-      const escaped = escapeLikePattern(material.trim());
-      q = q.ilike("material", `%${escaped}%`);
-    }
-    if (dimensions.trim()) {
-      const escaped = escapeLikePattern(dimensions.trim());
-      q = q.ilike("dimensions", `%${escaped}%`);
-    }
+    // Search both tables in parallel
+    let q1 = supabase.from("photos").select("*").order("created_at", { ascending: false }).limit(25);
+    let q2 = supabase.from("china_photos").select("*").order("created_at", { ascending: false }).limit(25);
+    q1 = applyFilters(q1, filters);
+    q2 = applyFilters(q2, filters);
 
-    const { data } = await q;
+    const [{ data: d1 }, { data: d2 }] = await Promise.all([q1, q2]);
+    const combined = [...(d1 || []), ...(d2 || [])]
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, 50);
 
-    if (data) {
-      const withUrls = await Promise.all(
-        data.map(async (p) => {
-          try {
-            const signed_url = await getSignedPhotoUrl(p.file_path);
-            return { ...p, signed_url };
-          } catch {
-            return { ...p, signed_url: undefined };
-          }
-        })
-      );
-      setResults(withUrls);
+    if (combined.length > 0) {
+      const urlMap = await batchSignedUrls(combined);
+      setResults(combined.map(p => ({ ...p, signed_url: urlMap.get(p.file_path) })) as Photo[]);
+    } else {
+      setResults([]);
     }
     setLoading(false);
     setPanelOpen(false);
@@ -117,7 +96,6 @@ export default function SearchPage() {
 
   return (
     <div className="container py-6">
-      {/* Collapsible search panel */}
       <div className="rounded-lg border bg-card shadow-sm overflow-hidden mb-6">
         <button
           onClick={() => setPanelOpen(!panelOpen)}
@@ -127,53 +105,32 @@ export default function SearchPage() {
             <Search className="h-4 w-4 text-muted-foreground" />
             <span className="font-medium">Search & Filter</span>
             {!panelOpen && hasFilters && (
-              <span className="text-xs text-muted-foreground ml-2">
-                (filters active)
-              </span>
+              <span className="text-xs text-muted-foreground ml-2">(filters active)</span>
             )}
           </div>
-          {panelOpen ? (
-            <ChevronUp className="h-4 w-4 text-muted-foreground" />
-          ) : (
-            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-          )}
+          {panelOpen ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
         </button>
 
         {panelOpen && (
           <form onSubmit={handleSearch} className="border-t px-4 py-4 space-y-4 animate-in slide-in-from-top-2 duration-200">
-            {/* Free-form search */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search products, brands, materials, notes..."
-                className="pl-10"
-              />
+              <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search products, brands, materials, notes..." className="pl-10" />
             </div>
 
-            {/* Per-field filters */}
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <div className="space-y-1">
                 <Label className="text-xs">Category</Label>
                 <Select value={category} onValueChange={setCategory}>
                   <SelectTrigger><SelectValue placeholder="Any" /></SelectTrigger>
-                  <SelectContent>
-                    {categories.map((c) => (
-                      <SelectItem key={c} value={c}>{c}</SelectItem>
-                    ))}
-                  </SelectContent>
+                  <SelectContent>{categories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Image Type</Label>
                 <Select value={imageType} onValueChange={setImageType}>
                   <SelectTrigger><SelectValue placeholder="Any" /></SelectTrigger>
-                  <SelectContent>
-                    {IMAGE_TYPES.map((t) => (
-                      <SelectItem key={t} value={t}>{t}</SelectItem>
-                    ))}
-                  </SelectContent>
+                  <SelectContent>{IMAGE_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div className="space-y-1">
@@ -203,22 +160,15 @@ export default function SearchPage() {
                 <Search className="h-3.5 w-3.5" />
                 {loading ? "Searching..." : "Search"}
               </Button>
-              {hasFilters && (
-                <Button type="button" variant="ghost" size="sm" onClick={clearFilters}>
-                  Clear All
-                </Button>
-              )}
+              {hasFilters && <Button type="button" variant="ghost" size="sm" onClick={clearFilters}>Clear All</Button>}
             </div>
           </form>
         )}
       </div>
 
-      {/* Results */}
       {loading ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="aspect-[4/3] animate-pulse rounded-lg bg-muted" />
-          ))}
+          {[1, 2, 3].map((i) => <div key={i} className="aspect-[4/3] animate-pulse rounded-lg bg-muted" />)}
         </div>
       ) : searched && results.length === 0 ? (
         <p className="py-12 text-center text-muted-foreground">No results found. Try different search terms or filters.</p>
@@ -226,9 +176,7 @@ export default function SearchPage() {
         <>
           <p className="mb-4 text-sm text-muted-foreground">{results.length} result{results.length !== 1 ? "s" : ""}</p>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {results.map((photo) => (
-              <PhotoCard key={photo.id} photo={photo} onUpdated={handleSearch} />
-            ))}
+            {results.map((photo) => <PhotoCard key={photo.id} photo={photo} onUpdated={handleSearch} />)}
           </div>
         </>
       ) : null}

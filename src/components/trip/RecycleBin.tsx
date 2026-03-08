@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Trash2, RotateCcw, Store } from "lucide-react";
+import { Trash2, RotateCcw, Store, Factory } from "lucide-react";
 import { format, differenceInDays } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 
@@ -14,6 +14,7 @@ interface DeletedTrip {
   date: string;
   location: string | null;
   deleted_at: string;
+  type: "shopping" | "asia";
 }
 
 interface RecycleBinProps {
@@ -36,23 +37,41 @@ export default function RecycleBin({ open, onOpenChange, onRestored }: RecycleBi
     setLoading(true);
     const fifteenDaysAgo = new Date();
     fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15);
+    const cutoff = fifteenDaysAgo.toISOString();
 
-    const { data } = await supabase
-      .from("shopping_trips")
-      .select("id, store, date, location, deleted_at")
-      .not("deleted_at", "is", null)
-      .gte("deleted_at", fifteenDaysAgo.toISOString())
-      .order("deleted_at", { ascending: false });
+    // Query both tables in parallel
+    const [{ data: shopData }, { data: chinaData }] = await Promise.all([
+      supabase
+        .from("shopping_trips")
+        .select("id, store, date, location, deleted_at")
+        .not("deleted_at", "is", null)
+        .gte("deleted_at", cutoff)
+        .order("deleted_at", { ascending: false }),
+      supabase
+        .from("china_trips")
+        .select("id, supplier, date, location, deleted_at")
+        .not("deleted_at", "is", null)
+        .gte("deleted_at", cutoff)
+        .order("deleted_at", { ascending: false }),
+    ]);
 
-    setDeleted((data as DeletedTrip[]) || []);
+    const shopping: DeletedTrip[] = (shopData || []).map(t => ({
+      id: t.id, store: t.store, date: t.date, location: t.location, deleted_at: t.deleted_at!, type: "shopping" as const,
+    }));
+    const asia: DeletedTrip[] = (chinaData || []).map(t => ({
+      id: t.id, store: t.supplier, date: t.date, location: t.location, deleted_at: t.deleted_at!, type: "asia" as const,
+    }));
+
+    const combined = [...shopping, ...asia].sort(
+      (a, b) => new Date(b.deleted_at).getTime() - new Date(a.deleted_at).getTime()
+    );
+    setDeleted(combined);
     setLoading(false);
   }
 
-  async function handleRestore(id: string) {
-    const { error } = await supabase
-      .from("shopping_trips")
-      .update({ deleted_at: null })
-      .eq("id", id);
+  async function handleRestore(trip: DeletedTrip) {
+    const table = trip.type === "shopping" ? "shopping_trips" : "china_trips";
+    const { error } = await supabase.from(table).update({ deleted_at: null }).eq("id", trip.id);
 
     if (error) {
       toast({ title: "Error", description: "Failed to restore trip", variant: "destructive" });
@@ -60,15 +79,13 @@ export default function RecycleBin({ open, onOpenChange, onRestored }: RecycleBi
     }
 
     toast({ title: "Trip restored" });
-    setDeleted((prev) => prev.filter((t) => t.id !== id));
+    setDeleted((prev) => prev.filter((t) => t.id !== trip.id));
     onRestored();
   }
 
-  async function handlePermanentDelete(id: string) {
-    const { error } = await supabase
-      .from("shopping_trips")
-      .delete()
-      .eq("id", id);
+  async function handlePermanentDelete(trip: DeletedTrip) {
+    const table = trip.type === "shopping" ? "shopping_trips" : "china_trips";
+    const { error } = await supabase.from(table).delete().eq("id", trip.id);
 
     if (error) {
       toast({ title: "Error", description: "Failed to permanently delete trip", variant: "destructive" });
@@ -76,7 +93,7 @@ export default function RecycleBin({ open, onOpenChange, onRestored }: RecycleBi
     }
 
     toast({ title: "Trip permanently deleted" });
-    setDeleted((prev) => prev.filter((t) => t.id !== id));
+    setDeleted((prev) => prev.filter((t) => t.id !== trip.id));
   }
 
   return (
@@ -100,12 +117,16 @@ export default function RecycleBin({ open, onOpenChange, onRestored }: RecycleBi
           <div className="space-y-2">
             {deleted.map((trip) => {
               const daysLeft = 15 - differenceInDays(new Date(), new Date(trip.deleted_at));
+              const Icon = trip.type === "asia" ? Factory : Store;
               return (
                 <div key={trip.id} className="flex items-center justify-between rounded-md border p-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <Store className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
                       <p className="font-medium text-sm truncate">{trip.store}</p>
+                      {trip.type === "asia" && (
+                        <Badge variant="outline" className="text-[10px]">Asia</Badge>
+                      )}
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       {format(new Date(trip.date), "MMM d, yyyy")}
@@ -116,10 +137,10 @@ export default function RecycleBin({ open, onOpenChange, onRestored }: RecycleBi
                     </p>
                   </div>
                   <div className="flex gap-1 shrink-0">
-                    <Button size="sm" variant="ghost" onClick={() => handleRestore(trip.id)} title="Restore">
+                    <Button size="sm" variant="ghost" onClick={() => handleRestore(trip)} title="Restore">
                       <RotateCcw className="h-4 w-4" />
                     </Button>
-                    <Button size="sm" variant="ghost" className="text-destructive" onClick={() => handlePermanentDelete(trip.id)} title="Delete permanently">
+                    <Button size="sm" variant="ghost" className="text-destructive" onClick={() => handlePermanentDelete(trip)} title="Delete permanently">
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>

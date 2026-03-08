@@ -2,7 +2,8 @@ import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { getSignedPhotoUrl, uploadPhoto, hashFile, checkDuplicatePhoto } from "@/lib/supabase-helpers";
+import { uploadPhoto, hashFile, checkDuplicatePhoto } from "@/lib/supabase-helpers";
+import { batchSignedUrls } from "@/lib/photo-utils";
 import { extractExif, distanceKm } from "@/lib/exif-utils";
 import { getCantonFairSession, sessionKey } from "@/lib/canton-fair-utils";
 import { Card, CardContent } from "@/components/ui/card";
@@ -75,21 +76,32 @@ export default function ChinaTrips() {
         .order("date", { ascending: false });
 
       if (data) {
-        const tripsWithCounts = await Promise.all(
-          data.map(async (trip) => {
-            const [{ count: photoCount }, coverResult] = await Promise.all([
-              supabase.from("china_photos").select("*", { count: "exact", head: true }).eq("trip_id", trip.id),
-              supabase.from("china_photos").select("file_path").eq("trip_id", trip.id).order("created_at", { ascending: true }).limit(1),
-            ]);
-
-            let cover_url: string | undefined;
-            if (coverResult.data?.[0]?.file_path) {
-              try { cover_url = await getSignedPhotoUrl(coverResult.data[0].file_path); } catch {}
-            }
-
-            return { ...trip, photo_count: photoCount ?? 0, cover_url };
-          })
+        const tripIds = data.map(t => t.id);
+        
+        const photoCountPromises = tripIds.map(tid =>
+          supabase.from("china_photos").select("*", { count: "exact", head: true }).eq("trip_id", tid)
         );
+        const coverPromises = tripIds.map(tid =>
+          supabase.from("china_photos").select("file_path").eq("trip_id", tid).order("created_at", { ascending: true }).limit(1)
+        );
+        
+        const [photoCounts, coverResults] = await Promise.all([
+          Promise.all(photoCountPromises),
+          Promise.all(coverPromises),
+        ]);
+
+        const coverPaths = coverResults
+          .map(r => r.data?.[0]?.file_path)
+          .filter(Boolean) as string[];
+        const urlMap = await batchSignedUrls(coverPaths.map(fp => ({ file_path: fp })));
+
+        const tripsWithCounts = data.map((trip, i) => ({
+          ...trip,
+          photo_count: photoCounts[i].count ?? 0,
+          cover_url: coverResults[i].data?.[0]?.file_path
+            ? urlMap.get(coverResults[i].data![0].file_path)
+            : undefined,
+        }));
         setTrips(tripsWithCounts);
       }
     } catch (err) {
