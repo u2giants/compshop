@@ -77,13 +77,24 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
   const addPhotoCameraRef = useRef<HTMLInputElement>(null);
   const dragState = useRef<{ isDragging: boolean; startX: number; startY: number; scrollLeft: number; scrollTop: number }>({ isDragging: false, startX: 0, startY: 0, scrollLeft: 0, scrollTop: 0 });
 
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault();
+  const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
     e.stopPropagation();
+    // Only use wheel for zooming — prevent the container from scrolling
+    e.currentTarget.style.overflow = 'hidden';
     setZoomScale((prev) => {
       const next = prev - e.deltaY * 0.002;
       return Math.min(Math.max(next, 0.5), 5);
     });
+    // Re-enable overflow after the event is processed
+    const el = e.currentTarget;
+    requestAnimationFrame(() => { el.style.overflow = 'auto'; });
+  }, []);
+
+  const handleDoubleClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setZoomScale(1);
+    setImageZoomed(false);
   }, []);
 
   const resetZoom = useCallback(() => {
@@ -527,6 +538,7 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
                 ref={imgContainerRef}
                 className="overflow-auto max-h-[50vh] touch-pan-x touch-pan-y cursor-grab active:cursor-grabbing select-none"
                 onWheel={handleWheel}
+                onDoubleClick={handleDoubleClick}
                 onPointerDown={handlePointerDown}
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
@@ -537,7 +549,6 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
                   alt={photo.product_name || "Photo"}
                   className="w-full rounded-lg origin-top-left transition-transform duration-100"
                   style={{ transform: `scale(${zoomScale})`, touchAction: "pinch-zoom" }}
-                  onDoubleClick={resetZoom}
                   draggable={false}
                 />
               </div>
@@ -594,6 +605,7 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
             <div
               className="overflow-auto max-h-[50vh] touch-pan-x touch-pan-y cursor-grab active:cursor-grabbing relative select-none"
               onWheel={handleWheel}
+              onDoubleClick={handleDoubleClick}
               onPointerDown={handlePointerDown}
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
@@ -604,7 +616,6 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
                 alt={photo.product_name || "Photo"}
                 className="w-full rounded-lg origin-top-left transition-transform duration-100"
                 style={{ transform: `scale(${zoomScale})`, touchAction: "pinch-zoom" }}
-                onDoubleClick={resetZoom}
                 draggable={false}
               />
               {zoomScale !== 1 && (
