@@ -8,6 +8,7 @@ import type { Photo, ChinaTrip } from "@/types/models";
 import { extractExif } from "@/lib/exif-utils";
 import { isInAmericas } from "@/lib/geo-utils";
 import { useCategories } from "@/hooks/use-categories";
+import { useBulkUndo } from "@/hooks/use-bulk-undo";
 import { useCountries } from "@/hooks/use-countries";
 import { useOnlineStatus } from "@/hooks/use-online-status";
 import {
@@ -39,7 +40,7 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, Camera, Calendar, MapPin, Factory, Sparkles, Loader2, Download,
-  Images, ArrowRightLeft, PenLine, Pencil, CalendarIcon, CloudOff, Plus, LayoutGrid, Layers,
+  Images, ArrowRightLeft, PenLine, Pencil, CalendarIcon, CloudOff, Plus, LayoutGrid, Layers, Undo2,
 } from "lucide-react";
 import { format } from "date-fns";
 import PhotoCard from "@/components/trip/PhotoCard";
@@ -59,6 +60,7 @@ export default function ChinaTripDetail() {
   const countries = useCountries();
   const categories = useCategories();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { undoAction, undoing, captureSnapshot, setUndo, performUndo, clearUndo } = useBulkUndo();
 
   const [trip, setTrip] = useState<ChinaTrip | null>(null);
   const [photos, setPhotos] = useState<Photo[]>([]);
@@ -229,11 +231,13 @@ export default function ChinaTripDetail() {
   async function handleAssignSection(sectionName: string) {
     if (selectedPhotos.size === 0) return;
     const ids = Array.from(selectedPhotos);
+    const snapshots = captureSnapshot(ids, photos as any[], ["section"]);
     const { error } = await supabase.from("china_photos").update({ section: sectionName }).in("id", ids);
     if (error) {
       toast({ title: "Failed to assign section", variant: "destructive" });
       return;
     }
+    setUndo({ type: "section", label: `section assignment (${ids.length} photos)`, snapshots, table: "china_photos" });
     toast({ title: `${ids.length} photo(s) moved to "${sectionName}"` });
     setSelectedPhotos(new Set());
     loadPhotos();
@@ -829,6 +833,11 @@ export default function ChinaTripDetail() {
             <CloudOff className="h-3 w-3" /> {pendingPhotos.length} pending
           </Badge>
         )}
+        {undoAction && (
+          <Button variant="outline" size="sm" onClick={() => performUndo(loadPhotos)} disabled={undoing} className="gap-1 text-xs">
+            <Undo2 className="h-3.5 w-3.5" /> {undoing ? "Undoing..." : `Undo ${undoAction.label}`}
+          </Button>
+        )}
       </div>
 
       {/* Pending uploads */}
@@ -1072,7 +1081,13 @@ export default function ChinaTripDetail() {
           onOpenChange={setShowBulkMove}
           photoIds={Array.from(selectedPhotos)}
           currentTripId={trip.id}
-          onMoved={() => { setSelectedPhotos(new Set()); loadPhotos(); }}
+          onMoved={() => {
+            const ids = Array.from(selectedPhotos);
+            const snapshots = captureSnapshot(ids, photos as any[], ["trip_id"]);
+            setUndo({ type: "move", label: `move (${ids.length} photos)`, snapshots, table: "china_photos" });
+            setSelectedPhotos(new Set());
+            loadPhotos();
+          }}
         />
       )}
 
@@ -1081,7 +1096,15 @@ export default function ChinaTripDetail() {
         onOpenChange={setShowBulkEdit}
         photoIds={Array.from(selectedPhotos)}
         photos={photos.map((p) => ({ id: p.id, product_name: p.product_name }))}
-        onApplied={() => { setSelectedPhotos(new Set()); loadPhotos(); }}
+        onApplied={() => {
+          const ids = Array.from(selectedPhotos);
+          const snapshots = captureSnapshot(ids, photos as any[], [
+            "product_name", "category", "price", "brand", "dimensions", "country_of_origin", "material", "image_type",
+          ]);
+          setUndo({ type: "edit", label: `bulk edit (${ids.length} photos)`, snapshots, table: "china_photos" });
+          setSelectedPhotos(new Set());
+          loadPhotos();
+        }}
         chinaMode
       />
     </div>

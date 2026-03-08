@@ -23,6 +23,7 @@ import {
 } from "@/lib/offline-db";
 import { runSync } from "@/lib/sync-service";
 import { useOnlineStatus } from "@/hooks/use-online-status";
+import { useBulkUndo } from "@/hooks/use-bulk-undo";
 import { useCountries } from "@/hooks/use-countries";
 import { useRetailers } from "@/hooks/use-retailers";
 import { Pencil, CalendarIcon } from "lucide-react";
@@ -40,7 +41,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Camera, Calendar, MapPin, Store, Users, CloudOff, Sparkles, Loader2, Download, Images, ArrowRightLeft, PenLine, Trash2, Upload, LayoutGrid, Layers } from "lucide-react";
+import { ArrowLeft, Camera, Calendar, MapPin, Store, Users, CloudOff, Sparkles, Loader2, Download, Images, ArrowRightLeft, PenLine, Trash2, Upload, LayoutGrid, Layers, Undo2 } from "lucide-react";
 import { format } from "date-fns";
 import PhotoCard from "@/components/trip/PhotoCard";
 import TripMembers from "@/components/trip/TripMembers";
@@ -64,6 +65,7 @@ export default function TripDetail() {
   const [editingStore, setEditingStore] = useState(false);
   const [storeValue, setStoreValue] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { undoAction, undoing, captureSnapshot, setUndo, performUndo, clearUndo } = useBulkUndo();
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
   const dragCounterRef = useRef(0);
@@ -965,6 +967,11 @@ export default function TripDetail() {
             Undo group
           </Button>
         )}
+        {undoAction && (
+          <Button variant="outline" size="sm" onClick={() => performUndo(loadPhotos)} disabled={undoing} className="gap-1 text-xs">
+            <Undo2 className="h-3.5 w-3.5" /> {undoing ? "Undoing..." : `Undo ${undoAction.label}`}
+          </Button>
+        )}
       </div>
 
       {/* Upload dialog */}
@@ -1170,7 +1177,13 @@ export default function TripDetail() {
         onOpenChange={setShowBulkMove}
         photoIds={Array.from(selectedPhotos)}
         currentTripId={trip.id}
-        onMoved={() => { setSelectedPhotos(new Set()); loadPhotos(); }}
+        onMoved={() => {
+          const ids = Array.from(selectedPhotos);
+          const snapshots = captureSnapshot(ids, photos as any[], ["trip_id"]);
+          setUndo({ type: "move", label: `move (${ids.length} photos)`, snapshots, table: "photos" });
+          setSelectedPhotos(new Set());
+          loadPhotos();
+        }}
       />
 
       <BulkEditDialog
@@ -1178,7 +1191,15 @@ export default function TripDetail() {
         onOpenChange={setShowBulkEdit}
         photoIds={Array.from(selectedPhotos)}
         photos={photos.map((p) => ({ id: p.id, product_name: p.product_name }))}
-        onApplied={() => { setSelectedPhotos(new Set()); loadPhotos(); }}
+        onApplied={() => {
+          const ids = Array.from(selectedPhotos);
+          const snapshots = captureSnapshot(ids, photos as any[], [
+            "product_name", "category", "price", "brand", "dimensions", "country_of_origin", "material", "image_type",
+          ]);
+          setUndo({ type: "edit", label: `bulk edit (${ids.length} photos)`, snapshots, table: "photos" });
+          setSelectedPhotos(new Set());
+          loadPhotos();
+        }}
       />
 
       {linkSourcePhotoId && (
