@@ -77,17 +77,24 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
   const addPhotoCameraRef = useRef<HTMLInputElement>(null);
   const dragState = useRef<{ isDragging: boolean; startX: number; startY: number; scrollLeft: number; scrollTop: number }>({ isDragging: false, startX: 0, startY: 0, scrollLeft: 0, scrollTop: 0 });
 
-  const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
-    e.stopPropagation();
-    // Only use wheel for zooming — prevent the container from scrolling
-    e.currentTarget.style.overflow = 'hidden';
-    setZoomScale((prev) => {
-      const next = prev - e.deltaY * 0.002;
-      return Math.min(Math.max(next, 0.5), 5);
-    });
-    // Re-enable overflow after the event is processed
-    const el = e.currentTarget;
-    requestAnimationFrame(() => { el.style.overflow = 'auto'; });
+  // Use a ref-based native wheel listener so we can preventDefault (passive: false)
+  const zoomContainerRef = useCallback((node: HTMLDivElement | null) => {
+    if (!node) return;
+    // Also store as imgContainerRef if needed
+    (imgContainerRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
+    
+    const handler = (e: WheelEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setZoomScale((prev) => {
+        const next = prev - e.deltaY * 0.002;
+        return Math.min(Math.max(next, 0.5), 5);
+      });
+    };
+    node.addEventListener('wheel', handler, { passive: false });
+    // Store cleanup on the node itself
+    (node as any).__wheelCleanup?.();
+    (node as any).__wheelCleanup = () => node.removeEventListener('wheel', handler);
   }, []);
 
   const handleDoubleClick = useCallback((e: React.MouseEvent) => {
@@ -536,9 +543,8 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
             <>
               <div className="relative">
                 <div
-                  ref={imgContainerRef}
+                  ref={zoomContainerRef}
                   className="overflow-auto max-h-[50vh] touch-pan-x touch-pan-y cursor-grab active:cursor-grabbing select-none"
-                  onWheel={handleWheel}
                   onDoubleClick={handleDoubleClick}
                   onPointerDown={handlePointerDown}
                   onPointerMove={handlePointerMove}
@@ -613,8 +619,8 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
             </>
           ) : photo.signed_url ? (
             <div
+              ref={zoomContainerRef}
               className="overflow-auto max-h-[50vh] touch-pan-x touch-pan-y cursor-grab active:cursor-grabbing relative select-none"
-              onWheel={handleWheel}
               onDoubleClick={handleDoubleClick}
               onPointerDown={handlePointerDown}
               onPointerMove={handlePointerMove}
