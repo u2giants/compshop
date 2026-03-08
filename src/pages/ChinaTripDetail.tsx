@@ -783,6 +783,16 @@ export default function ChinaTripDetail() {
               <Sparkles className="h-4 w-4" />
               {bulkAnalyzing ? `AI Detecting... ${bulkAnalyzeProgress}%` : "AI Detect All"}
             </Button>
+            <Button
+              variant={viewAllMode ? "default" : "outline"}
+              size="sm"
+              onClick={() => setViewAllMode((v) => !v)}
+              className="gap-2"
+              title={viewAllMode ? "Switch to grouped view" : "View all photos flat"}
+            >
+              {viewAllMode ? <Layers className="h-4 w-4" /> : <LayoutGrid className="h-4 w-4" />}
+              {viewAllMode ? "Grouped" : "View All"}
+            </Button>
           </>
         )}
         {selectedPhotos.size > 0 && (
