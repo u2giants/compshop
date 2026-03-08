@@ -77,13 +77,24 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
   const addPhotoCameraRef = useRef<HTMLInputElement>(null);
   const dragState = useRef<{ isDragging: boolean; startX: number; startY: number; scrollLeft: number; scrollTop: number }>({ isDragging: false, startX: 0, startY: 0, scrollLeft: 0, scrollTop: 0 });
 
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault();
+  const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
     e.stopPropagation();
+    // Only use wheel for zooming — prevent the container from scrolling
+    e.currentTarget.style.overflow = 'hidden';
     setZoomScale((prev) => {
       const next = prev - e.deltaY * 0.002;
       return Math.min(Math.max(next, 0.5), 5);
     });
+    // Re-enable overflow after the event is processed
+    const el = e.currentTarget;
+    requestAnimationFrame(() => { el.style.overflow = 'auto'; });
+  }, []);
+
+  const handleDoubleClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setZoomScale(1);
+    setImageZoomed(false);
   }, []);
 
   const resetZoom = useCallback(() => {
