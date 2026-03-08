@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DollarSign, MapPin, Ruler, Layers, Tag, MessageSquare, Trash2, Sparkles, Loader2, ImageIcon, ArrowRightLeft, Crop, Camera, Plus, Link2 } from "lucide-react";
+import { DollarSign, MapPin, Ruler, Layers, Tag, MessageSquare, Trash2, Sparkles, Loader2, ImageIcon, ArrowRightLeft, Crop, Camera, Plus, Link2, Unlink2 } from "lucide-react";
 import PhotoCropDialog from "./PhotoCropDialog";
 import MoveToTripDialog from "./MoveToTripDialog";
 import ChinaMoveToTripDialog from "./ChinaMoveToTripDialog";
