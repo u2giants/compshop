@@ -579,6 +579,19 @@ export default function ChinaTripDetail() {
     loadPhotos();
   }
 
+  async function handleUnlinkPhoto(photoId: string) {
+    const { error } = await supabase
+      .from("china_photos")
+      .update({ group_id: null })
+      .eq("id", photoId);
+    if (error) {
+      toast({ title: "Unlink failed", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Photo unlinked", description: "Photo is now its own card." });
+    loadPhotos();
+  }
+
   const groups = groupPhotos(photos);
   const sectionedGroups = (() => {
     const base = groupBySection(groups);
