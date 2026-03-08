@@ -40,7 +40,7 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, Camera, Calendar, MapPin, Factory, Sparkles, Loader2, Download,
-  Images, ArrowRightLeft, PenLine, Pencil, CalendarIcon, CloudOff, Plus, LayoutGrid, Layers,
+  Images, ArrowRightLeft, PenLine, Pencil, CalendarIcon, CloudOff, Plus, LayoutGrid, Layers, Undo2,
 } from "lucide-react";
 import { format } from "date-fns";
 import PhotoCard from "@/components/trip/PhotoCard";
