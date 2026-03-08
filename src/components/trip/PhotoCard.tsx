@@ -619,8 +619,8 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
             </>
           ) : photo.signed_url ? (
             <div
+              ref={zoomContainerRef}
               className="overflow-auto max-h-[50vh] touch-pan-x touch-pan-y cursor-grab active:cursor-grabbing relative select-none"
-              onWheel={handleWheel}
               onDoubleClick={handleDoubleClick}
               onPointerDown={handlePointerDown}
               onPointerMove={handlePointerMove}
