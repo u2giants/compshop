@@ -538,6 +538,7 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
                 ref={imgContainerRef}
                 className="overflow-auto max-h-[50vh] touch-pan-x touch-pan-y cursor-grab active:cursor-grabbing select-none"
                 onWheel={handleWheel}
+                onDoubleClick={handleDoubleClick}
                 onPointerDown={handlePointerDown}
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
@@ -548,7 +549,6 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
                   alt={photo.product_name || "Photo"}
                   className="w-full rounded-lg origin-top-left transition-transform duration-100"
                   style={{ transform: `scale(${zoomScale})`, touchAction: "pinch-zoom" }}
-                  onDoubleClick={handleDoubleClick}
                   draggable={false}
                 />
               </div>
