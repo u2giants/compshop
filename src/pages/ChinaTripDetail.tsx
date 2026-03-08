@@ -231,11 +231,13 @@ export default function ChinaTripDetail() {
   async function handleAssignSection(sectionName: string) {
     if (selectedPhotos.size === 0) return;
     const ids = Array.from(selectedPhotos);
+    const snapshots = captureSnapshot(ids, photos as any[], ["section"]);
     const { error } = await supabase.from("china_photos").update({ section: sectionName }).in("id", ids);
     if (error) {
       toast({ title: "Failed to assign section", variant: "destructive" });
       return;
     }
+    setUndo({ type: "section", label: `section assignment (${ids.length} photos)`, snapshots, table: "china_photos" });
     toast({ title: `${ids.length} photo(s) moved to "${sectionName}"` });
     setSelectedPhotos(new Set());
     loadPhotos();
