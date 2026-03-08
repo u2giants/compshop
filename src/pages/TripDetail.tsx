@@ -48,54 +48,8 @@ import MoveToTripDialog from "@/components/trip/MoveToTripDialog";
 import BulkEditDialog from "@/components/trip/BulkEditDialog";
 import LinkToCardDialog from "@/components/trip/LinkToCardDialog";
 
-interface Trip {
-  id: string;
-  name: string;
-  store: string;
-  date: string;
-  location: string | null;
-  notes: string | null;
-  created_by: string | null;
-}
-
-interface Photo {
-  id: string;
-  file_path: string;
-  product_name: string | null;
-  category: string | null;
-  price: number | null;
-  dimensions: string | null;
-  country_of_origin: string | null;
-  material: string | null;
-  brand: string | null;
-  notes: string | null;
-  image_type: string | null;
-  user_id: string | null;
-  created_at: string;
-  signed_url?: string;
-  group_id: string | null;
-}
-
-// Group photos: primary photos (no group_id) with their children
-function groupPhotos(photos: Photo[]): { primary: Photo; extras: Photo[] }[] {
-  const grouped = new Map<string, Photo[]>();
-  const primaries: Photo[] = [];
-
-  for (const p of photos) {
-    if (p.group_id) {
-      const list = grouped.get(p.group_id) || [];
-      list.push(p);
-      grouped.set(p.group_id, list);
-    } else {
-      primaries.push(p);
-    }
-  }
-
-  return primaries.map((p) => ({
-    primary: p,
-    extras: grouped.get(p.id) || [],
-  }));
-}
+// Photo and Trip types imported from @/types/models
+// groupPhotos imported from @/lib/photo-utils
 
 export default function TripDetail() {
   const { id } = useParams<{ id: string }>();
