@@ -48,71 +48,8 @@ import ChinaMoveToTripDialog from "@/components/trip/ChinaMoveToTripDialog";
 import BulkEditDialog from "@/components/trip/BulkEditDialog";
 import AutocompleteInput from "@/components/ui/autocomplete-input";
 
-interface ChinaTrip {
-  id: string;
-  name: string;
-  supplier: string;
-  venue_type: string;
-  date: string;
-  location: string | null;
-  notes: string | null;
-  created_by: string | null;
-}
-
-interface Photo {
-  id: string;
-  file_path: string;
-  product_name: string | null;
-  category: string | null;
-  price: number | null;
-  dimensions: string | null;
-  country_of_origin: string | null;
-  material: string | null;
-  brand: string | null;
-  notes: string | null;
-  image_type: string | null;
-  user_id: string | null;
-  created_at: string;
-  signed_url?: string;
-  group_id: string | null;
-  section: string | null;
-}
-
-function groupPhotos(photos: Photo[]): { primary: Photo; extras: Photo[] }[] {
-  const grouped = new Map<string, Photo[]>();
-  const primaries: Photo[] = [];
-  for (const p of photos) {
-    if (p.group_id) {
-      const list = grouped.get(p.group_id) || [];
-      list.push(p);
-      grouped.set(p.group_id, list);
-    } else {
-      primaries.push(p);
-    }
-  }
-  return primaries.map((p) => ({ primary: p, extras: grouped.get(p.id) || [] }));
-}
-
-/** Group photo cards by section, preserving order */
-function groupBySection(groups: { primary: Photo; extras: Photo[] }[]): { section: string | null; items: { primary: Photo; extras: Photo[] }[] }[] {
-  const sectionOrder: (string | null)[] = [];
-  const map = new Map<string | null, { primary: Photo; extras: Photo[] }[]>();
-  for (const g of groups) {
-    const sec = g.primary.section ?? null;
-    if (!map.has(sec)) {
-      sectionOrder.push(sec);
-      map.set(sec, []);
-    }
-    map.get(sec)!.push(g);
-  }
-  // Put null (unsectioned) first, then named sections
-  const nullIdx = sectionOrder.indexOf(null);
-  if (nullIdx > 0) {
-    sectionOrder.splice(nullIdx, 1);
-    sectionOrder.unshift(null);
-  }
-  return sectionOrder.map((sec) => ({ section: sec, items: map.get(sec)! }));
-}
+// ChinaTrip, Photo types imported from @/types/models
+// groupPhotos, groupBySection imported from @/lib/photo-utils
 
 export default function ChinaTripDetail() {
   const { id } = useParams<{ id: string }>();
