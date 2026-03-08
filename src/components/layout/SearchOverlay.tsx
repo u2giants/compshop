@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { getSignedPhotoUrl } from "@/lib/supabase-helpers";
+import { batchSignedUrls } from "@/lib/photo-utils";
+import type { Photo } from "@/types/models";
 import { useCategories } from "@/hooks/use-categories";
 import { useImageTypes } from "@/hooks/use-image-types";
 import { Input } from "@/components/ui/input";
@@ -9,24 +10,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Search, ChevronUp, X } from "lucide-react";
 import PhotoCard from "@/components/trip/PhotoCard";
-
-interface Photo {
-  id: string;
-  file_path: string;
-  product_name: string | null;
-  category: string | null;
-  price: number | null;
-  dimensions: string | null;
-  country_of_origin: string | null;
-  material: string | null;
-  brand: string | null;
-  notes: string | null;
-  image_type: string | null;
-  user_id: string | null;
-  created_at: string;
-  signed_url?: string;
-  trip?: { name: string; store: string };
-}
 
 interface Props {
   open: boolean;
@@ -38,6 +21,24 @@ function escapeLikePattern(input: string): string {
     .replace(/\\/g, '\\\\')
     .replace(/%/g, '\\%')
     .replace(/_/g, '\\_');
+}
+
+function applyFilters(
+  q: any,
+  { query, category, imageType, maxPrice, country, brand, material, dimensions }: Record<string, string>
+) {
+  if (query.trim()) {
+    const escaped = escapeLikePattern(query.trim());
+    q = q.or(`product_name.ilike.%${escaped}%,brand.ilike.%${escaped}%,notes.ilike.%${escaped}%,material.ilike.%${escaped}%`);
+  }
+  if (category) q = q.eq("category", category);
+  if (imageType) q = q.eq("image_type", imageType);
+  if (maxPrice) q = q.lte("price", Number(maxPrice));
+  if (country.trim()) q = q.ilike("country_of_origin", `%${escapeLikePattern(country.trim())}%`);
+  if (brand.trim()) q = q.ilike("brand", `%${escapeLikePattern(brand.trim())}%`);
+  if (material.trim()) q = q.ilike("material", `%${escapeLikePattern(material.trim())}%`);
+  if (dimensions.trim()) q = q.ilike("dimensions", `%${escapeLikePattern(dimensions.trim())}%`);
+  return q;
 }
 
 export default function SearchOverlay({ open, onClose }: Props) {
@@ -61,46 +62,24 @@ export default function SearchOverlay({ open, onClose }: Props) {
     setLoading(true);
     setSearched(true);
 
-    let q = supabase.from("photos").select("*").order("created_at", { ascending: false }).limit(50);
+    const filters = { query, category, imageType, maxPrice, country, brand, material, dimensions };
 
-    if (query.trim()) {
-      const escaped = escapeLikePattern(query.trim());
-      q = q.or(`product_name.ilike.%${escaped}%,brand.ilike.%${escaped}%,notes.ilike.%${escaped}%,material.ilike.%${escaped}%`);
-    }
-    if (category) q = q.eq("category", category);
-    if (imageType) q = q.eq("image_type", imageType);
-    if (maxPrice) q = q.lte("price", Number(maxPrice));
-    if (country.trim()) {
-      const escaped = escapeLikePattern(country.trim());
-      q = q.ilike("country_of_origin", `%${escaped}%`);
-    }
-    if (brand.trim()) {
-      const escaped = escapeLikePattern(brand.trim());
-      q = q.ilike("brand", `%${escaped}%`);
-    }
-    if (material.trim()) {
-      const escaped = escapeLikePattern(material.trim());
-      q = q.ilike("material", `%${escaped}%`);
-    }
-    if (dimensions.trim()) {
-      const escaped = escapeLikePattern(dimensions.trim());
-      q = q.ilike("dimensions", `%${escaped}%`);
-    }
+    // Search both photos and china_photos tables in parallel
+    let q1 = supabase.from("photos").select("*").order("created_at", { ascending: false }).limit(25);
+    let q2 = supabase.from("china_photos").select("*").order("created_at", { ascending: false }).limit(25);
+    q1 = applyFilters(q1, filters);
+    q2 = applyFilters(q2, filters);
 
-    const { data } = await q;
+    const [{ data: d1 }, { data: d2 }] = await Promise.all([q1, q2]);
+    const combined = [...(d1 || []), ...(d2 || [])]
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, 50);
 
-    if (data) {
-      const withUrls = await Promise.all(
-        data.map(async (p) => {
-          try {
-            const signed_url = await getSignedPhotoUrl(p.file_path);
-            return { ...p, signed_url };
-          } catch {
-            return { ...p, signed_url: undefined };
-          }
-        })
-      );
-      setResults(withUrls);
+    if (combined.length > 0) {
+      const urlMap = await batchSignedUrls(combined);
+      setResults(combined.map(p => ({ ...p, signed_url: urlMap.get(p.file_path) })) as Photo[]);
+    } else {
+      setResults([]);
     }
     setLoading(false);
   }
@@ -124,7 +103,6 @@ export default function SearchOverlay({ open, onClose }: Props) {
     <div className="md:absolute md:left-0 md:right-0 md:top-full z-50 border-b bg-card md:shadow-lg animate-in slide-in-from-top-2 duration-200">
       <div className="container py-4 space-y-4">
         <form onSubmit={handleSearch} className="space-y-4">
-          {/* Free-form search */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -136,7 +114,6 @@ export default function SearchOverlay({ open, onClose }: Props) {
             />
           </div>
 
-          {/* Per-field filters */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div className="space-y-1">
               <Label className="text-xs">Category</Label>
@@ -198,7 +175,6 @@ export default function SearchOverlay({ open, onClose }: Props) {
           </div>
         </form>
 
-        {/* Results inline */}
         {loading ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {[1, 2, 3].map((i) => (
