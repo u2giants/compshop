@@ -301,7 +301,6 @@ export default function ChinaTripDetail() {
   }
 
   async function loadPhotos() {
-    // Cached photos for offline
     const cached = await getCachedPhotos(id!);
     if (cached.length > 0) {
       const withUrls = await Promise.all(
@@ -317,15 +316,13 @@ export default function ChinaTripDetail() {
     try {
       const { data } = await supabase.from("china_photos").select("*").eq("trip_id", id!).order("created_at", { ascending: false });
       if (data) {
-        const withUrls = await Promise.all(
-          data.map(async (p) => {
-            try {
-              const signed_url = await getSignedPhotoUrl(p.file_path);
-              cacheImageInBackground(p.file_path, signed_url);
-              return { ...p, signed_url };
-            } catch { return { ...p, signed_url: undefined }; }
-          })
-        );
+        // Batch signed URL generation (single API call instead of N)
+        const urlMap = await batchSignedUrls(data);
+        const withUrls = data.map((p) => {
+          const signed_url = urlMap.get(p.file_path);
+          if (signed_url) cacheImageInBackground(p.file_path, signed_url);
+          return { ...p, signed_url };
+        });
         setPhotos(withUrls as Photo[]);
         await cachePhotos(data as unknown as CachedPhoto[]);
         // Fetch user profiles for attribution
