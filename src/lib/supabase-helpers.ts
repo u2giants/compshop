@@ -64,19 +64,8 @@ export async function getSignedPhotoUrl(filePath: string) {
   return data.signedUrl;
 }
 
-export const PRODUCT_CATEGORIES = [
-  "Wall art",
-  "Tabletop",
-  "Workspace",
-  "Clocks",
-  "Storage",
-  "Floor",
-  "Furniture",
-  "Garden",
-] as const;
+/** @deprecated Use useCategories() hook instead */
+export const PRODUCT_CATEGORIES = [] as const;
 
 /** @deprecated Use useImageTypes() hook instead */
-export const IMAGE_TYPES = [
-  "Product Format",
-  "Design Idea",
-] as const;
+export const IMAGE_TYPES = [] as const;
