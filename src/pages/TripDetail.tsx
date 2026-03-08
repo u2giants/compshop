@@ -23,6 +23,7 @@ import {
 } from "@/lib/offline-db";
 import { runSync } from "@/lib/sync-service";
 import { useOnlineStatus } from "@/hooks/use-online-status";
+import { useBulkUndo } from "@/hooks/use-bulk-undo";
 import { useCountries } from "@/hooks/use-countries";
 import { useRetailers } from "@/hooks/use-retailers";
 import { Pencil, CalendarIcon } from "lucide-react";

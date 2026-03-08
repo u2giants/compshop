@@ -8,6 +8,7 @@ import type { Photo, ChinaTrip } from "@/types/models";
 import { extractExif } from "@/lib/exif-utils";
 import { isInAmericas } from "@/lib/geo-utils";
 import { useCategories } from "@/hooks/use-categories";
+import { useBulkUndo } from "@/hooks/use-bulk-undo";
 import { useCountries } from "@/hooks/use-countries";
 import { useOnlineStatus } from "@/hooks/use-online-status";
 import {
