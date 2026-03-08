@@ -533,82 +533,84 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
 
           {/* Image with scroll-wheel zoom – double-click to reset */}
           {totalImages > 1 ? (
-            <div className="relative">
-              <div
-                ref={imgContainerRef}
-                className="overflow-auto max-h-[50vh] touch-pan-x touch-pan-y cursor-grab active:cursor-grabbing select-none"
-                onWheel={handleWheel}
-                onDoubleClick={handleDoubleClick}
-                onPointerDown={handlePointerDown}
-                onPointerMove={handlePointerMove}
-                onPointerUp={handlePointerUp}
-                onPointerCancel={handlePointerUp}
-              >
-                <img
-                  src={allImages[activeImageIndex]?.signed_url || ""}
-                  alt={photo.product_name || "Photo"}
-                  className="w-full rounded-lg origin-top-left transition-transform duration-100"
-                  style={{ transform: `scale(${zoomScale})`, touchAction: "pinch-zoom" }}
-                  draggable={false}
-                />
-              </div>
-              {zoomScale !== 1 && (
-                <Badge className="absolute top-2 left-1/2 -translate-x-1/2 bg-background/80 text-foreground backdrop-blur-sm text-xs">
-                  {Math.round(zoomScale * 100)}% — double-click to reset
-                </Badge>
-              )}
-              <Button
-                variant="outline"
-                size="sm"
-                className="absolute left-1 top-1/2 -translate-y-1/2 h-10 w-10 p-0 border-2 border-destructive bg-background/80 backdrop-blur-sm text-foreground"
-                onClick={() => setActiveImageIndex((i) => (i - 1 + totalImages) % totalImages)}
-              >
-                ‹
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="absolute right-1 top-1/2 -translate-y-1/2 h-10 w-10 p-0 border-2 border-destructive bg-background/80 backdrop-blur-sm text-foreground"
-                onClick={() => setActiveImageIndex((i) => (i + 1) % totalImages)}
-              >
-                ›
-              </Button>
-            </div>
-            {/* Thumbnail strip */}
-            <div className="flex gap-2 overflow-x-auto py-2 px-1">
-              {allImages.map((img, i) => (
-                <div key={img.id} className="relative shrink-0 group/thumb">
-                  <button
-                    className={`block h-16 w-16 rounded-md overflow-hidden border-2 transition-all ${i === activeImageIndex ? "border-primary ring-1 ring-primary" : "border-transparent hover:border-muted-foreground/40"}`}
-                    onClick={() => setActiveImageIndex(i)}
-                  >
-                    {img.signed_url ? (
-                      <img src={img.signed_url} alt="" className="h-full w-full object-cover" />
-                    ) : (
-                      <div className="h-full w-full bg-muted flex items-center justify-center">
-                        <ImageIcon className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                    )}
-                  </button>
-                  {onUnlinkPhoto && canEdit && totalImages > 1 && (
-                    <button
-                      className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 transition-opacity shadow-sm"
-                      title="Unlink from this card"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const imgToUnlink = i === 0 ? allImages[1] : img;
-                        if (confirm("Unlink this photo from the card? It will become its own card.")) {
-                          onUnlinkPhoto(imgToUnlink.id);
-                          if (activeImageIndex >= totalImages - 1) setActiveImageIndex(Math.max(0, activeImageIndex - 1));
-                        }
-                      }}
-                    >
-                      <Unlink2 className="h-3 w-3" />
-                    </button>
-                  )}
+            <>
+              <div className="relative">
+                <div
+                  ref={imgContainerRef}
+                  className="overflow-auto max-h-[50vh] touch-pan-x touch-pan-y cursor-grab active:cursor-grabbing select-none"
+                  onWheel={handleWheel}
+                  onDoubleClick={handleDoubleClick}
+                  onPointerDown={handlePointerDown}
+                  onPointerMove={handlePointerMove}
+                  onPointerUp={handlePointerUp}
+                  onPointerCancel={handlePointerUp}
+                >
+                  <img
+                    src={allImages[activeImageIndex]?.signed_url || ""}
+                    alt={photo.product_name || "Photo"}
+                    className="w-full rounded-lg origin-top-left transition-transform duration-100"
+                    style={{ transform: `scale(${zoomScale})`, touchAction: "pinch-zoom" }}
+                    draggable={false}
+                  />
                 </div>
-              ))}
-            </div>
+                {zoomScale !== 1 && (
+                  <Badge className="absolute top-2 left-1/2 -translate-x-1/2 bg-background/80 text-foreground backdrop-blur-sm text-xs">
+                    {Math.round(zoomScale * 100)}% — double-click to reset
+                  </Badge>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="absolute left-1 top-1/2 -translate-y-1/2 h-10 w-10 p-0 border-2 border-destructive bg-background/80 backdrop-blur-sm text-foreground"
+                  onClick={() => setActiveImageIndex((i) => (i - 1 + totalImages) % totalImages)}
+                >
+                  ‹
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 h-10 w-10 p-0 border-2 border-destructive bg-background/80 backdrop-blur-sm text-foreground"
+                  onClick={() => setActiveImageIndex((i) => (i + 1) % totalImages)}
+                >
+                  ›
+                </Button>
+              </div>
+              {/* Thumbnail strip with unlink buttons */}
+              <div className="flex gap-2 overflow-x-auto py-2 px-1">
+                {allImages.map((img, i) => (
+                  <div key={img.id} className="relative shrink-0 group/thumb">
+                    <button
+                      className={`block h-16 w-16 rounded-md overflow-hidden border-2 transition-all ${i === activeImageIndex ? "border-primary ring-1 ring-primary" : "border-transparent hover:border-muted-foreground/40"}`}
+                      onClick={() => setActiveImageIndex(i)}
+                    >
+                      {img.signed_url ? (
+                        <img src={img.signed_url} alt="" className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="h-full w-full bg-muted flex items-center justify-center">
+                          <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                      )}
+                    </button>
+                    {onUnlinkPhoto && canEdit && (
+                      <button
+                        className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 transition-opacity shadow-sm"
+                        title="Unlink from this card"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const imgToUnlink = i === 0 ? allImages[1] : img;
+                          if (confirm("Unlink this photo from the card? It will become its own card.")) {
+                            onUnlinkPhoto(imgToUnlink.id);
+                            if (activeImageIndex >= totalImages - 1) setActiveImageIndex(Math.max(0, activeImageIndex - 1));
+                          }
+                        }}
+                      >
+                        <Unlink2 className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
           ) : photo.signed_url ? (
             <div
               className="overflow-auto max-h-[50vh] touch-pan-x touch-pan-y cursor-grab active:cursor-grabbing relative select-none"
