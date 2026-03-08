@@ -972,7 +972,6 @@ export default function TripDetail() {
             <Undo2 className="h-3.5 w-3.5" /> {undoing ? "Undoing..." : `Undo ${undoAction.label}`}
           </Button>
         )}
-        )}
       </div>
 
       {/* Upload dialog */}
