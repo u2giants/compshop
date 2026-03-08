@@ -52,9 +52,8 @@ export function useBulkUndo() {
     async (onDone: () => void) => {
       if (!undoAction) return;
       setUndoing(true);
-      try {
         for (const snap of undoAction.snapshots) {
-          const id = snap.id as string;
+          const id = String(snap.id);
           const updates = { ...snap };
           delete updates.id;
           await supabase.from(undoAction.table).update(updates).eq("id", id);
