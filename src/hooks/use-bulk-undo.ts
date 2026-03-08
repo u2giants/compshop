@@ -5,7 +5,7 @@ export interface BulkUndoAction {
   type: "edit" | "move" | "section";
   label: string;
   /** Photo snapshots to restore: id + all fields that were potentially changed */
-  snapshots: Record<string, Record<string, unknown>>[];
+  snapshots: Record<string, unknown>[];
   table: "photos" | "china_photos";
 }
 
