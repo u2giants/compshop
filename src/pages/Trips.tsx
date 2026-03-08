@@ -264,13 +264,7 @@ export default function Trips() {
 
     // Pre-fetch GPS coordinates for existing trips (use first photo with GPS per trip)
     const sameDateTrips = trips.filter((t) => clusters.some((c) => c.date === t.date));
-    const tripGps = new Map<string, { lat: number; lng: number }>();
     if (sameDateTrips.length > 0) {
-      const { data: tripPhotos } = await supabase
-        .from("photos")
-        .select("trip_id, id")
-        .in("trip_id", sameDateTrips.map((t) => t.id))
-        .limit(500);
       // We don't have GPS on photos table, so we can't match by location against existing trips.
       // Only match existing trips if cluster has NO GPS (date-only fallback).
     }
