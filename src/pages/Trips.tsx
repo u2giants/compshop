@@ -87,25 +87,42 @@ export default function Trips() {
         .order("date", { ascending: false });
 
       if (data) {
-        const tripsWithCounts = await Promise.all(
-          data.map(async (trip) => {
-            const [{ count: photoCount }, { count: memberCount }, coverResult] = await Promise.all([
-              supabase.from("photos").select("*", { count: "exact", head: true }).eq("trip_id", trip.id),
-              supabase.from("trip_members").select("*", { count: "exact", head: true }).eq("trip_id", trip.id),
-              supabase.from("photos").select("file_path").eq("trip_id", trip.id).order("created_at", { ascending: true }).limit(1),
-            ]);
-            
-            let cover_url: string | undefined;
-            if (coverResult.data?.[0]?.file_path) {
-              try { cover_url = await getSignedPhotoUrl(coverResult.data[0].file_path); } catch {}
-            }
-
-            return { ...trip, photo_count: photoCount ?? 0, member_count: memberCount ?? 0, cover_url };
-          })
+        // Batch queries: get all photo counts and cover photos in fewer requests
+        const tripIds = data.map(t => t.id);
+        
+        // Get photo counts for all trips at once
+        const photoCountPromises = tripIds.map(tid =>
+          supabase.from("photos").select("*", { count: "exact", head: true }).eq("trip_id", tid)
         );
+        const memberCountPromises = tripIds.map(tid =>
+          supabase.from("trip_members").select("*", { count: "exact", head: true }).eq("trip_id", tid)
+        );
+        const coverPromises = tripIds.map(tid =>
+          supabase.from("photos").select("file_path").eq("trip_id", tid).order("created_at", { ascending: true }).limit(1)
+        );
+        
+        const [photoCounts, memberCounts, coverResults] = await Promise.all([
+          Promise.all(photoCountPromises),
+          Promise.all(memberCountPromises),
+          Promise.all(coverPromises),
+        ]);
+
+        // Batch signed URLs for all cover photos in a single call
+        const coverPaths = coverResults
+          .map(r => r.data?.[0]?.file_path)
+          .filter(Boolean) as string[];
+        const urlMap = await batchSignedUrls(coverPaths.map(fp => ({ file_path: fp })));
+
+        const tripsWithCounts = data.map((trip, i) => ({
+          ...trip,
+          photo_count: photoCounts[i].count ?? 0,
+          member_count: memberCounts[i].count ?? 0,
+          cover_url: coverResults[i].data?.[0]?.file_path
+            ? urlMap.get(coverResults[i].data![0].file_path)
+            : undefined,
+        }));
         setTrips(tripsWithCounts);
 
-        // Replace cache entirely with fresh server data to remove stale/deleted trips
         await clearCachedTrips();
         await cacheTrips(tripsWithCounts);
       }
