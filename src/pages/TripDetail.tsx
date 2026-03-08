@@ -1114,7 +1114,36 @@ export default function TripDetail() {
             <p className="text-sm text-muted-foreground">No photos yet. Tap "Add Photo" to capture your first find.</p>
           </CardContent>
         </Card>
+      ) : viewAllMode ? (
+        /* ── Flat "View All" grid ── */
+        <div className="grid gap-1 grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8">
+          {photos.map((photo) => (
+            <button
+              key={photo.id}
+              className={cn(
+                "relative aspect-square overflow-hidden rounded-md group focus:outline-none focus:ring-2 focus:ring-primary",
+                selectedPhotos.has(photo.id) && "ring-2 ring-primary"
+              )}
+              onClick={(e) => toggleSelectPhoto(photo.id, e)}
+            >
+              {photo.signed_url ? (
+                <img src={photo.signed_url} alt={photo.product_name || "Photo"} className="h-full w-full object-cover transition-transform group-hover:scale-105" loading="lazy" />
+              ) : (
+                <div className="h-full w-full bg-muted animate-pulse" />
+              )}
+              {photo.product_name && (
+                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-1.5 pb-1 pt-4">
+                  <p className="text-[10px] text-white leading-tight truncate">{photo.product_name}</p>
+                </div>
+              )}
+              {selectedPhotos.has(photo.id) && (
+                <div className="absolute inset-0 bg-primary/20" />
+              )}
+            </button>
+          ))}
+        </div>
       ) : (
+        /* ── Grouped view (default) ── */
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {groupPhotos(photos).map(({ primary, extras }) => (
             <PhotoCard

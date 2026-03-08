@@ -854,7 +854,7 @@ export default function ChinaTripDetail() {
         </div>
       )}
 
-      {/* Photos grid — grouped by section */}
+      {/* Photos grid */}
       {groups.length === 0 && pendingPhotos.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
@@ -863,7 +863,36 @@ export default function ChinaTripDetail() {
             <p className="mt-2 text-sm text-muted-foreground">Add photos from this supplier visit.</p>
           </CardContent>
         </Card>
+      ) : viewAllMode ? (
+        /* ── Flat "View All" grid ── */
+        <div className="grid gap-1 grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8">
+          {photos.map((photo) => (
+            <button
+              key={photo.id}
+              className={cn(
+                "relative aspect-square overflow-hidden rounded-md group focus:outline-none focus:ring-2 focus:ring-primary",
+                selectedPhotos.has(photo.id) && "ring-2 ring-primary"
+              )}
+              onClick={(e) => toggleSelectPhoto(photo.id, e)}
+            >
+              {photo.signed_url ? (
+                <img src={photo.signed_url} alt={photo.product_name || "Photo"} className="h-full w-full object-cover transition-transform group-hover:scale-105" loading="lazy" />
+              ) : (
+                <div className="h-full w-full bg-muted animate-pulse" />
+              )}
+              {photo.product_name && (
+                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-1.5 pb-1 pt-4">
+                  <p className="text-[10px] text-white leading-tight truncate">{photo.product_name}</p>
+                </div>
+              )}
+              {selectedPhotos.has(photo.id) && (
+                <div className="absolute inset-0 bg-primary/20" />
+              )}
+            </button>
+          ))}
+        </div>
       ) : (
+        /* ── Grouped by section (default) ── */
         <div className="space-y-6">
           {sectionedGroups.map(({ section, items }, sIdx) => (
             <div
@@ -873,7 +902,6 @@ export default function ChinaTripDetail() {
                 e.preventDefault();
                 const draggedId = e.dataTransfer.getData("text/plain");
                 if (draggedId) {
-                  // Move photo to this section
                   supabase.from("china_photos").update({ section: section ?? null }).eq("id", draggedId)
                     .then(({ error }) => {
                       if (!error) {
