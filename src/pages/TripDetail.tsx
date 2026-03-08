@@ -65,6 +65,7 @@ export default function TripDetail() {
   const [editingStore, setEditingStore] = useState(false);
   const [storeValue, setStoreValue] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { undoAction, undoing, captureSnapshot, setUndo, performUndo, clearUndo } = useBulkUndo();
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
   const dragCounterRef = useRef(0);
