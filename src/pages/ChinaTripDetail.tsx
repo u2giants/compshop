@@ -955,6 +955,7 @@ export default function ChinaTripDetail() {
                     tripId={id}
                     onUpdated={loadPhotos}
                     onGroupPhoto={handleGroupPhoto}
+                    onUnlinkPhoto={handleUnlinkPhoto}
                     chinaMode
                     selected={selectedPhotos.has(primary.id)}
                     onSelect={toggleSelectPhoto}
