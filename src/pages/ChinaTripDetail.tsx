@@ -60,6 +60,7 @@ export default function ChinaTripDetail() {
   const countries = useCountries();
   const categories = useCategories();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { undoAction, undoing, captureSnapshot, setUndo, performUndo, clearUndo } = useBulkUndo();
 
   const [trip, setTrip] = useState<ChinaTrip | null>(null);
   const [photos, setPhotos] = useState<Photo[]>([]);
