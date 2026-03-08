@@ -163,6 +163,7 @@ export default function TripDetail() {
   }
 
   const [downloading, setDownloading] = useState(false);
+  const [viewAllMode, setViewAllMode] = useState(false);
 
   function buildFileName(photo: Photo, indexInGroup?: number): string {
     const ext = photo.file_path.split(".").pop() || "jpg";
