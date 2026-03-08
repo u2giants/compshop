@@ -1076,7 +1076,13 @@ export default function ChinaTripDetail() {
           onOpenChange={setShowBulkMove}
           photoIds={Array.from(selectedPhotos)}
           currentTripId={trip.id}
-          onMoved={() => { setSelectedPhotos(new Set()); loadPhotos(); }}
+          onMoved={() => {
+            const ids = Array.from(selectedPhotos);
+            const snapshots = captureSnapshot(ids, photos as any[], ["trip_id"]);
+            setUndo({ type: "move", label: `move (${ids.length} photos)`, snapshots, table: "china_photos" });
+            setSelectedPhotos(new Set());
+            loadPhotos();
+          }}
         />
       )}
 
@@ -1085,7 +1091,15 @@ export default function ChinaTripDetail() {
         onOpenChange={setShowBulkEdit}
         photoIds={Array.from(selectedPhotos)}
         photos={photos.map((p) => ({ id: p.id, product_name: p.product_name }))}
-        onApplied={() => { setSelectedPhotos(new Set()); loadPhotos(); }}
+        onApplied={() => {
+          const ids = Array.from(selectedPhotos);
+          const snapshots = captureSnapshot(ids, photos as any[], [
+            "product_name", "category", "price", "brand", "dimensions", "country_of_origin", "material", "image_type",
+          ]);
+          setUndo({ type: "edit", label: `bulk edit (${ids.length} photos)`, snapshots, table: "china_photos" });
+          setSelectedPhotos(new Set());
+          loadPhotos();
+        }}
         chinaMode
       />
     </div>
