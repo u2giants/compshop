@@ -1040,6 +1040,9 @@ export default function ChinaTripDetail() {
             <Button variant="ghost" size="sm" onClick={() => setSelectedPhotos(new Set())}>
               Clear
             </Button>
+            <Button variant="outline" onClick={handleCacheSelected} disabled={bulkCaching} className="gap-2">
+              <Download className="h-4 w-4" /> {bulkCaching ? `Caching...` : `Cache ${selectedPhotos.size} Offline`}
+            </Button>
           </>
         )}
 
