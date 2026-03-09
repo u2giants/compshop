@@ -26,7 +26,7 @@ export default function AppShell() {
   const isChina = mode === "china_trip";
   const tripsLabel = isChina ? "Asia Trips" : "Str Trips";
 
-  const handleTripsPointerDown = useCallback(() => {
+  const handleTripsLongPressStart = useCallback(() => {
     longPressTriggered.current = false;
     longPressTimer.current = setTimeout(() => {
       longPressTriggered.current = true;
@@ -34,12 +34,21 @@ export default function AppShell() {
     }, 500);
   }, []);
 
-  const handleTripsPointerUp = useCallback(() => {
+  const handleTripsLongPressEnd = useCallback(() => {
     if (longPressTimer.current) {
       clearTimeout(longPressTimer.current);
       longPressTimer.current = null;
     }
   }, []);
+
+  const handleTripsClick = useCallback((path: string) => {
+    // If long-press just triggered the mode menu, don't also navigate
+    if (longPressTriggered.current) {
+      longPressTriggered.current = false;
+      return;
+    }
+    handleNavClick(path);
+  }, [isChina]);
 
   if (!user) return null;
 
@@ -143,25 +152,13 @@ export default function AppShell() {
                 return (
                   <div key={item.path} className="relative">
                     <button
-                      onTouchStart={handleTripsPointerDown}
-                      onTouchEnd={(e) => {
-                        handleTripsPointerUp();
-                        if (!longPressTriggered.current) {
-                          handleNavClick(item.path);
-                        } else {
-                          e.preventDefault();
-                        }
-                      }}
-                      onTouchCancel={handleTripsPointerUp}
-                      onClick={(e) => {
-                        // Desktop fallback
-                        if (!longPressTriggered.current) {
-                          handleNavClick(item.path);
-                        }
-                      }}
+                      onPointerDown={handleTripsLongPressStart}
+                      onPointerUp={handleTripsLongPressEnd}
+                      onPointerCancel={handleTripsLongPressEnd}
+                      onClick={() => handleTripsClick(item.path)}
                       onContextMenu={(e) => e.preventDefault()}
                       className={cn(
-                        "flex flex-col items-center gap-0.5 px-3 py-1 text-xs transition-colors select-none",
+                        "flex flex-col items-center gap-0.5 px-3 py-1 text-xs transition-colors select-none touch-manipulation",
                         isActive ? "text-primary" : "text-muted-foreground"
                       )}
                     >
