@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { cacheTrips, getCachedTrips, clearCachedTrips, type CachedTrip } from "@/lib/offline-db";
 import { useOnlineStatus } from "@/hooks/use-online-status";
 import { useRetailers } from "@/hooks/use-retailers";
+import { useCategories } from "@/hooks/use-categories";
 import { uploadPhoto, hashFile, checkDuplicatePhoto } from "@/lib/supabase-helpers";
 import { batchSignedUrls } from "@/lib/photo-utils";
 import { extractExif, distanceKm } from "@/lib/exif-utils";

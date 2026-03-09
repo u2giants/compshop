@@ -19,6 +19,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+import { useCategories } from "@/hooks/use-categories";
 import ChinaDraftTrips from "@/components/trip/ChinaDraftTrips";
 
 import CantonFairGroupCard, { type ChinaTripListItem } from "@/components/trip/CantonFairGroupCard";
