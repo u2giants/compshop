@@ -120,6 +120,7 @@ export default function CantonFairGroupCard({
                       if (selectMode) onToggleSelect(child.id);
                       else navigate(`/china/${child.id}`);
                     }}
+                    onReclassified={onReclassified}
                   />
                 ))}
                 {children.length === 0 && (

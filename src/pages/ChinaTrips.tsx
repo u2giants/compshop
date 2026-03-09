@@ -658,6 +658,7 @@ export default function ChinaTrips() {
                 if (selectMode) toggleSelect(trip.id);
                 else navigate(`/china/${trip.id}`);
               }}
+              onReclassified={loadTrips}
             />
           ))}
         </div>
