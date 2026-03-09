@@ -406,16 +406,33 @@ export default function Trips() {
     if (draftCount > 0) setDraftsOpen(true);
   }
 
+  // Fetch trip IDs matching selected category
+  useEffect(() => {
+    if (!filterCategory) {
+      setCategoryTripIds(null);
+      return;
+    }
+    supabase
+      .from("photos")
+      .select("trip_id")
+      .eq("category", filterCategory)
+      .then(({ data }) => {
+        if (data) setCategoryTripIds(new Set(data.map(d => d.trip_id)));
+        else setCategoryTripIds(new Set());
+      });
+  }, [filterCategory]);
+
   const filteredTrips = trips.filter((trip) => {
     if (filterDate && trip.date !== filterDate) return false;
     if (filterRetailer && trip.store.toLowerCase() !== filterRetailer.toLowerCase()) return false;
+    if (categoryTripIds && !categoryTripIds.has(trip.id)) return false;
     return true;
   });
 
   const uniqueDates = [...new Set(trips.map((t) => t.date))].sort((a, b) => b.localeCompare(a));
   const uniqueStores = [...new Set(trips.map((t) => t.store))].sort();
 
-  const hasFilters = filterDate || filterRetailer;
+  const hasFilters = filterDate || filterRetailer || filterCategory;
 
   return (
     <div className="container py-6">
