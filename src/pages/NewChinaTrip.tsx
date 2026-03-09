@@ -260,8 +260,8 @@ export default function NewChinaTrip() {
               </div>
             )}
 
-            {/* Auto-suggest parent group */}
-            {canHaveParent && availableGroups.length > 0 && (
+            {/* Auto-suggest parent group - hide when parent is preset from URL */}
+            {canHaveParent && !presetParent && availableGroups.length > 0 && (
               <div className="space-y-2">
                 <Label>Parent Group (optional)</Label>
                 <Select value={selectedParentId} onValueChange={setSelectedParentId}>
