@@ -480,6 +480,18 @@ export default function ChinaTrips() {
     return true;
   });
 
+  // Separate into groups (parent_id is null, venue_type is canton_fair with end_date) and standalone trips
+  const groupTrips = filteredTrips.filter(t => !t.parent_id && t.end_date != null);
+  const childTrips = filteredTrips.filter(t => t.parent_id != null);
+  const standaloneTrips = filteredTrips.filter(t => !t.parent_id && t.end_date == null);
+
+  const childrenByParent = new Map<string, ChinaTrip[]>();
+  childTrips.forEach(c => {
+    const list = childrenByParent.get(c.parent_id!) || [];
+    list.push(c);
+    childrenByParent.set(c.parent_id!, list);
+  });
+
   const uniqueDates = [...new Set(trips.map((t) => t.date))].sort((a, b) => b.localeCompare(a));
   const hasFilters = filterDate || filterVenue;
 
