@@ -174,8 +174,8 @@ export default function Factories() {
       </div>
 
       <div className="mb-6">
-        <h1 className="font-sans text-3xl md:text-4xl">Factories</h1>
-        <p className="mt-1 text-muted-foreground hidden md:block">All suppliers and factories across your Asia trips</p>
+        <h1 className="font-sans text-3xl md:text-4xl">Factory Visits</h1>
+        <p className="mt-1 text-muted-foreground hidden md:block">All standalone factory visit trips</p>
       </div>
 
       {suppliers.length > 0 && (
