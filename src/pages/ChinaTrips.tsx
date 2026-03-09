@@ -593,6 +593,7 @@ export default function ChinaTrips() {
             <SelectContent>
               <SelectItem value="canton_fair">Canton Fair</SelectItem>
               <SelectItem value="factory_visit">Factory Visit</SelectItem>
+              <SelectItem value="booth_visit">Booth Visit</SelectItem>
             </SelectContent>
           </Select>
           {hasFilters && (
