@@ -158,6 +158,20 @@ export default function Factories() {
 
   return (
     <div className="container py-6">
+      {/* Tabs navigation */}
+      <div className="mb-4">
+        <Tabs value="factories" onValueChange={(v) => v === "trips" && navigate("/china")}>
+          <TabsList>
+            <TabsTrigger value="trips" className="gap-1.5">
+              <Factory className="h-4 w-4" /> Trips
+            </TabsTrigger>
+            <TabsTrigger value="factories" className="gap-1.5">
+              <Building2 className="h-4 w-4" /> Factories
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
+
       <div className="mb-6">
         <h1 className="font-sans text-3xl md:text-4xl">Factories</h1>
         <p className="mt-1 text-muted-foreground hidden md:block">All suppliers and factories across your Asia trips</p>
