@@ -15,6 +15,8 @@ const TripDetail = lazy(() => import("@/pages/TripDetail"));
 const ChinaTrips = lazy(() => import("@/pages/ChinaTrips"));
 const NewChinaTrip = lazy(() => import("@/pages/NewChinaTrip"));
 const ChinaTripDetail = lazy(() => import("@/pages/ChinaTripDetail"));
+const Factories = lazy(() => import("@/pages/Factories"));
+const FactoryDetail = lazy(() => import("@/pages/FactoryDetail"));
 const Profile = lazy(() => import("@/pages/Profile"));
 const ImportKeep = lazy(() => import("@/pages/ImportKeep"));
 const ImportTeams = lazy(() => import("@/pages/ImportTeams"));
