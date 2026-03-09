@@ -64,7 +64,7 @@ const App = () => (
                     </ProtectedRoute>
                   }
                 >
-                  <Route path="/" element={<Trips />} />
+                  <Route path="/" element={<ModeRedirect><Trips /></ModeRedirect>} />
                   <Route path="/trips/new" element={<NewTrip />} />
                   <Route path="/trips/:id" element={<TripDetail />} />
                   <Route path="/china" element={<ChinaTrips />} />
