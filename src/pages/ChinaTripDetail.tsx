@@ -521,6 +521,39 @@ export default function ChinaTripDetail() {
         body: { imageBase64: base64, mimeType: selectedFile.type, categories },
       });
       if (error) throw error;
+
+      // Handle business card detection
+      if (data.is_business_card && data.company_name && user && id) {
+        const { data: newFactory, error: factoryError } = await supabase
+          .from("factories")
+          .insert({
+            name: data.company_name,
+            contact_person: data.contact_person || null,
+            phone: data.phone || null,
+            email: data.email || null,
+            wechat: data.wechat || null,
+            whatsapp: data.whatsapp || null,
+            address: data.address || null,
+            website: data.website || null,
+            created_by: user.id,
+          })
+          .select()
+          .single();
+
+        if (!factoryError && newFactory) {
+          await supabase.from("china_trips").update({ factory_id: newFactory.id }).eq("id", id);
+          toast({
+            title: "Business card detected!",
+            description: `Contact info for "${data.company_name}" saved to this trip.`,
+          });
+        } else {
+          toast({ title: "Business card detected", description: "But failed to save contact info." });
+        }
+        setAnalyzing(false);
+        return;
+      }
+
+      // Handle product photo
       if (data.product_name) setFormFields((f) => ({ ...f, product_name: data.product_name }));
       if (data.category) setFormFields((f) => ({ ...f, category: data.category }));
       if (data.price != null) setFormFields((f) => ({ ...f, price: String(data.price) }));
