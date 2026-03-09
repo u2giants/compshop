@@ -28,10 +28,15 @@ interface ParentGroup {
 export default function NewChinaTrip() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { toast } = useToast();
+
+  const presetType = searchParams.get("type") || "factory_visit";
+  const presetParent = searchParams.get("parent") || "";
+
   const [submitting, setSubmitting] = useState(false);
   const [supplier, setSupplier] = useState("");
-  const [venueType, setVenueType] = useState<string>("factory_visit");
+  const [venueType, setVenueType] = useState<string>(presetType);
   const [location, setLocation] = useState("");
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [endDate, setEndDate] = useState("");
