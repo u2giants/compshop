@@ -36,10 +36,13 @@ export default function Trips() {
   const { toast } = useToast();
   const { retailerNames, getLogoUrl } = useRetailers();
   const isMobile = useIsMobile();
+  const categories = useCategories();
   const [trips, setTrips] = useState<TripWithCover[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterDate, setFilterDate] = useState("");
   const [filterRetailer, setFilterRetailer] = useState("");
+  const [filterCategory, setFilterCategory] = useState("");
+  const [categoryTripIds, setCategoryTripIds] = useState<Set<string> | null>(null);
   const smartUploadRef = useRef<HTMLInputElement>(null);
   const [smartUploading, setSmartUploading] = useState(false);
   const [smartProgress, setSmartProgress] = useState(0);
