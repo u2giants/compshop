@@ -34,6 +34,7 @@ interface CantonFairGroupCardProps {
   selectMode: boolean;
   selected: Set<string>;
   onToggleSelect: (id: string) => void;
+  onReclassified?: () => void;
 }
 
 export default function CantonFairGroupCard({
@@ -42,6 +43,7 @@ export default function CantonFairGroupCard({
   selectMode,
   selected,
   onToggleSelect,
+  onReclassified,
 }: CantonFairGroupCardProps) {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
@@ -118,6 +120,7 @@ export default function CantonFairGroupCard({
                       if (selectMode) onToggleSelect(child.id);
                       else navigate(`/china/${child.id}`);
                     }}
+                    onReclassified={onReclassified}
                   />
                 ))}
                 {children.length === 0 && (
