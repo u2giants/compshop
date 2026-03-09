@@ -152,6 +152,7 @@ export type Database = {
           date: string
           deleted_at: string | null
           end_date: string | null
+          factory_id: string | null
           id: string
           is_draft: boolean
           location: string | null
@@ -168,6 +169,7 @@ export type Database = {
           date?: string
           deleted_at?: string | null
           end_date?: string | null
+          factory_id?: string | null
           id?: string
           is_draft?: boolean
           location?: string | null
@@ -184,6 +186,7 @@ export type Database = {
           date?: string
           deleted_at?: string | null
           end_date?: string | null
+          factory_id?: string | null
           id?: string
           is_draft?: boolean
           location?: string | null
@@ -195,6 +198,13 @@ export type Database = {
           venue_type?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "china_trips_factory_id_fkey"
+            columns: ["factory_id"]
+            isOneToOne: false
+            referencedRelation: "factories"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "china_trips_parent_id_fkey"
             columns: ["parent_id"]
@@ -254,6 +264,54 @@ export type Database = {
           created_at?: string
           id?: string
           name?: string
+        }
+        Relationships: []
+      }
+      factories: {
+        Row: {
+          address: string | null
+          contact_person: string | null
+          created_at: string
+          created_by: string | null
+          email: string | null
+          id: string
+          name: string
+          notes: string | null
+          phone: string | null
+          updated_at: string
+          website: string | null
+          wechat: string | null
+          whatsapp: string | null
+        }
+        Insert: {
+          address?: string | null
+          contact_person?: string | null
+          created_at?: string
+          created_by?: string | null
+          email?: string | null
+          id?: string
+          name: string
+          notes?: string | null
+          phone?: string | null
+          updated_at?: string
+          website?: string | null
+          wechat?: string | null
+          whatsapp?: string | null
+        }
+        Update: {
+          address?: string | null
+          contact_person?: string | null
+          created_at?: string
+          created_by?: string | null
+          email?: string | null
+          id?: string
+          name?: string
+          notes?: string | null
+          phone?: string | null
+          updated_at?: string
+          website?: string | null
+          wechat?: string | null
+          whatsapp?: string | null
         }
         Relationships: []
       }
