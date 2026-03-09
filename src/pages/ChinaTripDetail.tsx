@@ -11,6 +11,7 @@ import { useCategories } from "@/hooks/use-categories";
 import { useBulkUndo } from "@/hooks/use-bulk-undo";
 import { useCountries } from "@/hooks/use-countries";
 import { useOnlineStatus } from "@/hooks/use-online-status";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   getCachedTrip,
   cacheTrips,
@@ -41,15 +42,14 @@ import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, Camera, Calendar, MapPin, Factory, Sparkles, Loader2, Download,
   Images, ArrowRightLeft, PenLine, Pencil, CalendarIcon, CloudOff, Plus, LayoutGrid, Layers, Undo2,
+  User, Phone, Mail, MessageCircle, Globe, Merge, CheckSquare, X,
 } from "lucide-react";
 import { format } from "date-fns";
 import PhotoCard from "@/components/trip/PhotoCard";
 import ChinaMoveToTripDialog from "@/components/trip/ChinaMoveToTripDialog";
 import BulkEditDialog from "@/components/trip/BulkEditDialog";
+import LinkToCardDialog from "@/components/trip/LinkToCardDialog";
 import AutocompleteInput from "@/components/ui/autocomplete-input";
-
-// ChinaTrip, Photo types imported from @/types/models
-// groupPhotos, groupBySection imported from @/lib/photo-utils
 
 export default function ChinaTripDetail() {
   const { id } = useParams<{ id: string }>();
@@ -59,7 +59,9 @@ export default function ChinaTripDetail() {
   const online = useOnlineStatus();
   const countries = useCountries();
   const categories = useCategories();
+  const isMobile = useIsMobile();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const { undoAction, undoing, captureSnapshot, setUndo, performUndo, clearUndo } = useBulkUndo();
 
   const [trip, setTrip] = useState<ChinaTrip | null>(null);
@@ -84,6 +86,17 @@ export default function ChinaTripDetail() {
   const [bulkAnalyzeProgress, setBulkAnalyzeProgress] = useState(0);
   const [downloading, setDownloading] = useState(false);
   const [viewAllMode, setViewAllMode] = useState(false);
+
+  // Factory/business card info
+  const [factoryInfo, setFactoryInfo] = useState<{
+    id: string; name: string; contact_person: string | null; phone: string | null;
+    email: string | null; wechat: string | null; whatsapp: string | null;
+    address: string | null; website: string | null;
+  } | null>(null);
+
+  // Mobile link dialog
+  const [showLinkDialog, setShowLinkDialog] = useState(false);
+  const [linkSourceId, setLinkSourceId] = useState("");
 
   // Inline editing state
   const [editingSupplier, setEditingSupplier] = useState(false);
@@ -211,7 +224,6 @@ export default function ChinaTripDetail() {
         // Handle business card detection
         if (data.is_business_card && data.company_name && user && id) {
           businessCardsFound++;
-          // Create or update factory record
           const { data: newFactory, error: factoryError } = await supabase
             .from("factories")
             .insert({
@@ -229,8 +241,8 @@ export default function ChinaTripDetail() {
             .single();
 
           if (!factoryError && newFactory) {
-            // Link factory to trip
             await supabase.from("china_trips").update({ factory_id: newFactory.id }).eq("id", id);
+            setFactoryInfo(newFactory as any);
             success++;
           }
           continue;
@@ -262,6 +274,31 @@ export default function ChinaTripDetail() {
     loadPhotos();
   }
 
+  // ── Group selected photos together ──
+  async function handleGroupSelected() {
+    if (selectedPhotos.size < 2) {
+      toast({ title: "Select at least 2 photos to group" });
+      return;
+    }
+    const ids = Array.from(selectedPhotos);
+    // First selected becomes the target (primary)
+    const targetId = ids[0];
+    const toGroup = ids.slice(1);
+
+    const { error } = await supabase
+      .from("china_photos")
+      .update({ group_id: targetId })
+      .in("id", toGroup);
+
+    if (error) {
+      toast({ title: "Grouping failed", variant: "destructive" });
+      return;
+    }
+    toast({ title: `${ids.length} photos grouped together` });
+    setSelectedPhotos(new Set());
+    loadPhotos();
+  }
+
   // ── Assign selected photos to a section ──
   async function handleAssignSection(sectionName: string) {
     if (selectedPhotos.size === 0) return;
@@ -284,7 +321,6 @@ export default function ChinaTripDetail() {
     if (selectedPhotos.size > 0) {
       await handleAssignSection(name);
     } else {
-      // Add empty section placeholder so it appears as a drop target
       setEmptySections((prev) => prev.includes(name) ? prev : [...prev, name]);
       toast({ title: `Section "${name}" created`, description: "Drag photos into it to organize." });
     }
@@ -325,7 +361,6 @@ export default function ChinaTripDetail() {
   }, [id, online]);
 
   async function loadTrip() {
-    // Try cached first
     const cached = await getCachedTrip(id!);
     if (cached) { setTrip(cached as any); setLoading(false); }
     if (!navigator.onLine) { setLoading(false); return; }
@@ -334,6 +369,11 @@ export default function ChinaTripDetail() {
       if (data) {
         setTrip(data);
         await cacheTrips([{ id: data.id, name: data.name, store: data.supplier, date: data.date, location: data.location, notes: data.notes, created_by: data.created_by, created_at: data.created_at, updated_at: data.updated_at }]);
+        // Load factory info if linked
+        if (data.factory_id) {
+          const { data: factory } = await supabase.from("factories").select("*").eq("id", data.factory_id).single();
+          if (factory) setFactoryInfo(factory as any);
+        }
       }
     } catch (err) { console.error("Error loading china trip", err); }
     setLoading(false);
@@ -355,7 +395,6 @@ export default function ChinaTripDetail() {
     try {
       const { data } = await supabase.from("china_photos").select("*").eq("trip_id", id!).order("created_at", { ascending: false });
       if (data) {
-        // Batch signed URL generation (single API call instead of N)
         const urlMap = await batchSignedUrls(data);
         const withUrls = data.map((p) => {
           const signed_url = urlMap.get(p.file_path);
@@ -364,7 +403,6 @@ export default function ChinaTripDetail() {
         });
         setPhotos(withUrls as Photo[]);
         await cachePhotos(data as unknown as CachedPhoto[]);
-        // Fetch user profiles for attribution
         const userIds = [...new Set(data.map(p => p.user_id).filter(Boolean))] as string[];
         if (userIds.length > 0) {
           const { data: profiles } = await supabase.from("profiles").select("id, display_name, email").in("id", userIds);
@@ -444,6 +482,8 @@ export default function ChinaTripDetail() {
         }
       });
     }
+    // Reset input so same file can be selected again
+    e.target.value = "";
   }
 
   function openSingleUpload(file: File) {
@@ -542,6 +582,7 @@ export default function ChinaTripDetail() {
 
         if (!factoryError && newFactory) {
           await supabase.from("china_trips").update({ factory_id: newFactory.id }).eq("id", id);
+          setFactoryInfo(newFactory as any);
           toast({
             title: "Business card detected!",
             description: `Contact info for "${data.company_name}" saved to this trip.`,
@@ -613,7 +654,6 @@ export default function ChinaTripDetail() {
       setPreviewUrl(null);
       loadPhotos();
     } catch (err: any) {
-      // Save offline on failure
       const pendingId = crypto.randomUUID();
       await addPendingUpload({
         id: pendingId, trip_id: id, file_blob: selectedFile, file_name: selectedFile.name,
@@ -660,10 +700,15 @@ export default function ChinaTripDetail() {
     loadPhotos();
   }
 
+  // Mobile link handler
+  function handleMobileLinkRequest(sourcePhotoId: string) {
+    setLinkSourceId(sourcePhotoId);
+    setShowLinkDialog(true);
+  }
+
   const groups = groupPhotos(photos);
   const sectionedGroups = (() => {
     const base = groupBySection(groups);
-    // Add empty sections that don't have photos yet
     const existingInGroups = new Set(base.map(g => g.section));
     const emptyOnes = emptySections.filter(s => !existingInGroups.has(s));
     return [...base, ...emptyOnes.map(s => ({ section: s, items: [] as { primary: Photo; extras: Photo[] }[] }))];
@@ -690,13 +735,13 @@ export default function ChinaTripDetail() {
   }
 
   return (
-    <div className="container py-6">
+    <div className={cn("container py-6", isMobile && selectedPhotos.size > 0 && "pb-24")}>
       <button onClick={() => navigate("/china")} className="mb-4 flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-4 w-4" /> Back to Asia Trips
       </button>
 
       {/* Trip header with inline editing */}
-      <div className="mb-6">
+      <div className="mb-4">
         <div className="flex items-center gap-3">
           <Factory className="h-6 w-6 text-primary shrink-0" />
           {editingSupplier ? (
@@ -763,7 +808,6 @@ export default function ChinaTripDetail() {
                   onClick={async () => {
                     setShowLocationPicker(true);
                     setLocationEditValue(trip.location || "");
-                    // Check if location looks like GPS coordinates
                     const coordMatch = trip.location?.match(/\(([-\d.]+),\s*([-\d.]+)\)/);
                     if (coordMatch) {
                       setResolvingLocation(true);
@@ -849,24 +893,96 @@ export default function ChinaTripDetail() {
         </div>
       </div>
 
-      {/* Actions */}
+      {/* Factory / Business Card Info Banner */}
+      {factoryInfo && (
+        <Card className="mb-4 border-l-4 border-l-primary bg-primary/5">
+          <CardContent className="p-3">
+            <div className="flex items-start gap-3">
+              <Factory className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <h3 className="font-semibold text-sm">{factoryInfo.name}</h3>
+                <div className="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-0.5 text-xs text-muted-foreground">
+                  {factoryInfo.contact_person && (
+                    <span className="flex items-center gap-1.5 truncate">
+                      <User className="h-3 w-3 shrink-0" /> {factoryInfo.contact_person}
+                    </span>
+                  )}
+                  {factoryInfo.phone && (
+                    <a href={`tel:${factoryInfo.phone}`} className="flex items-center gap-1.5 truncate hover:text-foreground">
+                      <Phone className="h-3 w-3 shrink-0" /> {factoryInfo.phone}
+                    </a>
+                  )}
+                  {factoryInfo.email && (
+                    <a href={`mailto:${factoryInfo.email}`} className="flex items-center gap-1.5 truncate hover:text-foreground">
+                      <Mail className="h-3 w-3 shrink-0" /> {factoryInfo.email}
+                    </a>
+                  )}
+                  {factoryInfo.wechat && (
+                    <span className="flex items-center gap-1.5 truncate">
+                      <MessageCircle className="h-3 w-3 shrink-0" /> WeChat: {factoryInfo.wechat}
+                    </span>
+                  )}
+                  {factoryInfo.whatsapp && (
+                    <a href={`https://wa.me/${factoryInfo.whatsapp.replace(/\D/g, "")}`} className="flex items-center gap-1.5 truncate hover:text-foreground">
+                      <MessageCircle className="h-3 w-3 shrink-0" /> WhatsApp: {factoryInfo.whatsapp}
+                    </a>
+                  )}
+                  {factoryInfo.address && (
+                    <span className="flex items-center gap-1.5 truncate sm:col-span-2">
+                      <MapPin className="h-3 w-3 shrink-0" /> {factoryInfo.address}
+                    </span>
+                  )}
+                  {factoryInfo.website && (
+                    <a href={factoryInfo.website.startsWith("http") ? factoryInfo.website : `https://${factoryInfo.website}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 truncate hover:text-foreground">
+                      <Globe className="h-3 w-3 shrink-0" /> {factoryInfo.website}
+                    </a>
+                  )}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Actions — mobile-optimized */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFileSelect} />
-        <Button onClick={() => fileInputRef.current?.click()} disabled={uploading} className="gap-2">
-          {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
-          {uploading ? "Uploading..." : "Add Photos"}
-        </Button>
-        <Button variant="outline" onClick={() => fileInputRef.current?.click()} className="gap-2">
-          <Images className="h-4 w-4" /> Bulk Upload
-        </Button>
+        {isMobile && (
+          <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileSelect} />
+        )}
+
+        {isMobile ? (
+          <>
+            <Button onClick={() => cameraInputRef.current?.click()} disabled={uploading} className="gap-2 flex-1">
+              {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+              {uploading ? "Uploading..." : "Take Photo"}
+            </Button>
+            <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={uploading} className="gap-2 flex-1">
+              <Images className="h-4 w-4" /> Upload
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button onClick={() => fileInputRef.current?.click()} disabled={uploading} className="gap-2">
+              {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+              {uploading ? "Uploading..." : "Add Photos"}
+            </Button>
+            <Button variant="outline" onClick={() => fileInputRef.current?.click()} className="gap-2">
+              <Images className="h-4 w-4" /> Bulk Upload
+            </Button>
+          </>
+        )}
+
         {photos.length > 0 && (
           <>
-            <Button variant="outline" onClick={handleDownloadAll} disabled={downloading} className="gap-2">
-              <Download className="h-4 w-4" /> {downloading ? "Downloading..." : "Download All"}
-            </Button>
+            {!isMobile && (
+              <Button variant="outline" onClick={handleDownloadAll} disabled={downloading} className="gap-2">
+                <Download className="h-4 w-4" /> {downloading ? "Downloading..." : "Download All"}
+              </Button>
+            )}
             <Button variant="outline" onClick={handleBulkAiDetect} disabled={bulkAnalyzing} className="gap-2">
               <Sparkles className="h-4 w-4" />
-              {bulkAnalyzing ? `AI Detecting... ${bulkAnalyzeProgress}%` : "AI Detect All"}
+              {bulkAnalyzing ? `${bulkAnalyzeProgress}%` : "AI Detect All"}
             </Button>
             <Button
               variant={viewAllMode ? "default" : "outline"}
@@ -880,7 +996,9 @@ export default function ChinaTripDetail() {
             </Button>
           </>
         )}
-        {selectedPhotos.size > 0 && (
+
+        {/* Desktop-only selection actions */}
+        {!isMobile && selectedPhotos.size > 0 && (
           <>
             <Button variant="outline" onClick={() => setShowBulkEdit(true)} className="gap-2">
               <PenLine className="h-4 w-4" /> Edit {selectedPhotos.size}
@@ -888,7 +1006,9 @@ export default function ChinaTripDetail() {
             <Button variant="outline" onClick={() => setShowBulkMove(true)} className="gap-2">
               <ArrowRightLeft className="h-4 w-4" /> Move {selectedPhotos.size}
             </Button>
-            {/* Section assignment */}
+            <Button variant="outline" onClick={handleGroupSelected} className="gap-2">
+              <Merge className="h-4 w-4" /> Group {selectedPhotos.size}
+            </Button>
             {existingSections.length > 0 && (
               <Select onValueChange={(v) => handleAssignSection(v)}>
                 <SelectTrigger className="w-auto gap-1 h-9 text-sm">
@@ -906,6 +1026,7 @@ export default function ChinaTripDetail() {
             </Button>
           </>
         )}
+
         <Button variant="outline" size="sm" onClick={() => setShowAddSection(true)} className="gap-1">
           <Plus className="h-3.5 w-3.5" /> New Section
         </Button>
@@ -920,6 +1041,27 @@ export default function ChinaTripDetail() {
           </Button>
         )}
       </div>
+
+      {/* Mobile sticky bottom action bar when photos selected */}
+      {isMobile && selectedPhotos.size > 0 && (
+        <div className="fixed bottom-0 inset-x-0 z-50 bg-background border-t border-border p-3 flex items-center gap-2 safe-area-pb shadow-lg">
+          <Badge variant="secondary" className="shrink-0">{selectedPhotos.size} selected</Badge>
+          <div className="flex-1 flex items-center gap-2 overflow-x-auto">
+            <Button size="sm" variant="outline" onClick={handleGroupSelected} className="gap-1 shrink-0">
+              <Merge className="h-3.5 w-3.5" /> Group
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setShowBulkEdit(true)} className="gap-1 shrink-0">
+              <PenLine className="h-3.5 w-3.5" /> Edit
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setShowBulkMove(true)} className="gap-1 shrink-0">
+              <ArrowRightLeft className="h-3.5 w-3.5" /> Move
+            </Button>
+          </div>
+          <Button size="sm" variant="ghost" onClick={() => setSelectedPhotos(new Set())} className="shrink-0 p-1">
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
 
       {/* Pending uploads */}
       {pendingPhotos.length > 0 && (
@@ -950,11 +1092,14 @@ export default function ChinaTripDetail() {
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
             <Camera className="mb-4 h-12 w-12 text-muted-foreground/50" />
             <h2 className="font-sans text-xl">No photos yet</h2>
-            <p className="mt-2 text-sm text-muted-foreground">Add photos from this supplier visit.</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {isMobile
+                ? "Tap \"Take Photo\" to start capturing this booth."
+                : "Add photos from this supplier visit."}
+            </p>
           </CardContent>
         </Card>
       ) : viewAllMode ? (
-        /* ── Flat "View All" grid ── */
         <div className="grid gap-1 grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8">
           {photos.map((photo) => (
             <button
@@ -982,7 +1127,6 @@ export default function ChinaTripDetail() {
           ))}
         </div>
       ) : (
-        /* ── Grouped by section (default) ── */
         <div className="space-y-6">
           {sectionedGroups.map(({ section, items }, sIdx) => (
             <div
@@ -1014,7 +1158,7 @@ export default function ChinaTripDetail() {
                   Drag photos here
                 </div>
               ) : (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              <div className="grid gap-4 grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 {items.map(({ primary, extras }) => (
                   <PhotoCard
                     key={primary.id}
@@ -1024,6 +1168,7 @@ export default function ChinaTripDetail() {
                     onUpdated={loadPhotos}
                     onGroupPhoto={handleGroupPhoto}
                     onUnlinkPhoto={handleUnlinkPhoto}
+                    onMobileLinkRequest={handleMobileLinkRequest}
                     chinaMode
                     selected={selectedPhotos.has(primary.id)}
                     onSelect={toggleSelectPhoto}
@@ -1073,7 +1218,7 @@ export default function ChinaTripDetail() {
                 )}
               </div>
             )}
-            <div className="grid grid-cols-3 gap-3">
+            <div className={cn("grid gap-3", isMobile ? "grid-cols-2" : "grid-cols-3")}>
               <div className="space-y-1">
                 <Label className="text-xs">Product Name</Label>
                 <Input value={formFields.product_name} onChange={(e) => setFormFields((f) => ({ ...f, product_name: e.target.value }))} />
@@ -1138,6 +1283,15 @@ export default function ChinaTripDetail() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Mobile link-to-card dialog */}
+      <LinkToCardDialog
+        open={showLinkDialog}
+        onOpenChange={setShowLinkDialog}
+        sourcePhotoId={linkSourceId}
+        photos={allGroups.map(g => ({ id: g.primary.id, product_name: g.primary.product_name, signed_url: g.primary.signed_url }))}
+        onLink={(sourceId, targetId) => handleGroupPhoto(sourceId, targetId)}
+      />
 
       {/* Geo-fence warning */}
       <AlertDialog open={showGeoWarning} onOpenChange={setShowGeoWarning}>
