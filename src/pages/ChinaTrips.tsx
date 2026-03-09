@@ -634,59 +634,31 @@ export default function ChinaTrips() {
         </Card>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filteredTrips.map((trip) => {
-            const isSelected = selected.has(trip.id);
-            return (
-              <Card
-                key={trip.id}
-                className={`cursor-pointer overflow-hidden transition-shadow hover:shadow-md ${selectMode && isSelected ? "ring-2 ring-primary" : ""}`}
-                onClick={() => {
-                  if (selectMode) toggleSelect(trip.id);
-                  else navigate(`/china/${trip.id}`);
-                }}
-              >
-                {trip.cover_url ? (
-                  <div className="relative h-36 w-full">
-                    <img src={trip.cover_url} alt="" className="h-full w-full object-cover" loading="lazy" />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
-                    {selectMode && (
-                      <div className="absolute top-2 left-2">
-                        <Checkbox checked={isSelected} className="h-5 w-5 border-white bg-black/30 data-[state=checked]:bg-primary" />
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="relative flex h-24 items-center justify-center bg-muted">
-                    <Factory className="h-8 w-8 text-muted-foreground/30" />
-                    {selectMode && (
-                      <div className="absolute top-2 left-2">
-                        <Checkbox checked={isSelected} className="h-5 w-5 data-[state=checked]:bg-primary" />
-                      </div>
-                    )}
-                  </div>
-                )}
-                <CardContent className="p-3">
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className="font-sans font-medium truncate">{trip.supplier}</span>
-                    <span className="text-muted-foreground shrink-0">·</span>
-                    <Badge variant="outline" className="text-xs shrink-0">
-                      {trip.venue_type === "canton_fair" ? "Canton Fair" : "Factory"}
-                    </Badge>
-                    <span className="text-muted-foreground shrink-0">·</span>
-                    <span className="text-muted-foreground shrink-0">{format(new Date(trip.date), "MMM d, yyyy")}</span>
-                    <span className="text-muted-foreground shrink-0">·</span>
-                    <span className="text-muted-foreground shrink-0">{trip.photo_count ?? 0} photos</span>
-                  </div>
-                  {trip.location && (
-                    <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <MapPin className="h-3 w-3 shrink-0" />
-                      <span className="truncate">{trip.location}</span>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })}
+          {/* Render Canton Fair group cards */}
+          {groupTrips.map((group) => (
+            <CantonFairGroupCard
+              key={group.id}
+              group={group}
+              children={childrenByParent.get(group.id) || []}
+              selectMode={selectMode}
+              selected={selected}
+              onToggleSelect={toggleSelect}
+            />
+          ))}
+          {/* Render standalone trips */}
+          {standaloneTrips.map((trip) => (
+            <ChinaTripCard
+              key={trip.id}
+              trip={trip}
+              selectMode={selectMode}
+              isSelected={selected.has(trip.id)}
+              onToggleSelect={toggleSelect}
+              onClick={() => {
+                if (selectMode) toggleSelect(trip.id);
+                else navigate(`/china/${trip.id}`);
+              }}
+            />
+          ))}
         </div>
       )}
     </div>
