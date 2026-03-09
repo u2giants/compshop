@@ -6,7 +6,8 @@ import { batchSignedUrls } from "@/lib/photo-utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Factory, Search, MapPin, Phone, Mail, MessageCircle, Globe, User, ImageIcon } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Factory, Search, MapPin, Phone, Mail, MessageCircle, Globe, User, ImageIcon, Building2 } from "lucide-react";
 
 interface FactoryItem {
   id: string;
