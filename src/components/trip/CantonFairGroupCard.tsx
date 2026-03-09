@@ -43,6 +43,7 @@ export default function CantonFairGroupCard({
   selectMode,
   selected,
   onToggleSelect,
+  onReclassified,
 }: CantonFairGroupCardProps) {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
