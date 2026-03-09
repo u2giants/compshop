@@ -643,6 +643,7 @@ export default function ChinaTrips() {
               selectMode={selectMode}
               selected={selected}
               onToggleSelect={toggleSelect}
+              onReclassified={loadTrips}
             />
           ))}
           {/* Render standalone trips */}
