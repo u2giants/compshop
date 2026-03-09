@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.nearby-stores]
 verify_jwt = false
+
+[functions.reverse-geocode]
+verify_jwt = false
