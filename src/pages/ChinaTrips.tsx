@@ -503,9 +503,26 @@ export default function ChinaTrips() {
     if (draftCount > 0) setDraftsOpen(true);
   }
 
+  // Fetch trip IDs matching selected category
+  useEffect(() => {
+    if (!filterCategory) {
+      setCategoryTripIds(null);
+      return;
+    }
+    supabase
+      .from("china_photos")
+      .select("trip_id")
+      .eq("category", filterCategory)
+      .then(({ data }) => {
+        if (data) setCategoryTripIds(new Set(data.map(d => d.trip_id)));
+        else setCategoryTripIds(new Set());
+      });
+  }, [filterCategory]);
+
   const filteredTrips = trips.filter((trip) => {
     if (filterDate && trip.date !== filterDate) return false;
     if (filterVenue && trip.venue_type !== filterVenue) return false;
+    if (categoryTripIds && !categoryTripIds.has(trip.id)) return false;
     return true;
   });
 
