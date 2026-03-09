@@ -26,7 +26,7 @@ export default function AppShell() {
   const isChina = mode === "china_trip";
   const tripsLabel = isChina ? "Asia Trips" : "Str Trips";
 
-  const handleTripsPointerDown = useCallback(() => {
+  const handleTripsLongPressStart = useCallback(() => {
     longPressTriggered.current = false;
     longPressTimer.current = setTimeout(() => {
       longPressTriggered.current = true;
@@ -34,12 +34,21 @@ export default function AppShell() {
     }, 500);
   }, []);
 
-  const handleTripsPointerUp = useCallback(() => {
+  const handleTripsLongPressEnd = useCallback(() => {
     if (longPressTimer.current) {
       clearTimeout(longPressTimer.current);
       longPressTimer.current = null;
     }
   }, []);
+
+  const handleTripsClick = useCallback((path: string) => {
+    // If long-press just triggered the mode menu, don't also navigate
+    if (longPressTriggered.current) {
+      longPressTriggered.current = false;
+      return;
+    }
+    handleNavClick(path);
+  }, [isChina]);
 
   if (!user) return null;
 
