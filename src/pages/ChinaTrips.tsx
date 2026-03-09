@@ -31,9 +31,13 @@ export default function ChinaTrips() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const categories = useCategories();
   const [trips, setTrips] = useState<ChinaTrip[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterDate, setFilterDate] = useState("");
+  const [filterVenue, setFilterVenue] = useState("");
+  const [filterCategory, setFilterCategory] = useState("");
+  const [categoryTripIds, setCategoryTripIds] = useState<Set<string> | null>(null);
   const [filterVenue, setFilterVenue] = useState("");
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
