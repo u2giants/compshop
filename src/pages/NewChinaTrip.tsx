@@ -122,7 +122,7 @@ export default function NewChinaTrip() {
     setLoadingStores(true);
     try {
       const { data, error } = await supabase.functions.invoke("nearby-stores", {
-        body: { latitude, longitude, radius: 1000 },
+        body: { latitude, longitude, radius: 150 },
       });
       if (error) throw error;
       if (data?.stores) setNearbyStores(data.stores);
