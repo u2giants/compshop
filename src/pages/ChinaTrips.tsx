@@ -539,7 +539,7 @@ export default function ChinaTrips() {
   });
 
   const uniqueDates = [...new Set(trips.map((t) => t.date))].sort((a, b) => b.localeCompare(a));
-  const hasFilters = filterDate || filterVenue;
+  const hasFilters = filterDate || filterVenue || filterCategory;
 
   return (
     <div className="container py-6">
