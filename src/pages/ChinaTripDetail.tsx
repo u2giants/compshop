@@ -25,6 +25,7 @@ import {
   type PendingUpload,
 } from "@/lib/offline-db";
 import { runSync } from "@/lib/sync-service";
+import { cachePhotoImages, type BulkCacheProgress } from "@/lib/bulk-cache";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
