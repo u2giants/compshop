@@ -545,6 +545,9 @@ export default function ChinaTrips() {
           {selectMode ? (
             <>
               <span className="text-sm text-muted-foreground">{selected.size} selected</span>
+              <Button variant="outline" size="sm" disabled={selected.size === 0 || bulkCaching} onClick={handleCacheSelected} className="gap-1">
+                <Download className="h-4 w-4" /> {bulkCaching ? `${bulkCacheProgress ? Math.round((bulkCacheProgress.done / bulkCacheProgress.total) * 100) || 0 : 0}%` : "Cache"}
+              </Button>
               <Button variant="outline" size="sm" disabled={selected.size < 2} onClick={handleMergeTrips} className="gap-1">
                 <ArrowRightLeft className="h-4 w-4" /> Merge
               </Button>

@@ -424,6 +424,9 @@ export default function Trips() {
           {selectMode ? (
             <>
               <span className="text-sm text-muted-foreground">{selected.size} selected</span>
+              <Button variant="outline" size="sm" disabled={selected.size === 0 || bulkCaching} onClick={handleCacheSelected} className="gap-1">
+                <Download className="h-4 w-4" /> {bulkCaching ? `${bulkCacheProgress ? Math.round((bulkCacheProgress.done / bulkCacheProgress.total) * 100) || 0 : 0}%` : "Cache"}
+              </Button>
               <Button variant="destructive" size="sm" disabled={selected.size === 0} onClick={handleBulkDelete} className="gap-1">
                 <Trash2 className="h-4 w-4" /> Delete
               </Button>

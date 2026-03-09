@@ -966,9 +966,6 @@ export default function TripDetail() {
             <Button variant="outline" onClick={() => setShowBulkMove(true)} className="gap-2">
               <ArrowRightLeft className="h-4 w-4" /> Move {selectedPhotos.size} Selected
             </Button>
-            <Button variant="outline" onClick={handleCacheSelected} disabled={bulkCaching} className="gap-2">
-              <Download className="h-4 w-4" /> {bulkCaching ? `Caching... ${bulkCacheProgress ? Math.round((bulkCacheProgress.done / bulkCacheProgress.total) * 100) : 0}%` : `Cache ${selectedPhotos.size} Offline`}
-            </Button>
             <Button variant="destructive" onClick={handleBulkDelete} className="gap-2">
               <Trash2 className="h-4 w-4" /> Delete {selectedPhotos.size} Selected
             </Button>
