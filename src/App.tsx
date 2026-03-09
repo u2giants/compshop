@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { lazy, Suspense } from "react";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { AppModeProvider } from "@/contexts/AppModeContext";
+import ModeRedirect from "@/components/ModeRedirect";
 import AppShell from "@/components/layout/AppShell";
 
 const Auth = lazy(() => import("@/pages/Auth"));
@@ -64,7 +65,7 @@ const App = () => (
                     </ProtectedRoute>
                   }
                 >
-                  <Route path="/" element={<Trips />} />
+                  <Route path="/" element={<ModeRedirect><Trips /></ModeRedirect>} />
                   <Route path="/trips/new" element={<NewTrip />} />
                   <Route path="/trips/:id" element={<TripDetail />} />
                   <Route path="/china" element={<ChinaTrips />} />
