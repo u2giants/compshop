@@ -153,7 +153,7 @@ export default function NewChinaTrip() {
         insertData.end_date = endDate;
       }
 
-      if (canHaveParent && selectedParentId) {
+      if (canHaveParent && selectedParentId && selectedParentId !== "none") {
         insertData.parent_id = selectedParentId;
       }
 
