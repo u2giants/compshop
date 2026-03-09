@@ -202,9 +202,7 @@ export default function NewChinaTrip() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="factory_visit">Factory Visit</SelectItem>
-                  <SelectItem value="canton_fair">Canton Fair (Trade Show)</SelectItem>
-                  <SelectItem value="booth_visit">Booth Visit</SelectItem>
-                  <SelectItem value="canton_fair_group">📦 Canton Fair Trip Group</SelectItem>
+                  <SelectItem value="canton_fair_group">📦 Canton Fair Group</SelectItem>
                 </SelectContent>
               </Select>
               {isGroupType && (
