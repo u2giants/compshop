@@ -166,23 +166,6 @@ export default function TripDetail() {
 
   const [downloading, setDownloading] = useState(false);
   const [viewAllMode, setViewAllMode] = useState(false);
-  const [bulkCaching, setBulkCaching] = useState(false);
-  const [bulkCacheProgress, setBulkCacheProgress] = useState<BulkCacheProgress | null>(null);
-
-  async function handleCacheSelected() {
-    const selectedPhotosList = photos.filter((p) => selectedPhotos.has(p.id) || selectedPhotos.has(p.group_id || ""));
-    // Include all photos in selected groups
-    const allInSelection = photos.filter((p) => selectedPhotos.has(p.id) || (p.group_id && selectedPhotos.has(p.group_id)));
-    if (allInSelection.length === 0) return;
-    setBulkCaching(true);
-    const result = await cachePhotoImages(allInSelection, setBulkCacheProgress);
-    setBulkCaching(false);
-    setBulkCacheProgress(null);
-    toast({
-      title: "Images cached for offline",
-      description: `${result.done - result.failed} of ${result.total} images saved locally.`,
-    });
-  }
 
   function buildFileName(photo: Photo, indexInGroup?: number): string {
     const ext = photo.file_path.split(".").pop() || "jpg";
