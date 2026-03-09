@@ -78,6 +78,56 @@ export async function cachePhotoImages(
 }
 
 /**
+ * Cache all photos for given shopping trip IDs.
+ */
+export async function cacheTripPhotos(
+  tripIds: string[],
+  onProgress?: ProgressCallback
+): Promise<BulkCacheProgress> {
+  if (tripIds.length === 0) return { total: 0, done: 0, failed: 0 };
+
+  const { data: photos } = await supabase
+    .from("photos")
+    .select("file_path")
+    .in("trip_id", tripIds);
+
+  if (!photos || photos.length === 0) return { total: 0, done: 0, failed: 0 };
+
+  const urlMap = await batchSignedUrls(photos);
+  const withUrls = photos.map((p) => ({
+    file_path: p.file_path,
+    signed_url: urlMap.get(p.file_path),
+  }));
+
+  return cachePhotoImages(withUrls, onProgress);
+}
+
+/**
+ * Cache all photos for given china trip IDs.
+ */
+export async function cacheChinaTripPhotos(
+  tripIds: string[],
+  onProgress?: ProgressCallback
+): Promise<BulkCacheProgress> {
+  if (tripIds.length === 0) return { total: 0, done: 0, failed: 0 };
+
+  const { data: photos } = await supabase
+    .from("china_photos")
+    .select("file_path")
+    .in("trip_id", tripIds);
+
+  if (!photos || photos.length === 0) return { total: 0, done: 0, failed: 0 };
+
+  const urlMap = await batchSignedUrls(photos);
+  const withUrls = photos.map((p) => ({
+    file_path: p.file_path,
+    signed_url: urlMap.get(p.file_path),
+  }));
+
+  return cachePhotoImages(withUrls, onProgress);
+}
+
+/**
  * Fetch all photos from the last N months across both tables and cache their images.
  */
 export async function cacheRecentPhotos(

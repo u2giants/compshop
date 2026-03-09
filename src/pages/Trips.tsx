@@ -9,6 +9,7 @@ import { useRetailers } from "@/hooks/use-retailers";
 import { uploadPhoto, hashFile, checkDuplicatePhoto } from "@/lib/supabase-helpers";
 import { batchSignedUrls } from "@/lib/photo-utils";
 import { extractExif, distanceKm } from "@/lib/exif-utils";
+import { cacheTripPhotos, type BulkCacheProgress } from "@/lib/bulk-cache";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,7 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Calendar, MapPin, Store, Plus, Users, Filter, X, Upload, Loader2, Trash2, CheckSquare, FileText } from "lucide-react";
+import { Calendar, MapPin, Store, Plus, Users, Filter, X, Upload, Loader2, Trash2, CheckSquare, FileText, Download } from "lucide-react";
 import { format } from "date-fns";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
@@ -51,6 +52,27 @@ export default function Trips() {
   const [draftsOpen, setDraftsOpen] = useState(false);
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSelectedRef = useRef<string | null>(null);
+  const [bulkCaching, setBulkCaching] = useState(false);
+  const [bulkCacheProgress, setBulkCacheProgress] = useState<BulkCacheProgress | null>(null);
+
+  async function handleCacheSelected() {
+    if (selected.size === 0) return;
+    const tripIds = Array.from(selected);
+    setBulkCaching(true);
+    setBulkCacheProgress({ total: 0, done: 0, failed: 0 });
+    try {
+      const result = await cacheTripPhotos(tripIds, setBulkCacheProgress);
+      toast({
+        title: "Cache complete",
+        description: `${result.done - result.failed} of ${result.total} images cached for offline.`,
+      });
+    } catch (err: any) {
+      toast({ title: "Cache failed", description: err.message, variant: "destructive" });
+    } finally {
+      setBulkCaching(false);
+      setBulkCacheProgress(null);
+    }
+  }
 
   useEffect(() => {
     if (!user) return;
@@ -402,6 +424,9 @@ export default function Trips() {
           {selectMode ? (
             <>
               <span className="text-sm text-muted-foreground">{selected.size} selected</span>
+              <Button variant="outline" size="sm" disabled={selected.size === 0 || bulkCaching} onClick={handleCacheSelected} className="gap-1">
+                <Download className="h-4 w-4" /> {bulkCaching ? `${bulkCacheProgress ? Math.round((bulkCacheProgress.done / bulkCacheProgress.total) * 100) || 0 : 0}%` : "Cache"}
+              </Button>
               <Button variant="destructive" size="sm" disabled={selected.size === 0} onClick={handleBulkDelete} className="gap-1">
                 <Trash2 className="h-4 w-4" /> Delete
               </Button>

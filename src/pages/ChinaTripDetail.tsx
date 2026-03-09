@@ -25,7 +25,6 @@ import {
   type PendingUpload,
 } from "@/lib/offline-db";
 import { runSync } from "@/lib/sync-service";
-import { cachePhotoImages, type BulkCacheProgress } from "@/lib/bulk-cache";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -86,21 +85,6 @@ export default function ChinaTripDetail() {
   const lastSelectedPhotoRef = useRef<string | null>(null);
   const [bulkAnalyzeProgress, setBulkAnalyzeProgress] = useState(0);
   const [downloading, setDownloading] = useState(false);
-  const [bulkCaching, setBulkCaching] = useState(false);
-  const [bulkCacheProgress, setBulkCacheProgress] = useState<BulkCacheProgress | null>(null);
-
-  async function handleCacheSelected() {
-    const allInSelection = photos.filter((p) => selectedPhotos.has(p.id) || (p.group_id && selectedPhotos.has(p.group_id)));
-    if (allInSelection.length === 0) return;
-    setBulkCaching(true);
-    const result = await cachePhotoImages(allInSelection, setBulkCacheProgress);
-    setBulkCaching(false);
-    setBulkCacheProgress(null);
-    toast({
-      title: "Images cached for offline",
-      description: `${result.done - result.failed} of ${result.total} images saved locally.`,
-    });
-  }
   const [viewAllMode, setViewAllMode] = useState(false);
 
   // Factory/business card info
@@ -1040,9 +1024,6 @@ export default function ChinaTripDetail() {
             <Button variant="ghost" size="sm" onClick={() => setSelectedPhotos(new Set())}>
               Clear
             </Button>
-            <Button variant="outline" onClick={handleCacheSelected} disabled={bulkCaching} className="gap-2">
-              <Download className="h-4 w-4" /> {bulkCaching ? `Caching...` : `Cache ${selectedPhotos.size} Offline`}
-            </Button>
           </>
         )}
 
@@ -1074,9 +1055,6 @@ export default function ChinaTripDetail() {
             </Button>
             <Button size="sm" variant="outline" onClick={() => setShowBulkMove(true)} className="gap-1 shrink-0">
               <ArrowRightLeft className="h-3.5 w-3.5" /> Move
-            </Button>
-            <Button size="sm" variant="outline" onClick={handleCacheSelected} disabled={bulkCaching} className="gap-1 shrink-0">
-              <Download className="h-3.5 w-3.5" /> {bulkCaching ? "Caching..." : "Cache"}
             </Button>
           </div>
           <Button size="sm" variant="ghost" onClick={() => setSelectedPhotos(new Set())} className="shrink-0 p-1">
