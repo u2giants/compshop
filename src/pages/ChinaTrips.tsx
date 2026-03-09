@@ -18,22 +18,10 @@ import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import ChinaDraftTrips from "@/components/trip/ChinaDraftTrips";
 
-interface ChinaTrip {
-  id: string;
-  name: string;
-  supplier: string;
-  venue_type: string;
-  date: string;
-  location: string | null;
-  notes: string | null;
-  created_by: string | null;
-  created_at: string;
-  updated_at: string;
-  deleted_at: string | null;
-  is_draft: boolean;
-  photo_count?: number;
-  cover_url?: string;
-}
+import CantonFairGroupCard, { type ChinaTripListItem } from "@/components/trip/CantonFairGroupCard";
+import ChinaTripCard from "@/components/trip/ChinaTripCard";
+
+interface ChinaTrip extends ChinaTripListItem {}
 
 export default function ChinaTrips() {
   const { user } = useAuth();
