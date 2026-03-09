@@ -70,13 +70,29 @@ export default function ChinaTrips() {
           supabase.from("china_photos").select("*", { count: "exact", head: true }).eq("trip_id", tid)
         );
         const coverPromises = tripIds.map(tid =>
-          supabase.from("china_photos").select("file_path").eq("trip_id", tid).order("created_at", { ascending: true }).limit(1)
+          supabase.from("china_photos").select("file_path, user_id").eq("trip_id", tid).order("created_at", { ascending: true }).limit(1)
         );
         
         const [photoCounts, coverResults] = await Promise.all([
           Promise.all(photoCountPromises),
           Promise.all(coverPromises),
         ]);
+
+        // Collect unique user IDs for photographer display
+        const userIds = new Set<string>();
+        data.forEach(t => { if (t.created_by) userIds.add(t.created_by); });
+        coverResults.forEach(r => { if (r.data?.[0]?.user_id) userIds.add(r.data[0].user_id); });
+
+        let profileMap: Record<string, string> = {};
+        if (userIds.size > 0) {
+          const { data: profiles } = await supabase
+            .from("profiles")
+            .select("id, display_name")
+            .in("id", Array.from(userIds));
+          if (profiles) {
+            profiles.forEach(p => { profileMap[p.id] = p.display_name || "Unknown"; });
+          }
+        }
 
         const coverPaths = coverResults
           .map(r => r.data?.[0]?.file_path)
@@ -89,6 +105,7 @@ export default function ChinaTrips() {
           cover_url: coverResults[i].data?.[0]?.file_path
             ? urlMap.get(coverResults[i].data![0].file_path)
             : undefined,
+          photographer: trip.created_by ? profileMap[trip.created_by] ?? null : null,
         }));
         setTrips(tripsWithCounts);
       }
