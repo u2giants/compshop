@@ -22,6 +22,7 @@ import {
   type PendingUpload,
 } from "@/lib/offline-db";
 import { runSync } from "@/lib/sync-service";
+import { cachePhotoImages, type BulkCacheProgress } from "@/lib/bulk-cache";
 import { useOnlineStatus } from "@/hooks/use-online-status";
 import { useBulkUndo } from "@/hooks/use-bulk-undo";
 import { useCountries } from "@/hooks/use-countries";
