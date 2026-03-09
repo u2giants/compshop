@@ -192,6 +192,8 @@ export default function NewChinaTrip() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Only show type selector if no preset type from URL */}
+            {!searchParams.get("type") && (
             <div className="space-y-2">
               <Label>Trip Type</Label>
               <Select value={venueType} onValueChange={(v) => { setVenueType(v); setSelectedParentId(""); }}>
@@ -212,6 +214,7 @@ export default function NewChinaTrip() {
                 </p>
               )}
             </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="supplier">{isGroupType ? "Trip Name" : "Supplier / Factory"}</Label>
