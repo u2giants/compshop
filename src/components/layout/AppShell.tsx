@@ -143,14 +143,22 @@ export default function AppShell() {
                 return (
                   <div key={item.path} className="relative">
                     <button
-                      onPointerDown={handleTripsPointerDown}
-                      onPointerUp={(e) => {
+                      onTouchStart={handleTripsPointerDown}
+                      onTouchEnd={(e) => {
                         handleTripsPointerUp();
+                        if (!longPressTriggered.current) {
+                          handleNavClick(item.path);
+                        } else {
+                          e.preventDefault();
+                        }
+                      }}
+                      onTouchCancel={handleTripsPointerUp}
+                      onClick={(e) => {
+                        // Desktop fallback
                         if (!longPressTriggered.current) {
                           handleNavClick(item.path);
                         }
                       }}
-                      onPointerCancel={handleTripsPointerUp}
                       onContextMenu={(e) => e.preventDefault()}
                       className={cn(
                         "flex flex-col items-center gap-0.5 px-3 py-1 text-xs transition-colors select-none",
