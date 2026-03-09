@@ -87,6 +87,22 @@ export default function ChinaTripDetail() {
   const [bulkAnalyzeProgress, setBulkAnalyzeProgress] = useState(0);
   const [downloading, setDownloading] = useState(false);
   const [viewAllMode, setViewAllMode] = useState(false);
+  const [bulkCaching, setBulkCaching] = useState(false);
+  const [bulkCacheProgress, setBulkCacheProgress] = useState<BulkCacheProgress | null>(null);
+
+  async function handleCacheSelected() {
+    const allInSelection = photos.filter((p) => selectedPhotos.has(p.id) || (p.group_id && selectedPhotos.has(p.group_id)));
+    if (allInSelection.length === 0) return;
+    setBulkCaching(true);
+    const result = await cachePhotoImages(allInSelection, setBulkCacheProgress);
+    setBulkCaching(false);
+    setBulkCacheProgress(null);
+    toast({
+      title: "Images cached for offline",
+      description: `${result.done - result.failed} of ${result.total} images saved locally.`,
+    });
+  }
+  const [viewAllMode, setViewAllMode] = useState(false);
 
   // Factory/business card info
   const [factoryInfo, setFactoryInfo] = useState<{
