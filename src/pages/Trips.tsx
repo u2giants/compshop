@@ -52,6 +52,27 @@ export default function Trips() {
   const [draftsOpen, setDraftsOpen] = useState(false);
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSelectedRef = useRef<string | null>(null);
+  const [bulkCaching, setBulkCaching] = useState(false);
+  const [bulkCacheProgress, setBulkCacheProgress] = useState<BulkCacheProgress | null>(null);
+
+  async function handleCacheSelected() {
+    if (selected.size === 0) return;
+    const tripIds = Array.from(selected);
+    setBulkCaching(true);
+    setBulkCacheProgress({ total: 0, done: 0, failed: 0 });
+    try {
+      const result = await cacheTripPhotos(tripIds, setBulkCacheProgress);
+      toast({
+        title: "Cache complete",
+        description: `${result.done - result.failed} of ${result.total} images cached for offline.`,
+      });
+    } catch (err: any) {
+      toast({ title: "Cache failed", description: err.message, variant: "destructive" });
+    } finally {
+      setBulkCaching(false);
+      setBulkCacheProgress(null);
+    }
+  }
 
   useEffect(() => {
     if (!user) return;
