@@ -86,7 +86,6 @@ export default function ChinaTripDetail() {
   const lastSelectedPhotoRef = useRef<string | null>(null);
   const [bulkAnalyzeProgress, setBulkAnalyzeProgress] = useState(0);
   const [downloading, setDownloading] = useState(false);
-  const [viewAllMode, setViewAllMode] = useState(false);
   const [bulkCaching, setBulkCaching] = useState(false);
   const [bulkCacheProgress, setBulkCacheProgress] = useState<BulkCacheProgress | null>(null);
 
