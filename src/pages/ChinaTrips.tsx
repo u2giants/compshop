@@ -12,7 +12,8 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar, MapPin, Factory, Plus, Filter, X, Trash2, CheckSquare, Upload, Loader2, FileText, ArrowRightLeft } from "lucide-react";
+import { Calendar, MapPin, Factory, Plus, Filter, X, Trash2, CheckSquare, Upload, Loader2, FileText, ArrowRightLeft, ChevronDown } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Checkbox } from "@/components/ui/checkbox";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -521,10 +522,23 @@ export default function ChinaTrips() {
                 {smartUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
                 {smartUploading ? `${smartProgress}%` : "Smart Upload"}
               </Button>
-              <Button onClick={() => navigate("/china/new")} className="gap-2">
-                <Plus className="h-4 w-4" />
-                <span className="hidden sm:inline">New Trip</span>
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button className="gap-2">
+                    <Plus className="h-4 w-4" />
+                    <span className="hidden sm:inline">New</span>
+                    <ChevronDown className="h-3 w-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => navigate("/china/new?type=factory_visit")}>
+                    Factory Visit
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate("/china/new?type=canton_fair_group")}>
+                    📦 Canton Fair Group
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               <Button variant="ghost" size="icon" onClick={() => setDraftsOpen(true)} title="Draft Trips">
                 <FileText className="h-4 w-4" />
               </Button>
@@ -626,7 +640,7 @@ export default function ChinaTrips() {
                 : "Create your first Asia trip or use Smart Upload to auto-sort photos by Canton Fair session."}
             </p>
             {!hasFilters && (
-              <Button onClick={() => navigate("/china/new")} className="mt-6 gap-2">
+              <Button onClick={() => navigate("/china/new?type=factory_visit")} className="mt-6 gap-2">
                 <Plus className="h-4 w-4" /> Create First Trip
               </Button>
             )}

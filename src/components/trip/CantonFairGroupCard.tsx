@@ -4,7 +4,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Calendar, MapPin, Factory, ChevronDown, ChevronRight, Users } from "lucide-react";
+import { Calendar, MapPin, Factory, ChevronDown, ChevronRight, Users, Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { format } from "date-fns";
 import ChinaTripCard from "./ChinaTripCard";
 
@@ -108,6 +110,26 @@ export default function CantonFairGroupCard({
 
           <CollapsibleContent>
             <div className="border-t border-amber-200/50 dark:border-amber-800/30 px-4 pb-4 pt-3">
+            <div className="mb-3 flex items-center justify-between">
+                <span className="text-xs font-medium text-muted-foreground">{children.length} sub-trip{children.length !== 1 ? "s" : ""}</span>
+                {!selectMode && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs">
+                        <Plus className="h-3 w-3" /> Add
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => navigate(`/china/new?type=booth_visit&parent=${group.id}`)}>
+                        Booth Visit
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => navigate(`/china/new?type=factory_visit&parent=${group.id}`)}>
+                        Factory Visit
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </div>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {children.map((child) => (
                   <ChinaTripCard
@@ -125,7 +147,7 @@ export default function CantonFairGroupCard({
                 ))}
                 {children.length === 0 && (
                   <p className="col-span-full text-sm text-muted-foreground py-2">
-                    No sub-trips yet. Create a factory visit or booth visit within this group.
+                    No sub-trips yet. Use the Add button above.
                   </p>
                 )}
               </div>

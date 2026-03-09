@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -28,10 +28,15 @@ interface ParentGroup {
 export default function NewChinaTrip() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { toast } = useToast();
+
+  const presetType = searchParams.get("type") || "factory_visit";
+  const presetParent = searchParams.get("parent") || "";
+
   const [submitting, setSubmitting] = useState(false);
   const [supplier, setSupplier] = useState("");
-  const [venueType, setVenueType] = useState<string>("factory_visit");
+  const [venueType, setVenueType] = useState<string>(presetType);
   const [location, setLocation] = useState("");
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [endDate, setEndDate] = useState("");
@@ -43,7 +48,7 @@ export default function NewChinaTrip() {
 
   // Auto-suggest parent group
   const [availableGroups, setAvailableGroups] = useState<ParentGroup[]>([]);
-  const [selectedParentId, setSelectedParentId] = useState<string>("");
+  const [selectedParentId, setSelectedParentId] = useState<string>(presetParent);
   const [suggestedParentId, setSuggestedParentId] = useState<string | null>(null);
 
   const isGroupType = venueType === "canton_fair_group";
@@ -187,6 +192,8 @@ export default function NewChinaTrip() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Only show type selector if no preset type from URL */}
+            {!searchParams.get("type") && (
             <div className="space-y-2">
               <Label>Trip Type</Label>
               <Select value={venueType} onValueChange={(v) => { setVenueType(v); setSelectedParentId(""); }}>
@@ -207,6 +214,7 @@ export default function NewChinaTrip() {
                 </p>
               )}
             </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="supplier">{isGroupType ? "Trip Name" : "Supplier / Factory"}</Label>
@@ -252,8 +260,8 @@ export default function NewChinaTrip() {
               </div>
             )}
 
-            {/* Auto-suggest parent group */}
-            {canHaveParent && availableGroups.length > 0 && (
+            {/* Auto-suggest parent group - hide when parent is preset from URL */}
+            {canHaveParent && !presetParent && availableGroups.length > 0 && (
               <div className="space-y-2">
                 <Label>Parent Group (optional)</Label>
                 <Select value={selectedParentId} onValueChange={setSelectedParentId}>
