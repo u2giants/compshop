@@ -164,10 +164,10 @@ export default function Factories() {
         <Tabs value="factories" onValueChange={(v) => v === "trips" && navigate("/china")}>
           <TabsList>
             <TabsTrigger value="trips" className="gap-1.5">
-              <Factory className="h-4 w-4" /> Trips
+              <Factory className="h-4 w-4" /> Fair Trips
             </TabsTrigger>
             <TabsTrigger value="factories" className="gap-1.5">
-              <Building2 className="h-4 w-4" /> Factories
+              <Building2 className="h-4 w-4" /> Fty Visits
             </TabsTrigger>
           </TabsList>
         </Tabs>
