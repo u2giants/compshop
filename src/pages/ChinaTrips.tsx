@@ -483,9 +483,10 @@ export default function ChinaTrips() {
   });
 
   // Separate into groups (parent_id is null, venue_type is canton_fair with end_date) and standalone trips
+  // Only show Canton Fair related trips here — standalone factory visits go to "Fty Visits" tab
   const groupTrips = filteredTrips.filter(t => !t.parent_id && t.end_date != null);
   const childTrips = filteredTrips.filter(t => t.parent_id != null);
-  const standaloneTrips = filteredTrips.filter(t => !t.parent_id && t.end_date == null);
+  const standaloneTrips = filteredTrips.filter(t => !t.parent_id && t.end_date == null && t.venue_type !== "factory_visit");
 
   const childrenByParent = new Map<string, ChinaTrip[]>();
   childTrips.forEach(c => {
@@ -504,10 +505,10 @@ export default function ChinaTrips() {
         <Tabs value="trips" onValueChange={(v) => v === "factories" && navigate("/china/factories")}>
           <TabsList>
             <TabsTrigger value="trips" className="gap-1.5">
-              <Factory className="h-4 w-4" /> Trips
+              <Factory className="h-4 w-4" /> Fair Trips
             </TabsTrigger>
             <TabsTrigger value="factories" className="gap-1.5">
-              <Building2 className="h-4 w-4" /> Factories
+              <Building2 className="h-4 w-4" /> Fty Visits
             </TabsTrigger>
           </TabsList>
         </Tabs>

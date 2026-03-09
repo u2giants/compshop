@@ -50,10 +50,11 @@ export default function Factories() {
       // Get all non-deleted china trips (excluding groups that have end_date)
       const { data: trips } = await supabase
         .from("china_trips")
-        .select("id, supplier, date, factory_id")
+        .select("id, supplier, date, factory_id, venue_type")
         .is("deleted_at", null)
         .eq("is_draft", false)
-        .is("end_date", null) // exclude group cards
+        .eq("venue_type", "factory_visit")
+        .is("parent_id", null) // exclude children of Canton Fair groups
         .order("date", { ascending: false });
 
       if (!trips) { setLoading(false); return; }
@@ -163,18 +164,18 @@ export default function Factories() {
         <Tabs value="factories" onValueChange={(v) => v === "trips" && navigate("/china")}>
           <TabsList>
             <TabsTrigger value="trips" className="gap-1.5">
-              <Factory className="h-4 w-4" /> Trips
+              <Factory className="h-4 w-4" /> Fair Trips
             </TabsTrigger>
             <TabsTrigger value="factories" className="gap-1.5">
-              <Building2 className="h-4 w-4" /> Factories
+              <Building2 className="h-4 w-4" /> Fty Visits
             </TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
 
       <div className="mb-6">
-        <h1 className="font-sans text-3xl md:text-4xl">Factories</h1>
-        <p className="mt-1 text-muted-foreground hidden md:block">All suppliers and factories across your Asia trips</p>
+        <h1 className="font-sans text-3xl md:text-4xl">Factory Visits</h1>
+        <p className="mt-1 text-muted-foreground hidden md:block">All standalone factory visit trips</p>
       </div>
 
       {suppliers.length > 0 && (
