@@ -34,6 +34,7 @@ interface CantonFairGroupCardProps {
   selectMode: boolean;
   selected: Set<string>;
   onToggleSelect: (id: string) => void;
+  onReclassified?: () => void;
 }
 
 export default function CantonFairGroupCard({
