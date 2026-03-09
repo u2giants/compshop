@@ -151,11 +151,13 @@ export type Database = {
           created_by: string | null
           date: string
           deleted_at: string | null
+          end_date: string | null
           id: string
           is_draft: boolean
           location: string | null
           name: string
           notes: string | null
+          parent_id: string | null
           supplier: string
           updated_at: string
           venue_type: string
@@ -165,11 +167,13 @@ export type Database = {
           created_by?: string | null
           date?: string
           deleted_at?: string | null
+          end_date?: string | null
           id?: string
           is_draft?: boolean
           location?: string | null
           name: string
           notes?: string | null
+          parent_id?: string | null
           supplier: string
           updated_at?: string
           venue_type?: string
@@ -179,16 +183,26 @@ export type Database = {
           created_by?: string | null
           date?: string
           deleted_at?: string | null
+          end_date?: string | null
           id?: string
           is_draft?: boolean
           location?: string | null
           name?: string
           notes?: string | null
+          parent_id?: string | null
           supplier?: string
           updated_at?: string
           venue_type?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "china_trips_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "china_trips"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       comments: {
         Row: {
