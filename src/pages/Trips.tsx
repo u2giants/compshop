@@ -547,7 +547,6 @@ export default function Trips() {
           </Select>
           {hasFilters && (
             <Button variant="ghost" size="sm" className="h-8 gap-1 text-xs" onClick={() => { setFilterDate(""); setFilterRetailer(""); setFilterCategory(""); }}>
-            <Button variant="ghost" size="sm" className="h-8 gap-1 text-xs" onClick={() => { setFilterDate(""); setFilterRetailer(""); }}>
               <X className="h-3 w-3" /> Clear
             </Button>
           )}
