@@ -38,7 +38,6 @@ export default function ChinaTrips() {
   const [filterVenue, setFilterVenue] = useState("");
   const [filterCategory, setFilterCategory] = useState("");
   const [categoryTripIds, setCategoryTripIds] = useState<Set<string> | null>(null);
-  const [filterVenue, setFilterVenue] = useState("");
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkCaching, setBulkCaching] = useState(false);
