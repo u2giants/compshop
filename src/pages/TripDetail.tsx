@@ -22,6 +22,7 @@ import {
   type PendingUpload,
 } from "@/lib/offline-db";
 import { runSync } from "@/lib/sync-service";
+import { cachePhotoImages, type BulkCacheProgress } from "@/lib/bulk-cache";
 import { useOnlineStatus } from "@/hooks/use-online-status";
 import { useBulkUndo } from "@/hooks/use-bulk-undo";
 import { useCountries } from "@/hooks/use-countries";
@@ -166,6 +167,23 @@ export default function TripDetail() {
 
   const [downloading, setDownloading] = useState(false);
   const [viewAllMode, setViewAllMode] = useState(false);
+  const [bulkCaching, setBulkCaching] = useState(false);
+  const [bulkCacheProgress, setBulkCacheProgress] = useState<BulkCacheProgress | null>(null);
+
+  async function handleCacheSelected() {
+    const selectedPhotosList = photos.filter((p) => selectedPhotos.has(p.id) || selectedPhotos.has(p.group_id || ""));
+    // Include all photos in selected groups
+    const allInSelection = photos.filter((p) => selectedPhotos.has(p.id) || (p.group_id && selectedPhotos.has(p.group_id)));
+    if (allInSelection.length === 0) return;
+    setBulkCaching(true);
+    const result = await cachePhotoImages(allInSelection, setBulkCacheProgress);
+    setBulkCaching(false);
+    setBulkCacheProgress(null);
+    toast({
+      title: "Images cached for offline",
+      description: `${result.done - result.failed} of ${result.total} images saved locally.`,
+    });
+  }
 
   function buildFileName(photo: Photo, indexInGroup?: number): string {
     const ext = photo.file_path.split(".").pop() || "jpg";
@@ -947,6 +965,9 @@ export default function TripDetail() {
             </Button>
             <Button variant="outline" onClick={() => setShowBulkMove(true)} className="gap-2">
               <ArrowRightLeft className="h-4 w-4" /> Move {selectedPhotos.size} Selected
+            </Button>
+            <Button variant="outline" onClick={handleCacheSelected} disabled={bulkCaching} className="gap-2">
+              <Download className="h-4 w-4" /> {bulkCaching ? `Caching... ${bulkCacheProgress ? Math.round((bulkCacheProgress.done / bulkCacheProgress.total) * 100) : 0}%` : `Cache ${selectedPhotos.size} Offline`}
             </Button>
             <Button variant="destructive" onClick={handleBulkDelete} className="gap-2">
               <Trash2 className="h-4 w-4" /> Delete {selectedPhotos.size} Selected

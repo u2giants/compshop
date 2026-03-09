@@ -16,6 +16,7 @@ import ImageTypeManager from "@/components/admin/ImageTypeManager";
 import CategoryManager from "@/components/admin/CategoryManager";
 import DefaultModeManager from "@/components/admin/DefaultModeManager";
 import StorageQuotaManager from "@/components/settings/StorageQuotaManager";
+import BulkCacheManager from "@/components/settings/BulkCacheManager";
 
 export default function Profile() {
   const { user, isAdmin, signOut } = useAuth();
@@ -114,6 +115,7 @@ export default function Profile() {
 
         {/* Storage quota settings */}
         <StorageQuotaManager />
+        <BulkCacheManager />
       </div>
 
       {/* Admin panels */}
