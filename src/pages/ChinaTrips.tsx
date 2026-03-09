@@ -640,7 +640,7 @@ export default function ChinaTrips() {
                 : "Create your first Asia trip or use Smart Upload to auto-sort photos by Canton Fair session."}
             </p>
             {!hasFilters && (
-              <Button onClick={() => navigate("/china/new")} className="mt-6 gap-2">
+              <Button onClick={() => navigate("/china/new?type=factory_visit")} className="mt-6 gap-2">
                 <Plus className="h-4 w-4" /> Create First Trip
               </Button>
             )}

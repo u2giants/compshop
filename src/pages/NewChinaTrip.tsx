@@ -48,7 +48,7 @@ export default function NewChinaTrip() {
 
   // Auto-suggest parent group
   const [availableGroups, setAvailableGroups] = useState<ParentGroup[]>([]);
-  const [selectedParentId, setSelectedParentId] = useState<string>("");
+  const [selectedParentId, setSelectedParentId] = useState<string>(presetParent);
   const [suggestedParentId, setSuggestedParentId] = useState<string | null>(null);
 
   const isGroupType = venueType === "canton_fair_group";
