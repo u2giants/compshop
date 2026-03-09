@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { cacheTrips, getCachedTrips, clearCachedTrips, type CachedTrip } from "@/lib/offline-db";
 import { useOnlineStatus } from "@/hooks/use-online-status";
 import { useRetailers } from "@/hooks/use-retailers";
+import { useCategories } from "@/hooks/use-categories";
 import { uploadPhoto, hashFile, checkDuplicatePhoto } from "@/lib/supabase-helpers";
 import { batchSignedUrls } from "@/lib/photo-utils";
 import { extractExif, distanceKm } from "@/lib/exif-utils";
@@ -35,10 +36,13 @@ export default function Trips() {
   const { toast } = useToast();
   const { retailerNames, getLogoUrl } = useRetailers();
   const isMobile = useIsMobile();
+  const categories = useCategories();
   const [trips, setTrips] = useState<TripWithCover[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterDate, setFilterDate] = useState("");
   const [filterRetailer, setFilterRetailer] = useState("");
+  const [filterCategory, setFilterCategory] = useState("");
+  const [categoryTripIds, setCategoryTripIds] = useState<Set<string> | null>(null);
   const smartUploadRef = useRef<HTMLInputElement>(null);
   const [smartUploading, setSmartUploading] = useState(false);
   const [smartProgress, setSmartProgress] = useState(0);
@@ -402,16 +406,33 @@ export default function Trips() {
     if (draftCount > 0) setDraftsOpen(true);
   }
 
+  // Fetch trip IDs matching selected category
+  useEffect(() => {
+    if (!filterCategory) {
+      setCategoryTripIds(null);
+      return;
+    }
+    supabase
+      .from("photos")
+      .select("trip_id")
+      .eq("category", filterCategory)
+      .then(({ data }) => {
+        if (data) setCategoryTripIds(new Set(data.map(d => d.trip_id)));
+        else setCategoryTripIds(new Set());
+      });
+  }, [filterCategory]);
+
   const filteredTrips = trips.filter((trip) => {
     if (filterDate && trip.date !== filterDate) return false;
     if (filterRetailer && trip.store.toLowerCase() !== filterRetailer.toLowerCase()) return false;
+    if (categoryTripIds && !categoryTripIds.has(trip.id)) return false;
     return true;
   });
 
   const uniqueDates = [...new Set(trips.map((t) => t.date))].sort((a, b) => b.localeCompare(a));
   const uniqueStores = [...new Set(trips.map((t) => t.store))].sort();
 
-  const hasFilters = filterDate || filterRetailer;
+  const hasFilters = filterDate || filterRetailer || filterCategory;
 
   return (
     <div className="container py-6">
@@ -514,8 +535,18 @@ export default function Trips() {
               ))}
             </SelectContent>
           </Select>
+          <Select value={filterCategory} onValueChange={setFilterCategory}>
+            <SelectTrigger className="w-[120px] md:w-[160px]">
+              <SelectValue placeholder="Category" />
+            </SelectTrigger>
+            <SelectContent>
+              {categories.map((c) => (
+                <SelectItem key={c} value={c}>{c}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           {hasFilters && (
-            <Button variant="ghost" size="sm" className="h-8 gap-1 text-xs" onClick={() => { setFilterDate(""); setFilterRetailer(""); }}>
+            <Button variant="ghost" size="sm" className="h-8 gap-1 text-xs" onClick={() => { setFilterDate(""); setFilterRetailer(""); setFilterCategory(""); }}>
               <X className="h-3 w-3" /> Clear
             </Button>
           )}

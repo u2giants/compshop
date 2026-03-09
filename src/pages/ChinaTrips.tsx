@@ -19,6 +19,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+import { useCategories } from "@/hooks/use-categories";
 import ChinaDraftTrips from "@/components/trip/ChinaDraftTrips";
 
 import CantonFairGroupCard, { type ChinaTripListItem } from "@/components/trip/CantonFairGroupCard";
@@ -30,10 +31,13 @@ export default function ChinaTrips() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const categories = useCategories();
   const [trips, setTrips] = useState<ChinaTrip[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterDate, setFilterDate] = useState("");
   const [filterVenue, setFilterVenue] = useState("");
+  const [filterCategory, setFilterCategory] = useState("");
+  const [categoryTripIds, setCategoryTripIds] = useState<Set<string> | null>(null);
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkCaching, setBulkCaching] = useState(false);
@@ -498,9 +502,26 @@ export default function ChinaTrips() {
     if (draftCount > 0) setDraftsOpen(true);
   }
 
+  // Fetch trip IDs matching selected category
+  useEffect(() => {
+    if (!filterCategory) {
+      setCategoryTripIds(null);
+      return;
+    }
+    supabase
+      .from("china_photos")
+      .select("trip_id")
+      .eq("category", filterCategory)
+      .then(({ data }) => {
+        if (data) setCategoryTripIds(new Set(data.map(d => d.trip_id)));
+        else setCategoryTripIds(new Set());
+      });
+  }, [filterCategory]);
+
   const filteredTrips = trips.filter((trip) => {
     if (filterDate && trip.date !== filterDate) return false;
     if (filterVenue && trip.venue_type !== filterVenue) return false;
+    if (categoryTripIds && !categoryTripIds.has(trip.id)) return false;
     return true;
   });
 
@@ -518,7 +539,7 @@ export default function ChinaTrips() {
   });
 
   const uniqueDates = [...new Set(trips.map((t) => t.date))].sort((a, b) => b.localeCompare(a));
-  const hasFilters = filterDate || filterVenue;
+  const hasFilters = filterDate || filterVenue || filterCategory;
 
   return (
     <div className="container py-6">
@@ -651,8 +672,18 @@ export default function ChinaTrips() {
               <SelectItem value="booth_visit">Booth Visit</SelectItem>
             </SelectContent>
           </Select>
+          <Select value={filterCategory} onValueChange={setFilterCategory}>
+            <SelectTrigger className="w-[120px] md:w-[160px]">
+              <SelectValue placeholder="Category" />
+            </SelectTrigger>
+            <SelectContent>
+              {categories.map((c) => (
+                <SelectItem key={c} value={c}>{c}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           {hasFilters && (
-            <Button variant="ghost" size="sm" className="h-8 gap-1 text-xs" onClick={() => { setFilterDate(""); setFilterVenue(""); }}>
+            <Button variant="ghost" size="sm" className="h-8 gap-1 text-xs" onClick={() => { setFilterDate(""); setFilterVenue(""); setFilterCategory(""); }}>
               <X className="h-3 w-3" /> Clear
             </Button>
           )}
