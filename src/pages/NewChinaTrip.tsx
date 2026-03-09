@@ -98,15 +98,13 @@ export default function NewChinaTrip() {
         try {
           const { latitude, longitude } = position.coords;
           coordsRef.current = { lat: latitude, lng: longitude };
-          const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`
-          );
-          const data = await res.json();
-          const city = data.address?.city || data.address?.town || data.address?.village || "";
-          const state = data.address?.state || "";
-          const country = data.address?.country || "";
-          const parts = [city, state, country].filter(Boolean);
-          setLocation(parts.join(", "));
+          // Use backend function to avoid GFW blocking Nominatim
+          const { data: geocodeData, error: geocodeError } = await supabase.functions.invoke("reverse-geocode", {
+            body: { latitude, longitude },
+          });
+          if (!geocodeError && geocodeData?.location) {
+            setLocation(geocodeData.location);
+          }
           fetchNearbyStores(latitude, longitude);
         } catch {
         } finally {
