@@ -70,6 +70,8 @@ const App = () => (
                   <Route path="/china" element={<ChinaTrips />} />
                   <Route path="/china/new" element={<NewChinaTrip />} />
                   <Route path="/china/:id" element={<ChinaTripDetail />} />
+                  <Route path="/china/factories" element={<Factories />} />
+                  <Route path="/china/factories/:name" element={<FactoryDetail />} />
                   <Route path="/search" element={<Navigate to="/" replace />} />
                   <Route path="/profile" element={<Profile />} />
                   <Route path="/import/keep" element={<ImportKeep />} />
