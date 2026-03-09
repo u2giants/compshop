@@ -8,13 +8,21 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, MapPin, Loader2, Store, Star } from "lucide-react";
+import { ArrowLeft, MapPin, Loader2, Store, Star, Info } from "lucide-react";
 
 interface NearbyStore {
   name: string;
   address: string;
   rating: number | null;
+}
+
+interface ParentGroup {
+  id: string;
+  name: string;
+  date: string;
+  end_date: string | null;
 }
 
 export default function NewChinaTrip() {
@@ -23,16 +31,59 @@ export default function NewChinaTrip() {
   const { toast } = useToast();
   const [submitting, setSubmitting] = useState(false);
   const [supplier, setSupplier] = useState("");
-  const [venueType, setVenueType] = useState<string>("canton_fair");
+  const [venueType, setVenueType] = useState<string>("factory_visit");
   const [location, setLocation] = useState("");
+  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
+  const [endDate, setEndDate] = useState("");
+  const [notes, setNotes] = useState("");
   const [locatingDevice, setLocatingDevice] = useState(false);
   const [nearbyStores, setNearbyStores] = useState<NearbyStore[]>([]);
   const [loadingStores, setLoadingStores] = useState(false);
   const coordsRef = useRef<{ lat: number; lng: number } | null>(null);
 
+  // Auto-suggest parent group
+  const [availableGroups, setAvailableGroups] = useState<ParentGroup[]>([]);
+  const [selectedParentId, setSelectedParentId] = useState<string>("");
+  const [suggestedParentId, setSuggestedParentId] = useState<string | null>(null);
+
+  const isGroupType = venueType === "canton_fair_group";
+  const canHaveParent = venueType === "factory_visit" || venueType === "booth_visit" || venueType === "canton_fair";
+
   useEffect(() => {
     detectLocation();
+    loadAvailableGroups();
   }, []);
+
+  // Auto-suggest parent when date changes
+  useEffect(() => {
+    if (!canHaveParent || !date) {
+      setSuggestedParentId(null);
+      return;
+    }
+    const d = new Date(date);
+    const matching = availableGroups.find((g) => {
+      const start = new Date(g.date);
+      const end = g.end_date ? new Date(g.end_date) : start;
+      return d >= start && d <= end;
+    });
+    if (matching) {
+      setSuggestedParentId(matching.id);
+      if (!selectedParentId) setSelectedParentId(matching.id);
+    } else {
+      setSuggestedParentId(null);
+    }
+  }, [date, availableGroups, canHaveParent]);
+
+  async function loadAvailableGroups() {
+    const { data } = await supabase
+      .from("china_trips")
+      .select("id, name, date, end_date")
+      .not("end_date", "is", null)
+      .is("parent_id", null)
+      .is("deleted_at", null)
+      .order("date", { ascending: false });
+    if (data) setAvailableGroups(data as ParentGroup[]);
+  }
 
   const detectLocation = () => {
     if (!navigator.geolocation) return;
@@ -42,7 +93,6 @@ export default function NewChinaTrip() {
         try {
           const { latitude, longitude } = position.coords;
           coordsRef.current = { lat: latitude, lng: longitude };
-
           const res = await fetch(
             `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`
           );
@@ -52,8 +102,6 @@ export default function NewChinaTrip() {
           const country = data.address?.country || "";
           const parts = [city, state, country].filter(Boolean);
           setLocation(parts.join(", "));
-
-          // Use larger radius (1km) for trade shows / large venues
           fetchNearbyStores(latitude, longitude);
         } catch {
         } finally {
@@ -72,9 +120,7 @@ export default function NewChinaTrip() {
         body: { latitude, longitude, radius: 1000 },
       });
       if (error) throw error;
-      if (data?.stores) {
-        setNearbyStores(data.stores);
-      }
+      if (data?.stores) setNearbyStores(data.stores);
     } catch (err: any) {
       console.error("Failed to fetch nearby stores:", err);
     } finally {
@@ -84,9 +130,7 @@ export default function NewChinaTrip() {
 
   const selectNearbyStore = (s: NearbyStore) => {
     setSupplier(s.name);
-    if (s.address && !location) {
-      setLocation(s.address);
-    }
+    if (s.address && !location) setLocation(s.address);
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -94,22 +138,28 @@ export default function NewChinaTrip() {
     if (!user || !supplier.trim()) return;
     setSubmitting(true);
 
-    const form = new FormData(e.currentTarget);
-    const date = form.get("date") as string;
-    const notes = form.get("notes") as string;
-
     try {
+      const insertData: any = {
+        name: supplier.trim(),
+        supplier: supplier.trim(),
+        venue_type: isGroupType ? "canton_fair" : venueType,
+        date,
+        location: location || null,
+        notes: notes || null,
+        created_by: user.id,
+      };
+
+      if (isGroupType && endDate) {
+        insertData.end_date = endDate;
+      }
+
+      if (canHaveParent && selectedParentId && selectedParentId !== "none") {
+        insertData.parent_id = selectedParentId;
+      }
+
       const { data: trip, error } = await supabase
         .from("china_trips")
-        .insert({
-          name: supplier.trim(),
-          supplier: supplier.trim(),
-          venue_type: venueType,
-          date,
-          location: location || null,
-          notes: notes || null,
-          created_by: user.id,
-        })
+        .insert(insertData)
         .select()
         .single();
 
@@ -117,8 +167,8 @@ export default function NewChinaTrip() {
 
       await supabase.from("china_trip_members").insert({ trip_id: trip.id, user_id: user.id });
 
-      toast({ title: "Asia trip created!" });
-      navigate(`/china/${trip.id}`);
+      toast({ title: isGroupType ? "Canton Fair group created!" : "Asia trip created!" });
+      navigate(isGroupType ? "/china" : `/china/${trip.id}`);
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally {
@@ -138,18 +188,39 @@ export default function NewChinaTrip() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="supplier">Supplier / Factory</Label>
+              <Label>Trip Type</Label>
+              <Select value={venueType} onValueChange={(v) => { setVenueType(v); setSelectedParentId(""); }}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="factory_visit">Factory Visit</SelectItem>
+                  <SelectItem value="canton_fair">Canton Fair (Trade Show)</SelectItem>
+                  <SelectItem value="booth_visit">Booth Visit</SelectItem>
+                  <SelectItem value="canton_fair_group">📦 Canton Fair Trip Group</SelectItem>
+                </SelectContent>
+              </Select>
+              {isGroupType && (
+                <p className="text-xs text-muted-foreground flex items-start gap-1">
+                  <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                  A group card contains factory visits and booth visits made during a Canton Fair trip.
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="supplier">{isGroupType ? "Trip Name" : "Supplier / Factory"}</Label>
               <Input
                 id="supplier"
                 value={supplier}
                 onChange={(e) => setSupplier(e.target.value)}
-                placeholder="e.g. Shenzhen Lighting Co."
+                placeholder={isGroupType ? "e.g. Canton Fair Autumn 2026" : "e.g. Shenzhen Lighting Co."}
                 required
               />
             </div>
 
             {/* Nearby Location Suggestions */}
-            {(loadingStores || nearbyStores.length > 0) && (
+            {!isGroupType && (loadingStores || nearbyStores.length > 0) && (
               <div className="space-y-2">
                 <Label className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <Store className="h-3.5 w-3.5" /> Nearby locations
@@ -181,24 +252,67 @@ export default function NewChinaTrip() {
               </div>
             )}
 
-            <div className="space-y-2">
-              <Label>Venue Type</Label>
-              <Select value={venueType} onValueChange={setVenueType}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="canton_fair">Canton Fair (Trade Show)</SelectItem>
-                  <SelectItem value="factory_visit">Factory Visit</SelectItem>
-                </SelectContent>
-              </Select>
+            {/* Auto-suggest parent group */}
+            {canHaveParent && availableGroups.length > 0 && (
+              <div className="space-y-2">
+                <Label>Parent Group (optional)</Label>
+                <Select value={selectedParentId} onValueChange={setSelectedParentId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="None (standalone trip)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None (standalone)</SelectItem>
+                    {availableGroups.map((g) => (
+                      <SelectItem key={g.id} value={g.id}>
+                        {g.name} ({g.date}{g.end_date ? ` – ${g.end_date}` : ""})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {suggestedParentId && selectedParentId === suggestedParentId && (
+                  <Badge variant="secondary" className="text-xs">
+                    Auto-suggested based on date
+                  </Badge>
+                )}
+              </div>
+            )}
+
+            <div className={`grid gap-4 ${isGroupType ? "grid-cols-2" : "grid-cols-2"}`}>
+              <div className="space-y-2">
+                <Label htmlFor="date">{isGroupType ? "Start Date" : "Date"}</Label>
+                <Input id="date" type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+              </div>
+              {isGroupType ? (
+                <div className="space-y-2">
+                  <Label htmlFor="end_date">End Date</Label>
+                  <Input id="end_date" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} required />
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Label htmlFor="location">Location</Label>
+                  <div className="relative">
+                    <Input
+                      id="location"
+                      value={location}
+                      onChange={(e) => setLocation(e.target.value)}
+                      placeholder="City or booth #"
+                      className="pr-9"
+                    />
+                    <button
+                      type="button"
+                      onClick={detectLocation}
+                      disabled={locatingDevice}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      title="Detect location"
+                    >
+                      {locatingDevice ? <Loader2 className="h-4 w-4 animate-spin" /> : <MapPin className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="date">Date</Label>
-                <Input id="date" name="date" type="date" defaultValue={new Date().toISOString().split("T")[0]} required />
-              </div>
+            {isGroupType && (
               <div className="space-y-2">
                 <Label htmlFor="location">Location</Label>
                 <div className="relative">
@@ -206,7 +320,7 @@ export default function NewChinaTrip() {
                     id="location"
                     value={location}
                     onChange={(e) => setLocation(e.target.value)}
-                    placeholder="City or booth #"
+                    placeholder="e.g. Guangzhou, China"
                     className="pr-9"
                   />
                   <button
@@ -220,13 +334,14 @@ export default function NewChinaTrip() {
                   </button>
                 </div>
               </div>
-            </div>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="notes">Notes</Label>
-              <Textarea id="notes" name="notes" placeholder="What products are you sourcing?" rows={3} />
+              <Textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="What products are you sourcing?" rows={3} />
             </div>
             <Button type="submit" className="w-full" disabled={submitting || !supplier.trim()}>
-              {submitting ? "Creating..." : "Create Trip"}
+              {submitting ? "Creating..." : isGroupType ? "Create Group" : "Create Trip"}
             </Button>
           </form>
         </CardContent>

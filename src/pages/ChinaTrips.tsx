@@ -18,22 +18,10 @@ import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import ChinaDraftTrips from "@/components/trip/ChinaDraftTrips";
 
-interface ChinaTrip {
-  id: string;
-  name: string;
-  supplier: string;
-  venue_type: string;
-  date: string;
-  location: string | null;
-  notes: string | null;
-  created_by: string | null;
-  created_at: string;
-  updated_at: string;
-  deleted_at: string | null;
-  is_draft: boolean;
-  photo_count?: number;
-  cover_url?: string;
-}
+import CantonFairGroupCard, { type ChinaTripListItem } from "@/components/trip/CantonFairGroupCard";
+import ChinaTripCard from "@/components/trip/ChinaTripCard";
+
+interface ChinaTrip extends ChinaTripListItem {}
 
 export default function ChinaTrips() {
   const { user } = useAuth();
@@ -82,13 +70,29 @@ export default function ChinaTrips() {
           supabase.from("china_photos").select("*", { count: "exact", head: true }).eq("trip_id", tid)
         );
         const coverPromises = tripIds.map(tid =>
-          supabase.from("china_photos").select("file_path").eq("trip_id", tid).order("created_at", { ascending: true }).limit(1)
+          supabase.from("china_photos").select("file_path, user_id").eq("trip_id", tid).order("created_at", { ascending: true }).limit(1)
         );
         
         const [photoCounts, coverResults] = await Promise.all([
           Promise.all(photoCountPromises),
           Promise.all(coverPromises),
         ]);
+
+        // Collect unique user IDs for photographer display
+        const userIds = new Set<string>();
+        data.forEach(t => { if (t.created_by) userIds.add(t.created_by); });
+        coverResults.forEach(r => { if (r.data?.[0]?.user_id) userIds.add(r.data[0].user_id); });
+
+        let profileMap: Record<string, string> = {};
+        if (userIds.size > 0) {
+          const { data: profiles } = await supabase
+            .from("profiles")
+            .select("id, display_name")
+            .in("id", Array.from(userIds));
+          if (profiles) {
+            profiles.forEach(p => { profileMap[p.id] = p.display_name || "Unknown"; });
+          }
+        }
 
         const coverPaths = coverResults
           .map(r => r.data?.[0]?.file_path)
@@ -101,6 +105,7 @@ export default function ChinaTrips() {
           cover_url: coverResults[i].data?.[0]?.file_path
             ? urlMap.get(coverResults[i].data![0].file_path)
             : undefined,
+          photographer: trip.created_by ? profileMap[trip.created_by] ?? null : null,
         }));
         setTrips(tripsWithCounts);
       }
@@ -475,6 +480,18 @@ export default function ChinaTrips() {
     return true;
   });
 
+  // Separate into groups (parent_id is null, venue_type is canton_fair with end_date) and standalone trips
+  const groupTrips = filteredTrips.filter(t => !t.parent_id && t.end_date != null);
+  const childTrips = filteredTrips.filter(t => t.parent_id != null);
+  const standaloneTrips = filteredTrips.filter(t => !t.parent_id && t.end_date == null);
+
+  const childrenByParent = new Map<string, ChinaTrip[]>();
+  childTrips.forEach(c => {
+    const list = childrenByParent.get(c.parent_id!) || [];
+    list.push(c);
+    childrenByParent.set(c.parent_id!, list);
+  });
+
   const uniqueDates = [...new Set(trips.map((t) => t.date))].sort((a, b) => b.localeCompare(a));
   const hasFilters = filterDate || filterVenue;
 
@@ -576,6 +593,7 @@ export default function ChinaTrips() {
             <SelectContent>
               <SelectItem value="canton_fair">Canton Fair</SelectItem>
               <SelectItem value="factory_visit">Factory Visit</SelectItem>
+              <SelectItem value="booth_visit">Booth Visit</SelectItem>
             </SelectContent>
           </Select>
           {hasFilters && (
@@ -616,59 +634,31 @@ export default function ChinaTrips() {
         </Card>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filteredTrips.map((trip) => {
-            const isSelected = selected.has(trip.id);
-            return (
-              <Card
-                key={trip.id}
-                className={`cursor-pointer overflow-hidden transition-shadow hover:shadow-md ${selectMode && isSelected ? "ring-2 ring-primary" : ""}`}
-                onClick={() => {
-                  if (selectMode) toggleSelect(trip.id);
-                  else navigate(`/china/${trip.id}`);
-                }}
-              >
-                {trip.cover_url ? (
-                  <div className="relative h-36 w-full">
-                    <img src={trip.cover_url} alt="" className="h-full w-full object-cover" loading="lazy" />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
-                    {selectMode && (
-                      <div className="absolute top-2 left-2">
-                        <Checkbox checked={isSelected} className="h-5 w-5 border-white bg-black/30 data-[state=checked]:bg-primary" />
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="relative flex h-24 items-center justify-center bg-muted">
-                    <Factory className="h-8 w-8 text-muted-foreground/30" />
-                    {selectMode && (
-                      <div className="absolute top-2 left-2">
-                        <Checkbox checked={isSelected} className="h-5 w-5 data-[state=checked]:bg-primary" />
-                      </div>
-                    )}
-                  </div>
-                )}
-                <CardContent className="p-3">
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className="font-sans font-medium truncate">{trip.supplier}</span>
-                    <span className="text-muted-foreground shrink-0">·</span>
-                    <Badge variant="outline" className="text-xs shrink-0">
-                      {trip.venue_type === "canton_fair" ? "Canton Fair" : "Factory"}
-                    </Badge>
-                    <span className="text-muted-foreground shrink-0">·</span>
-                    <span className="text-muted-foreground shrink-0">{format(new Date(trip.date), "MMM d, yyyy")}</span>
-                    <span className="text-muted-foreground shrink-0">·</span>
-                    <span className="text-muted-foreground shrink-0">{trip.photo_count ?? 0} photos</span>
-                  </div>
-                  {trip.location && (
-                    <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <MapPin className="h-3 w-3 shrink-0" />
-                      <span className="truncate">{trip.location}</span>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })}
+          {/* Render Canton Fair group cards */}
+          {groupTrips.map((group) => (
+            <CantonFairGroupCard
+              key={group.id}
+              group={group}
+              children={childrenByParent.get(group.id) || []}
+              selectMode={selectMode}
+              selected={selected}
+              onToggleSelect={toggleSelect}
+            />
+          ))}
+          {/* Render standalone trips */}
+          {standaloneTrips.map((trip) => (
+            <ChinaTripCard
+              key={trip.id}
+              trip={trip}
+              selectMode={selectMode}
+              isSelected={selected.has(trip.id)}
+              onToggleSelect={toggleSelect}
+              onClick={() => {
+                if (selectMode) toggleSelect(trip.id);
+                else navigate(`/china/${trip.id}`);
+              }}
+            />
+          ))}
         </div>
       )}
     </div>
