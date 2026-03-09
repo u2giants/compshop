@@ -36,6 +36,8 @@ export interface ChinaTrip {
   supplier: string;
   venue_type: string;
   date: string;
+  end_date: string | null;
+  parent_id: string | null;
   location: string | null;
   notes: string | null;
   created_by: string | null;
