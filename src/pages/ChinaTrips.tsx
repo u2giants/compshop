@@ -12,8 +12,9 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar, MapPin, Factory, Plus, Filter, X, Trash2, CheckSquare, Upload, Loader2, FileText, ArrowRightLeft, ChevronDown } from "lucide-react";
+import { Calendar, MapPin, Factory, Plus, Filter, X, Trash2, CheckSquare, Upload, Loader2, FileText, ArrowRightLeft, ChevronDown, Building2 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -498,6 +499,20 @@ export default function ChinaTrips() {
 
   return (
     <div className="container py-6">
+      {/* Tabs navigation */}
+      <div className="mb-4">
+        <Tabs value="trips" onValueChange={(v) => v === "factories" && navigate("/china/factories")}>
+          <TabsList>
+            <TabsTrigger value="trips" className="gap-1.5">
+              <Factory className="h-4 w-4" /> Trips
+            </TabsTrigger>
+            <TabsTrigger value="factories" className="gap-1.5">
+              <Building2 className="h-4 w-4" /> Factories
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
+
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="font-sans text-3xl md:text-4xl">Asia Trips</h1>

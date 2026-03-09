@@ -62,8 +62,24 @@ Deno.serve(async (req) => {
             content: [
               {
                 type: "text",
-                text: `Analyze this product photo. Extract any visible information and return a JSON object with ONLY these fields (use null if not found):
+                text: `Analyze this image. First determine if this is a BUSINESS CARD or a PRODUCT PHOTO.
+
+If it is a BUSINESS CARD, return a JSON object with:
 {
+  "is_business_card": true,
+  "company_name": "company/factory name",
+  "contact_person": "person's name",
+  "phone": "phone number(s)",
+  "email": "email address",
+  "wechat": "WeChat ID if present",
+  "whatsapp": "WhatsApp number if present",
+  "address": "physical address",
+  "website": "website URL"
+}
+
+If it is a PRODUCT PHOTO, return a JSON object with:
+{
+  "is_business_card": false,
   "product_name": "name of the product if visible",${categoryInstruction}
   "price": numeric price value only (no currency symbol), 
   "dimensions": "size/dimensions if shown on label",
@@ -71,7 +87,8 @@ Deno.serve(async (req) => {
   "material": "material if labeled",
   "country_of_origin": "country if shown (e.g. Made in China)"
 }
-Return ONLY the JSON, no markdown, no explanation.`,
+
+Use null for any field not found. Return ONLY the JSON, no markdown, no explanation.`,
               },
               {
                 type: "image_url",
@@ -85,6 +102,18 @@ Return ONLY the JSON, no markdown, no explanation.`,
     });
 
     if (!response.ok) {
+      if (response.status === 429) {
+        return new Response(JSON.stringify({ error: "Rate limits exceeded, please try again later." }), {
+          status: 429,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (response.status === 402) {
+        return new Response(JSON.stringify({ error: "Payment required, please add funds to your workspace." }), {
+          status: 402,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
       const err = await response.text();
       throw new Error(`AI gateway error [${response.status}]: ${err}`);
     }

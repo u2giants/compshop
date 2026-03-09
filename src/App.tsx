@@ -15,6 +15,8 @@ const TripDetail = lazy(() => import("@/pages/TripDetail"));
 const ChinaTrips = lazy(() => import("@/pages/ChinaTrips"));
 const NewChinaTrip = lazy(() => import("@/pages/NewChinaTrip"));
 const ChinaTripDetail = lazy(() => import("@/pages/ChinaTripDetail"));
+const Factories = lazy(() => import("@/pages/Factories"));
+const FactoryDetail = lazy(() => import("@/pages/FactoryDetail"));
 const Profile = lazy(() => import("@/pages/Profile"));
 const ImportKeep = lazy(() => import("@/pages/ImportKeep"));
 const ImportTeams = lazy(() => import("@/pages/ImportTeams"));
@@ -68,6 +70,8 @@ const App = () => (
                   <Route path="/china" element={<ChinaTrips />} />
                   <Route path="/china/new" element={<NewChinaTrip />} />
                   <Route path="/china/:id" element={<ChinaTripDetail />} />
+                  <Route path="/china/factories" element={<Factories />} />
+                  <Route path="/china/factories/:name" element={<FactoryDetail />} />
                   <Route path="/search" element={<Navigate to="/" replace />} />
                   <Route path="/profile" element={<Profile />} />
                   <Route path="/import/keep" element={<ImportKeep />} />
