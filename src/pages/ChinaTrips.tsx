@@ -522,10 +522,23 @@ export default function ChinaTrips() {
                 {smartUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
                 {smartUploading ? `${smartProgress}%` : "Smart Upload"}
               </Button>
-              <Button onClick={() => navigate("/china/new")} className="gap-2">
-                <Plus className="h-4 w-4" />
-                <span className="hidden sm:inline">New Trip</span>
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button className="gap-2">
+                    <Plus className="h-4 w-4" />
+                    <span className="hidden sm:inline">New</span>
+                    <ChevronDown className="h-3 w-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => navigate("/china/new?type=factory_visit")}>
+                    Factory Visit
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate("/china/new?type=canton_fair_group")}>
+                    📦 Canton Fair Group
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               <Button variant="ghost" size="icon" onClick={() => setDraftsOpen(true)} title="Draft Trips">
                 <FileText className="h-4 w-4" />
               </Button>
