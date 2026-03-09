@@ -1075,6 +1075,9 @@ export default function ChinaTripDetail() {
             <Button size="sm" variant="outline" onClick={() => setShowBulkMove(true)} className="gap-1 shrink-0">
               <ArrowRightLeft className="h-3.5 w-3.5" /> Move
             </Button>
+            <Button size="sm" variant="outline" onClick={handleCacheSelected} disabled={bulkCaching} className="gap-1 shrink-0">
+              <Download className="h-3.5 w-3.5" /> {bulkCaching ? "Caching..." : "Cache"}
+            </Button>
           </div>
           <Button size="sm" variant="ghost" onClick={() => setSelectedPhotos(new Set())} className="shrink-0 p-1">
             <X className="h-4 w-4" />
