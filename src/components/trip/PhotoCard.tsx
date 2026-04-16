@@ -400,9 +400,9 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
               {selected && <span className="text-xs">✓</span>}
             </button>
           )}
-          {(allImages[activeImageIndex]?.signed_url || photo.signed_url) ? (
+          {(blobUrl || allImages[activeImageIndex]?.signed_url || photo.signed_url) ? (
             <img
-              src={allImages[activeImageIndex]?.signed_thumbnail_url || allImages[activeImageIndex]?.signed_url || photo.signed_thumbnail_url || photo.signed_url}
+              src={blobUrl || allImages[activeImageIndex]?.signed_thumbnail_url || allImages[activeImageIndex]?.signed_url || photo.signed_thumbnail_url || photo.signed_url}
               alt={photo.product_name || "Photo"}
               className="aspect-[4/3] w-full object-cover"
               loading="lazy"
