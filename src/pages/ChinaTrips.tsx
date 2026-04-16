@@ -7,6 +7,8 @@ import { batchSignedUrls } from "@/lib/photo-utils";
 import { extractExif, distanceKm } from "@/lib/exif-utils";
 import { getCantonFairSession, sessionKey } from "@/lib/canton-fair-utils";
 import { cacheChinaTripPhotos, type BulkCacheProgress } from "@/lib/bulk-cache";
+import { cacheChinaTrips, getCachedChinaTrips, clearCachedChinaTrips, setSyncTimestamp, getSyncTimestamp, cacheImageBlob, getCachedImageBlob, type CachedChinaTrip } from "@/lib/offline-db";
+import { useOnlineStatus } from "@/hooks/use-online-status";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
