@@ -360,9 +360,10 @@ export default function TripDetail() {
     if (cached.length > 0) {
       const withUrls = await Promise.all(
         cached.map(async (p) => {
-          if (p.signed_url) return p;
+          // Always check blob cache first — signed_url expires after 1 hour
           const blob = await getCachedImageBlob(p.file_path);
-          return { ...p, signed_url: blob ? URL.createObjectURL(blob) : undefined };
+          if (blob) return { ...p, signed_url: URL.createObjectURL(blob) };
+          return { ...p, signed_url: undefined };
         })
       );
       setPhotos(withUrls as unknown as Photo[]);
@@ -379,7 +380,9 @@ export default function TripDetail() {
           return { ...p, signed_url };
         });
         setPhotos(withUrls);
-        await cachePhotos(data as unknown as CachedPhoto[]);
+        // Strip signed_url before caching — they expire and shouldn't be persisted
+        const toCache = data.map(({ ...p }) => ({ ...p, signed_url: undefined }));
+        await cachePhotos(toCache as unknown as CachedPhoto[]);
         // Fetch user profiles for attribution
         const userIds = [...new Set(data.map(p => p.user_id).filter(Boolean))] as string[];
         if (userIds.length > 0) {
