@@ -27,6 +27,7 @@ export interface ChinaTripListItem {
   is_draft: boolean;
   photo_count?: number;
   cover_url?: string;
+  cover_file_path?: string;
   photographer?: string | null;
 }
 
