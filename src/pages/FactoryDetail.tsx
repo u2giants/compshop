@@ -252,6 +252,8 @@ export default function FactoryDetail() {
                             </div>
                           }
                         />
+                        {photo.product_name && (
+                          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-1.5">
                             <p className="text-[10px] text-white truncate">{photo.product_name}</p>
                           </div>
                         )}
