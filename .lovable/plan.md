@@ -1,54 +1,60 @@
 
 
-## Comp Shopping Intelligence App
+# Aggressive Offline-First: Cache Everything, Eliminate Round-Trips
 
-A collaborative web app (installable as PWA on iPhone & Android) for your team to capture, organize, and analyze findings from comparison shopping trips.
+## Problem
+The app makes full network round-trips on every page load — trip lists, photo metadata, signed URLs, and cover images all reload from scratch. In China, each round-trip takes 200-500ms, making the app feel sluggish. The ChinaTrips page has zero caching.
 
-### Core Structure
+## Strategy: Stale-While-Revalidate Everywhere
 
-**Shopping Trips** — The main organizing unit. Each trip has a store name, date, location, and team members who participated. Trips live in a timeline view and can be filtered/searched.
+Show cached data instantly, then update silently in the background. Users see content in <50ms on repeat visits.
 
-**Photo Entries** — Within each trip, team members upload photos with structured metadata fields:
-- Product name/description
-- Category (furniture, textiles, lighting, etc.)
-- Price
-- Dimensions/size
-- Country of origin
-- Material
-- Brand/manufacturer
-- Custom notes
+## Plan
 
-**Image Annotation** — Draw directly on photos with freehand tools (circles, arrows, highlights) to call out specific details like construction methods, finishes, or design elements. Annotations are saved as overlays so the original photo is preserved.
+### 1. Upgrade IndexedDB schema (offline-db.ts)
+- Bump DB version to 2
+- Add `china_trips` object store (mirrors `trips` store)
+- Add `china_photos` object store with `by-trip` index
+- Add `signed_urls` object store: `{ file_path, url, expires_at }` — cache signed URLs with their expiry timestamp
+- Add helper functions: `cacheChinaTrips`, `getCachedChinaTrips`, `getCachedChinaTrip`, `cacheChinaPhotos`, `getCachedChinaPhotos`, `cacheSignedUrl`, `getCachedSignedUrl`
 
-### Collaboration Features
+### 2. Extend signed URL TTL to 24 hours
+- Change all `createSignedUrls(paths, 3600)` calls to `createSignedUrls(paths, 86400)` in `batchSignedUrls` (photo-utils.ts)
+- Store generated URLs in the new `signed_urls` IndexedDB store with `expires_at = Date.now() + 86400000`
+- Before calling Supabase, check if we have unexpired cached URLs — skip the API call entirely if all URLs are still valid
 
-**Team Comments** — Thread-based comments on any photo entry so team members can discuss findings, share opinions, and flag items of interest.
+### 3. Add stale-while-revalidate to Trips.tsx
+- Current: shows cached trips, then waits for network to replace them
+- Change: show cached trips instantly and set `loading=false` immediately. Fire network refresh in background without blocking UI. Only update state if data actually changed.
 
-**Real-time Feed** — When on a trip together, the team sees a live feed of everyone's uploads organized by store, making it easy to see what's already been captured.
+### 4. Add full offline caching to ChinaTrips.tsx
+- Mirror the pattern from Trips.tsx: load from `getCachedChinaTrips()` first, render immediately
+- Background-fetch from Supabase, then `cacheChinaTrips()` on success
+- When offline, skip network entirely
 
-### Search & Discovery
+### 5. Cache signed URLs in ChinaTripDetail.tsx and TripDetail.tsx
+- Before calling `batchSignedUrls`, check the `signed_urls` store for unexpired URLs
+- Only request URLs for paths not already cached
+- This eliminates the biggest per-page-load API call
 
-**Powerful Filtering** — Search across all trips by store, date range, product category, price range, country of origin, brand, or free text. Quickly answer questions like "show me all competitor lamps under $200 made in India."
+### 6. Pre-cache cover images on trip list load
+- When Trips.tsx or ChinaTrips.tsx fetches cover photos, immediately cache the blob via `cacheImageInBackground` so the `CachedImage` component finds them on next visit
 
-### Export & Reporting
+### 7. Add a `lastSyncedAt` timestamp per store
+- Store a simple `{ key: 'trips_last_sync', timestamp }` entry
+- If last sync was <5 minutes ago AND we have cached data, skip the background refresh entirely (saves bandwidth in China)
 
-**PDF/Spreadsheet Export** — Generate trip reports with photos and metadata for internal presentations or buying meetings. Export filtered results as spreadsheets for pricing analysis.
+## Files Changed
+- `src/lib/offline-db.ts` — new stores, version bump, new helpers
+- `src/lib/photo-utils.ts` — 24h TTL, signed URL caching layer
+- `src/pages/Trips.tsx` — stale-while-revalidate, cover image pre-caching
+- `src/pages/ChinaTrips.tsx` — full IndexedDB caching (currently zero)
+- `src/pages/TripDetail.tsx` — signed URL cache lookup before API
+- `src/pages/ChinaTripDetail.tsx` — signed URL cache lookup before API
+- `src/components/CachedImage.tsx` — check signed URL cache as fallback
 
-### Mobile-First Design
-
-**PWA (Installable Web App)** — Works in any browser and can be installed to the home screen on both iPhone and Android. Optimized for one-handed use while walking through a store — quick photo capture, fast metadata entry, swipe-through browsing.
-
-**Offline Support** — Draft entries can be saved locally and synced when back online.
-
-### User Management
-
-**Team Accounts** — Email-based login with team roles. All team members can upload and comment. Admin users can manage trips, edit/delete any entry, and run exports.
-
-### Backend (Lovable Cloud)
-
-The app will use Lovable Cloud for:
-- **Database** — Stores trips, photo entries, annotations, comments, and user data
-- **Authentication** — Email-based sign-up/login for the team
-- **File Storage** — Secure storage for all uploaded photos
-- **Edge Functions** — PDF report generation and any data processing
+## Technical Notes
+- DB version bump from 1→2 requires an `upgrade` handler that creates the new stores only if they don't exist
+- Signed URL cache uses a simple expiry check: `if (entry && entry.expires_at > Date.now()) return entry.url`
+- No changes to RLS, edge functions, or database schema
 
