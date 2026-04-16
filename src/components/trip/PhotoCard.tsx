@@ -1,4 +1,5 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
+import { getCachedImageBlob, cacheImageBlob } from "@/lib/offline-db";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCategories } from "@/hooks/use-categories";
@@ -78,6 +79,38 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
   const addPhotoInputRef = useRef<HTMLInputElement>(null);
   const addPhotoCameraRef = useRef<HTMLInputElement>(null);
   const dragState = useRef<{ isDragging: boolean; startX: number; startY: number; scrollLeft: number; scrollTop: number }>({ isDragging: false, startX: 0, startY: 0, scrollLeft: 0, scrollTop: 0 });
+
+  // ── Blob cache: prefer local blobs over signed URLs ──
+  const [blobUrl, setBlobUrl] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    let revoke: string | undefined;
+    let cancelled = false;
+    (async () => {
+      // Check blob cache for the original file
+      const blob = await getCachedImageBlob(photo.file_path);
+      if (cancelled) return;
+      if (blob) {
+        const url = URL.createObjectURL(blob);
+        revoke = url;
+        setBlobUrl(url);
+        return;
+      }
+      // No blob cached — if we have a signed URL, fetch & cache it
+      const signedUrl = photo.signed_thumbnail_url || photo.signed_url;
+      if (signedUrl) {
+        try {
+          const res = await fetch(signedUrl);
+          const b = await res.blob();
+          await cacheImageBlob(photo.file_path, b);
+          if (cancelled) return;
+          const url = URL.createObjectURL(b);
+          revoke = url;
+          setBlobUrl(url);
+        } catch {}
+      }
+    })();
+    return () => { cancelled = true; if (revoke) URL.revokeObjectURL(revoke); };
+  }, [photo.id, photo.file_path]);
 
   // Use a ref-based native wheel listener so we can preventDefault (passive: false)
   const zoomContainerRef = useCallback((node: HTMLDivElement | null) => {
@@ -367,9 +400,9 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
               {selected && <span className="text-xs">✓</span>}
             </button>
           )}
-          {(allImages[activeImageIndex]?.signed_url || photo.signed_url) ? (
+          {(blobUrl || allImages[activeImageIndex]?.signed_url || photo.signed_url) ? (
             <img
-              src={allImages[activeImageIndex]?.signed_thumbnail_url || allImages[activeImageIndex]?.signed_url || photo.signed_thumbnail_url || photo.signed_url}
+              src={blobUrl || allImages[activeImageIndex]?.signed_thumbnail_url || allImages[activeImageIndex]?.signed_url || photo.signed_thumbnail_url || photo.signed_url}
               alt={photo.product_name || "Photo"}
               className="aspect-[4/3] w-full object-cover"
               loading="lazy"
