@@ -44,18 +44,24 @@ export function groupBySection(groups: { primary: Photo; extras: Photo[] }[]): {
 
 /**
  * Batch-generate signed URLs for an array of photos.
+ * Also signs thumbnail_path when available.
  * Falls back to individual requests if the batch API fails.
  */
-export async function batchSignedUrls(photos: { file_path: string }[]): Promise<Map<string, string>> {
+export async function batchSignedUrls(photos: { file_path: string; thumbnail_path?: string | null }[]): Promise<Map<string, string>> {
   const urlMap = new Map<string, string>();
   if (photos.length === 0) return urlMap;
 
-  const paths = photos.map((p) => p.file_path);
+  // Collect all paths (originals + thumbnails)
+  const allPaths: string[] = [];
+  for (const p of photos) {
+    allPaths.push(p.file_path);
+    if (p.thumbnail_path) allPaths.push(p.thumbnail_path);
+  }
 
   try {
     const { data, error } = await supabase.storage
       .from("photos")
-      .createSignedUrls(paths, 3600);
+      .createSignedUrls(allPaths, 3600);
 
     if (!error && data) {
       for (const item of data) {
@@ -65,13 +71,13 @@ export async function batchSignedUrls(photos: { file_path: string }[]): Promise<
       }
     }
   } catch {
-    // Fallback: individual requests (shouldn't normally happen)
-    for (const p of photos) {
+    // Fallback: individual requests
+    for (const path of allPaths) {
       try {
         const { data } = await supabase.storage
           .from("photos")
-          .createSignedUrl(p.file_path, 3600);
-        if (data?.signedUrl) urlMap.set(p.file_path, data.signedUrl);
+          .createSignedUrl(path, 3600);
+        if (data?.signedUrl) urlMap.set(path, data.signedUrl);
       } catch {}
     }
   }

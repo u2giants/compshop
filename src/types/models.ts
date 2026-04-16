@@ -15,6 +15,8 @@ export interface Photo {
   user_id: string | null;
   created_at: string;
   signed_url?: string;
+  thumbnail_path?: string | null;
+  signed_thumbnail_url?: string;
   group_id: string | null;
   section?: string | null;
   trip?: { name: string; store: string };

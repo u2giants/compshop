@@ -376,8 +376,9 @@ export default function TripDetail() {
         const urlMap = await batchSignedUrls(data);
         const withUrls = data.map((p) => {
           const signed_url = urlMap.get(p.file_path);
+          const signed_thumbnail_url = p.thumbnail_path ? urlMap.get(p.thumbnail_path) : undefined;
           if (signed_url) cacheImageInBackground(p.file_path, signed_url);
-          return { ...p, signed_url };
+          return { ...p, signed_url, signed_thumbnail_url };
         });
         setPhotos(withUrls);
         // Strip signed_url before caching — they expire and shouldn't be persisted
@@ -579,9 +580,9 @@ export default function TripDetail() {
         const lat = exif.latitude ?? null;
         const lng = exif.longitude ?? null;
 
-        const filePath = await uploadPhoto(file, user.id, id);
+        const { filePath, thumbnailPath } = await uploadPhoto(file, user.id, id);
         const { error } = await supabase.from("photos").insert({
-          trip_id: id, user_id: user.id, file_path: filePath, file_hash: fileHash,
+          trip_id: id, user_id: user.id, file_path: filePath, thumbnail_path: thumbnailPath, file_hash: fileHash,
           ...(lat != null && lng != null ? { latitude: lat, longitude: lng } : {}),
         });
         if (error) throw error;
@@ -625,9 +626,9 @@ export default function TripDetail() {
       try {
         const fileHash = await hashFile(file);
         if (await checkDuplicatePhoto(fileHash)) continue;
-        const filePath = await uploadPhoto(file, user.id, id);
+        const { filePath, thumbnailPath } = await uploadPhoto(file, user.id, id);
         const { error } = await supabase.from("photos").insert({
-          trip_id: id, user_id: user.id, file_path: filePath, group_id: targetPhotoId, file_hash: fileHash,
+          trip_id: id, user_id: user.id, file_path: filePath, thumbnail_path: thumbnailPath, group_id: targetPhotoId, file_hash: fileHash,
         });
         if (error) throw error;
         successCount++;
@@ -725,9 +726,9 @@ export default function TripDetail() {
       const lat = exif.latitude ?? null;
       const lng = exif.longitude ?? null;
 
-      const filePath = await uploadPhoto(selectedFile, user.id, id);
+      const { filePath, thumbnailPath } = await uploadPhoto(selectedFile, user.id, id);
       const { error } = await supabase.from("photos").insert({
-        trip_id: id, user_id: user.id, file_path: filePath, file_hash: fileHash, ...metadata,
+        trip_id: id, user_id: user.id, file_path: filePath, thumbnail_path: thumbnailPath, file_hash: fileHash, ...metadata,
         ...(lat != null && lng != null ? { latitude: lat, longitude: lng } : {}),
       });
       if (error) throw error;

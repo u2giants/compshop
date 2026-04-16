@@ -140,11 +140,12 @@ export default function ImportKeep() {
             const file = new File([img.blob], img.name, { type: img.blob.type || "image/jpeg" });
             const fileHash = await hashFile(file);
             if (await checkDuplicatePhoto(fileHash)) continue;
-            const filePath = await uploadPhoto(file, user.id, trip.id);
+            const { filePath, thumbnailPath } = await uploadPhoto(file, user.id, trip.id);
             await supabase.from("photos").insert({
               trip_id: trip.id,
               user_id: user.id,
               file_path: filePath,
+              thumbnail_path: thumbnailPath,
               file_hash: fileHash,
               notes: `Imported from Google Keep: ${card.title}`,
             });

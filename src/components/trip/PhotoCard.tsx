@@ -37,6 +37,8 @@ interface Photo {
   created_at: string;
   signed_url?: string;
   group_id?: string | null;
+  thumbnail_path?: string | null;
+  signed_thumbnail_url?: string;
 }
 
 interface Props {
@@ -367,7 +369,7 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
           )}
           {(allImages[activeImageIndex]?.signed_url || photo.signed_url) ? (
             <img
-              src={allImages[activeImageIndex]?.signed_url || photo.signed_url}
+              src={allImages[activeImageIndex]?.signed_thumbnail_url || allImages[activeImageIndex]?.signed_url || photo.signed_thumbnail_url || photo.signed_url}
               alt={photo.product_name || "Photo"}
               className="aspect-[4/3] w-full object-cover"
               loading="lazy"

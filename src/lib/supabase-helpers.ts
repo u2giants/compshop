@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { createAndUploadThumbnail } from "@/lib/thumbnail-utils";
 
 export async function getCurrentUser() {
   const { data: { user } } = await supabase.auth.getUser();
@@ -39,7 +40,7 @@ export async function checkDuplicatePhoto(fileHash: string): Promise<boolean> {
   return (d1?.length ?? 0) > 0 || (d2?.length ?? 0) > 0;
 }
 
-export async function uploadPhoto(file: File, userId: string, tripId: string) {
+export async function uploadPhoto(file: File, userId: string, tripId: string): Promise<{ filePath: string; thumbnailPath: string | null }> {
   const fileExt = file.name.split(".").pop();
   const filePath = `${userId}/${tripId}/${crypto.randomUUID()}.${fileExt}`;
 
@@ -48,7 +49,16 @@ export async function uploadPhoto(file: File, userId: string, tripId: string) {
     .upload(filePath, file);
 
   if (error) throw error;
-  return filePath;
+
+  // Generate WebP thumbnail in parallel (non-blocking on failure)
+  let thumbnailPath: string | null = null;
+  try {
+    thumbnailPath = await createAndUploadThumbnail(file, userId, tripId);
+  } catch (e) {
+    console.warn("Thumbnail generation failed, using original:", e);
+  }
+
+  return { filePath, thumbnailPath };
 }
 
 export function getPhotoUrl(filePath: string) {

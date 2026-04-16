@@ -41,12 +41,13 @@ async function syncOne(upload: PendingUpload): Promise<boolean> {
       await removePendingUpload(upload.id);
       return true;
     }
-    const filePath = await uploadPhoto(file, upload.user_id, upload.trip_id);
+    const { filePath, thumbnailPath } = await uploadPhoto(file, upload.user_id, upload.trip_id);
 
     const { error } = await supabase.from("photos").insert({
       trip_id: upload.trip_id,
       user_id: upload.user_id,
       file_path: filePath,
+      thumbnail_path: thumbnailPath,
       file_hash: fileHash,
       ...upload.metadata,
     });

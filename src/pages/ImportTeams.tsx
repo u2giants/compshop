@@ -111,11 +111,12 @@ export default function ImportTeams() {
         try {
           const fileHash = await hashFile(img);
           if (await checkDuplicatePhoto(fileHash)) continue;
-          const filePath = await uploadPhoto(img, user.id, trip.id);
+          const { filePath, thumbnailPath } = await uploadPhoto(img, user.id, trip.id);
           await supabase.from("photos").insert({
             trip_id: trip.id,
             user_id: user.id,
             file_path: filePath,
+            thumbnail_path: thumbnailPath,
             file_hash: fileHash,
             notes: "Imported from Teams conversation",
           });
