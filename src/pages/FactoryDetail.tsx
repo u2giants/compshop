@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import CachedImage from "@/components/CachedImage";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -239,20 +240,18 @@ export default function FactoryDetail() {
                         className="group relative aspect-square cursor-pointer overflow-hidden rounded-md bg-muted"
                         onClick={() => navigate(`/china/${trip.id}`)}
                       >
-                        {photo.signed_url ? (
-                          <img
-                            src={photo.signed_url}
-                            alt={photo.product_name || "Photo"}
-                            className="h-full w-full object-cover transition-transform group-hover:scale-105"
-                            loading="lazy"
-                          />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center">
-                            <Factory className="h-6 w-6 text-muted-foreground/30" />
-                          </div>
-                        )}
-                        {photo.product_name && (
-                          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-1.5">
+                        <CachedImage
+                          filePath={photo.file_path}
+                          signedUrl={photo.signed_url}
+                          alt={photo.product_name || "Photo"}
+                          className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                          loading="lazy"
+                          fallback={
+                            <div className="flex h-full w-full items-center justify-center">
+                              <Factory className="h-6 w-6 text-muted-foreground/30" />
+                            </div>
+                          }
+                        />
                             <p className="text-[10px] text-white truncate">{photo.product_name}</p>
                           </div>
                         )}
