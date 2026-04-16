@@ -579,9 +579,9 @@ export default function TripDetail() {
         const lat = exif.latitude ?? null;
         const lng = exif.longitude ?? null;
 
-        const filePath = await uploadPhoto(file, user.id, id);
+        const { filePath, thumbnailPath } = await uploadPhoto(file, user.id, id);
         const { error } = await supabase.from("photos").insert({
-          trip_id: id, user_id: user.id, file_path: filePath, file_hash: fileHash,
+          trip_id: id, user_id: user.id, file_path: filePath, thumbnail_path: thumbnailPath, file_hash: fileHash,
           ...(lat != null && lng != null ? { latitude: lat, longitude: lng } : {}),
         });
         if (error) throw error;
@@ -625,9 +625,9 @@ export default function TripDetail() {
       try {
         const fileHash = await hashFile(file);
         if (await checkDuplicatePhoto(fileHash)) continue;
-        const filePath = await uploadPhoto(file, user.id, id);
+        const { filePath, thumbnailPath } = await uploadPhoto(file, user.id, id);
         const { error } = await supabase.from("photos").insert({
-          trip_id: id, user_id: user.id, file_path: filePath, group_id: targetPhotoId, file_hash: fileHash,
+          trip_id: id, user_id: user.id, file_path: filePath, thumbnail_path: thumbnailPath, group_id: targetPhotoId, file_hash: fileHash,
         });
         if (error) throw error;
         successCount++;
@@ -725,9 +725,9 @@ export default function TripDetail() {
       const lat = exif.latitude ?? null;
       const lng = exif.longitude ?? null;
 
-      const filePath = await uploadPhoto(selectedFile, user.id, id);
+      const { filePath, thumbnailPath } = await uploadPhoto(selectedFile, user.id, id);
       const { error } = await supabase.from("photos").insert({
-        trip_id: id, user_id: user.id, file_path: filePath, file_hash: fileHash, ...metadata,
+        trip_id: id, user_id: user.id, file_path: filePath, thumbnail_path: thumbnailPath, file_hash: fileHash, ...metadata,
         ...(lat != null && lng != null ? { latitude: lat, longitude: lng } : {}),
       });
       if (error) throw error;

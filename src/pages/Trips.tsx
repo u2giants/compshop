@@ -371,11 +371,12 @@ export default function Trips() {
         try {
           const fileHash = await hashFile(file);
           if (await checkDuplicatePhoto(fileHash)) continue;
-          const filePath = await uploadPhoto(file, user.id, tripId);
+          const { filePath, thumbnailPath } = await uploadPhoto(file, user.id, tripId);
           await supabase.from("photos").insert({
             trip_id: tripId,
             user_id: user.id,
             file_path: filePath,
+            thumbnail_path: thumbnailPath,
             file_hash: fileHash,
           });
 
