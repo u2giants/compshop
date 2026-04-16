@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from "react";
+import CachedImage from "@/components/CachedImage";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";

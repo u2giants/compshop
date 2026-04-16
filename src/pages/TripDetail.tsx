@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from "react";
+import CachedImage from "@/components/CachedImage";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
