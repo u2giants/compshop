@@ -14,15 +14,16 @@ import { useCountries } from "@/hooks/use-countries";
 import { useOnlineStatus } from "@/hooks/use-online-status";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
-  getCachedTrip,
-  cacheTrips,
-  getCachedPhotos,
-  cachePhotos,
+  getCachedChinaTrip,
+  cacheChinaTrips,
+  getCachedChinaPhotos,
+  cacheChinaPhotos,
   cacheImageBlob,
   getCachedImageBlob,
   addPendingUpload,
   getPendingUploadsByTrip,
-  type CachedPhoto,
+  type CachedChinaTrip as CachedChinaTripType,
+  type CachedChinaPhoto,
   type PendingUpload,
 } from "@/lib/offline-db";
 import { runSync } from "@/lib/sync-service";
