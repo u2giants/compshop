@@ -1,5 +1,6 @@
 import type { Photo } from "@/types/models";
 import { supabase } from "@/integrations/supabase/client";
+import { getCachedSignedUrls, cacheSignedUrls, type CachedSignedUrl } from "@/lib/offline-db";
 
 /** Group photos: primary photos (no group_id) with their children */
 export function groupPhotos(photos: Photo[]): { primary: Photo; extras: Photo[] }[] {
@@ -42,9 +43,13 @@ export function groupBySection(groups: { primary: Photo; extras: Photo[] }[]): {
   return sectionOrder.map((sec) => ({ section: sec, items: map.get(sec)! }));
 }
 
+const SIGNED_URL_TTL = 86400; // 24 hours
+const SIGNED_URL_TTL_MS = SIGNED_URL_TTL * 1000;
+
 /**
  * Batch-generate signed URLs for an array of photos.
  * Also signs thumbnail_path when available.
+ * Checks IndexedDB cache first — only requests URLs for uncached/expired paths.
  * Falls back to individual requests if the batch API fails.
  */
 export async function batchSignedUrls(photos: { file_path: string; thumbnail_path?: string | null }[]): Promise<Map<string, string>> {
@@ -58,26 +63,45 @@ export async function batchSignedUrls(photos: { file_path: string; thumbnail_pat
     if (p.thumbnail_path) allPaths.push(p.thumbnail_path);
   }
 
+  // Check cache first
+  const cached = await getCachedSignedUrls(allPaths);
+  cached.forEach((url, path) => urlMap.set(path, url));
+
+  // Determine which paths still need fetching
+  const uncachedPaths = allPaths.filter((p) => !urlMap.has(p));
+  if (uncachedPaths.length === 0) return urlMap;
+
   try {
     const { data, error } = await supabase.storage
       .from("photos")
-      .createSignedUrls(allPaths, 3600);
+      .createSignedUrls(uncachedPaths, SIGNED_URL_TTL);
 
     if (!error && data) {
+      const toCache: CachedSignedUrl[] = [];
       for (const item of data) {
         if (item.signedUrl && item.path) {
           urlMap.set(item.path, item.signedUrl);
+          toCache.push({
+            file_path: item.path,
+            url: item.signedUrl,
+            expires_at: Date.now() + SIGNED_URL_TTL_MS,
+          });
         }
       }
+      // Cache in background — don't block
+      cacheSignedUrls(toCache).catch(() => {});
     }
   } catch {
     // Fallback: individual requests
-    for (const path of allPaths) {
+    for (const path of uncachedPaths) {
       try {
         const { data } = await supabase.storage
           .from("photos")
-          .createSignedUrl(path, 3600);
-        if (data?.signedUrl) urlMap.set(path, data.signedUrl);
+          .createSignedUrl(path, SIGNED_URL_TTL);
+        if (data?.signedUrl) {
+          urlMap.set(path, data.signedUrl);
+          cacheSignedUrls([{ file_path: path, url: data.signedUrl, expires_at: Date.now() + SIGNED_URL_TTL_MS }]).catch(() => {});
+        }
       } catch {}
     }
   }

@@ -4,7 +4,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { cacheTrips, getCachedTrips, clearCachedTrips, type CachedTrip } from "@/lib/offline-db";
+import { cacheTrips, getCachedTrips, clearCachedTrips, setSyncTimestamp, getSyncTimestamp, cacheImageBlob, getCachedImageBlob, type CachedTrip } from "@/lib/offline-db";
 import { useOnlineStatus } from "@/hooks/use-online-status";
 import { useRetailers } from "@/hooks/use-retailers";
 import { useCategories } from "@/hooks/use-categories";
@@ -95,6 +95,7 @@ export default function Trips() {
   }, [user, online]);
 
   async function loadTrips() {
+    // 1. Show cached data instantly
     const cached = await getCachedTrips();
     if (cached.length > 0) {
       setTrips(cached.filter(t => !(t as any).deleted_at && !(t as any).is_draft).sort((a, b) => b.date.localeCompare(a.date)));
@@ -106,6 +107,14 @@ export default function Trips() {
       return;
     }
 
+    // 2. Skip background refresh if synced recently (<5 min)
+    const lastSync = await getSyncTimestamp("trips");
+    if (cached.length > 0 && lastSync && Date.now() - lastSync < 5 * 60 * 1000) {
+      setLoading(false);
+      return;
+    }
+
+    // 3. Background fetch
     try {
       const { data } = await supabase
         .from("shopping_trips")
@@ -115,10 +124,8 @@ export default function Trips() {
         .order("date", { ascending: false });
 
       if (data) {
-        // Batch queries: get all photo counts and cover photos in fewer requests
         const tripIds = data.map(t => t.id);
         
-        // Get photo counts for all trips at once
         const photoCountPromises = tripIds.map(tid =>
           supabase.from("photos").select("*", { count: "exact", head: true }).eq("trip_id", tid)
         );
@@ -135,7 +142,6 @@ export default function Trips() {
           Promise.all(coverPromises),
         ]);
 
-        // Batch signed URLs for all cover photos in a single call
         const coverPaths = coverResults
           .map(r => r.data?.[0]?.file_path)
           .filter(Boolean) as string[];
@@ -152,13 +158,28 @@ export default function Trips() {
         }));
         setTrips(tripsWithCounts);
 
+        // Pre-cache cover image blobs in background
+        for (const t of tripsWithCounts) {
+          if (t.cover_file_path && t.cover_url) {
+            preCacheCoverImage(t.cover_file_path, t.cover_url);
+          }
+        }
+
         await clearCachedTrips();
         await cacheTrips(tripsWithCounts);
+        await setSyncTimestamp("trips");
       }
     } catch (err) {
       console.error("[Trips] Network error, using cache", err);
     }
     setLoading(false);
+  }
+
+  function preCacheCoverImage(filePath: string, url: string) {
+    getCachedImageBlob(filePath).then((existing) => {
+      if (existing) return;
+      fetch(url).then(r => r.blob()).then(b => cacheImageBlob(filePath, b)).catch(() => {});
+    });
   }
 
   function toggleSelect(id: string, shiftKey: boolean) {

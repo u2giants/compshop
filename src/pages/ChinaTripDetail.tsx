@@ -14,15 +14,16 @@ import { useCountries } from "@/hooks/use-countries";
 import { useOnlineStatus } from "@/hooks/use-online-status";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
-  getCachedTrip,
-  cacheTrips,
-  getCachedPhotos,
-  cachePhotos,
+  getCachedChinaTrip,
+  cacheChinaTrips,
+  getCachedChinaPhotos,
+  cacheChinaPhotos,
   cacheImageBlob,
   getCachedImageBlob,
   addPendingUpload,
   getPendingUploadsByTrip,
-  type CachedPhoto,
+  type CachedChinaTrip as CachedChinaTripType,
+  type CachedChinaPhoto,
   type PendingUpload,
 } from "@/lib/offline-db";
 import { runSync } from "@/lib/sync-service";
@@ -362,15 +363,14 @@ export default function ChinaTripDetail() {
   }, [id, online]);
 
   async function loadTrip() {
-    const cached = await getCachedTrip(id!);
+    const cached = await getCachedChinaTrip(id!);
     if (cached) { setTrip(cached as any); setLoading(false); }
     if (!navigator.onLine) { setLoading(false); return; }
     try {
       const { data } = await supabase.from("china_trips").select("*").eq("id", id!).single();
       if (data) {
         setTrip(data);
-        await cacheTrips([{ id: data.id, name: data.name, store: data.supplier, date: data.date, location: data.location, notes: data.notes, created_by: data.created_by, created_at: data.created_at, updated_at: data.updated_at }]);
-        // Load factory info if linked
+        await cacheChinaTrips([{ ...data, photo_count: undefined, cover_url: undefined, cover_file_path: undefined, photographer: null }]);
         if (data.factory_id) {
           const { data: factory } = await supabase.from("factories").select("*").eq("id", data.factory_id).single();
           if (factory) setFactoryInfo(factory as any);
@@ -381,11 +381,10 @@ export default function ChinaTripDetail() {
   }
 
   async function loadPhotos() {
-    const cached = await getCachedPhotos(id!);
+    const cached = await getCachedChinaPhotos(id!);
     if (cached.length > 0) {
       const withUrls = await Promise.all(
         cached.map(async (p) => {
-          // Always check blob cache first — signed_url expires after 1 hour
           const blob = await getCachedImageBlob(p.file_path);
           if (blob) return { ...p, signed_url: URL.createObjectURL(blob) };
           return { ...p, signed_url: undefined };
@@ -406,7 +405,7 @@ export default function ChinaTripDetail() {
         });
         setPhotos(withUrls as Photo[]);
         const toCache = data.map(({ ...p }) => ({ ...p, signed_url: undefined }));
-        await cachePhotos(toCache as unknown as CachedPhoto[]);
+        await cacheChinaPhotos(toCache as unknown as CachedChinaPhoto[]);
         const userIds = [...new Set(data.map(p => p.user_id).filter(Boolean))] as string[];
         if (userIds.length > 0) {
           const { data: profiles } = await supabase.from("profiles").select("id, display_name, email").in("id", userIds);

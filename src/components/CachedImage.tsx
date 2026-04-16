@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { getCachedImageBlob, cacheImageBlob } from "@/lib/offline-db";
+import { getCachedImageBlob, cacheImageBlob, getCachedSignedUrl } from "@/lib/offline-db";
 
 interface CachedImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
   filePath: string;
@@ -9,7 +9,8 @@ interface CachedImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
 }
 
 /**
- * An <img> that checks IndexedDB blob cache first, falling back to signedUrl.
+ * An <img> that checks IndexedDB blob cache first, then signed URL cache,
+ * falling back to the provided signedUrl prop.
  * Automatically caches fetched images for offline use.
  */
 export default function CachedImage({ filePath, signedUrl, fallback, ...imgProps }: CachedImageProps) {
@@ -30,10 +31,20 @@ export default function CachedImage({ filePath, signedUrl, fallback, ...imgProps
         setSrc(url);
         return;
       }
-      // 2. Fetch from signed URL and cache
-      if (signedUrl) {
+
+      // 2. Resolve the best URL: prop > IndexedDB signed URL cache
+      let resolvedUrl = signedUrl;
+      if (!resolvedUrl) {
+        const cached = await getCachedSignedUrl(filePath);
+        if (cached && cached.expires_at > Date.now()) {
+          resolvedUrl = cached.url;
+        }
+      }
+
+      // 3. Fetch from URL and cache blob
+      if (resolvedUrl) {
         try {
-          const res = await fetch(signedUrl);
+          const res = await fetch(resolvedUrl);
           if (!res.ok) throw new Error("fetch failed");
           const b = await res.blob();
           await cacheImageBlob(filePath, b);
@@ -43,8 +54,7 @@ export default function CachedImage({ filePath, signedUrl, fallback, ...imgProps
           setSrc(url);
         } catch {
           if (!cancelled) {
-            // Fall back to direct signed URL
-            setSrc(signedUrl);
+            setSrc(resolvedUrl);
           }
         }
       }

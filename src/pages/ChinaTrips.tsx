@@ -7,6 +7,8 @@ import { batchSignedUrls } from "@/lib/photo-utils";
 import { extractExif, distanceKm } from "@/lib/exif-utils";
 import { getCantonFairSession, sessionKey } from "@/lib/canton-fair-utils";
 import { cacheChinaTripPhotos, type BulkCacheProgress } from "@/lib/bulk-cache";
+import { cacheChinaTrips, getCachedChinaTrips, clearCachedChinaTrips, setSyncTimestamp, getSyncTimestamp, cacheImageBlob, getCachedImageBlob, type CachedChinaTrip } from "@/lib/offline-db";
+import { useOnlineStatus } from "@/hooks/use-online-status";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -32,6 +34,7 @@ export default function ChinaTrips() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const categories = useCategories();
+  const online = useOnlineStatus();
   const [trips, setTrips] = useState<ChinaTrip[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterDate, setFilterDate] = useState("");
@@ -74,15 +77,37 @@ export default function ChinaTrips() {
     if (!user) return;
     loadTrips();
 
+    if (!online) return;
+
     const channel = supabase
       .channel("china-trips-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "china_trips" }, () => loadTrips())
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [user]);
+  }, [user, online]);
 
   async function loadTrips() {
+    // 1. Show cached data instantly
+    const cached = await getCachedChinaTrips();
+    if (cached.length > 0) {
+      setTrips(cached as ChinaTrip[]);
+      setLoading(false);
+    }
+
+    if (!navigator.onLine) {
+      setLoading(false);
+      return;
+    }
+
+    // 2. Skip background refresh if synced recently (<5 min)
+    const lastSync = await getSyncTimestamp("china_trips");
+    if (cached.length > 0 && lastSync && Date.now() - lastSync < 5 * 60 * 1000) {
+      setLoading(false);
+      return;
+    }
+
+    // 3. Background fetch
     try {
       const { data } = await supabase
         .from("china_trips")
@@ -106,7 +131,6 @@ export default function ChinaTrips() {
           Promise.all(coverPromises),
         ]);
 
-        // Collect unique user IDs for photographer display
         const userIds = new Set<string>();
         data.forEach(t => { if (t.created_by) userIds.add(t.created_by); });
         coverResults.forEach(r => { if (r.data?.[0]?.user_id) userIds.add(r.data[0].user_id); });
@@ -127,7 +151,7 @@ export default function ChinaTrips() {
           .filter(Boolean) as string[];
         const urlMap = await batchSignedUrls(coverPaths.map(fp => ({ file_path: fp })));
 
-        const tripsWithCounts = data.map((trip, i) => ({
+        const tripsWithCounts: CachedChinaTrip[] = data.map((trip, i) => ({
           ...trip,
           photo_count: photoCounts[i].count ?? 0,
           cover_file_path: coverResults[i].data?.[0]?.file_path || undefined,
@@ -136,12 +160,30 @@ export default function ChinaTrips() {
             : undefined,
           photographer: trip.created_by ? profileMap[trip.created_by] ?? null : null,
         }));
-        setTrips(tripsWithCounts);
+        setTrips(tripsWithCounts as ChinaTrip[]);
+
+        // Pre-cache cover image blobs in background
+        for (const t of tripsWithCounts) {
+          if (t.cover_file_path && t.cover_url) {
+            preCacheCoverImage(t.cover_file_path, t.cover_url);
+          }
+        }
+
+        await clearCachedChinaTrips();
+        await cacheChinaTrips(tripsWithCounts);
+        await setSyncTimestamp("china_trips");
       }
     } catch (err) {
       console.error("[ChinaTrips] Error loading trips", err);
     }
     setLoading(false);
+  }
+
+  function preCacheCoverImage(filePath: string, url: string) {
+    getCachedImageBlob(filePath).then((existing) => {
+      if (existing) return;
+      fetch(url).then(r => r.blob()).then(b => cacheImageBlob(filePath, b)).catch(() => {});
+    });
   }
 
   function toggleSelect(id: string) {
