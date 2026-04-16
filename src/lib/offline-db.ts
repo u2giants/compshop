@@ -29,6 +29,8 @@ export interface CachedChinaTrip {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  deleted_at: string | null;
+  is_draft: boolean;
   photo_count?: number;
   cover_url?: string;
   cover_file_path?: string;
