@@ -399,8 +399,9 @@ export default function ChinaTripDetail() {
         const urlMap = await batchSignedUrls(data);
         const withUrls = data.map((p) => {
           const signed_url = urlMap.get(p.file_path);
+          const signed_thumbnail_url = p.thumbnail_path ? urlMap.get(p.thumbnail_path) : undefined;
           if (signed_url) cacheImageInBackground(p.file_path, signed_url);
-          return { ...p, signed_url };
+          return { ...p, signed_url, signed_thumbnail_url };
         });
         setPhotos(withUrls as Photo[]);
         const toCache = data.map(({ ...p }) => ({ ...p, signed_url: undefined }));
