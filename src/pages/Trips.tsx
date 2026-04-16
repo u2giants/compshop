@@ -27,6 +27,7 @@ import DraftTrips from "@/components/trip/DraftTrips";
 
 interface TripWithCover extends CachedTrip {
   cover_url?: string;
+  cover_file_path?: string;
 }
 
 export default function Trips() {
@@ -143,6 +144,7 @@ export default function Trips() {
           ...trip,
           photo_count: photoCounts[i].count ?? 0,
           member_count: memberCounts[i].count ?? 0,
+          cover_file_path: coverResults[i].data?.[0]?.file_path || undefined,
           cover_url: coverResults[i].data?.[0]?.file_path
             ? urlMap.get(coverResults[i].data![0].file_path)
             : undefined,
@@ -601,9 +603,9 @@ export default function Trips() {
                 }}
               >
                 {/* Cover image */}
-                {trip.cover_url ? (
+                {trip.cover_file_path ? (
                   <div className="relative h-36 w-full">
-                    <img src={trip.cover_url} alt="" className="h-full w-full object-cover" loading="lazy" />
+                    <CachedImage filePath={trip.cover_file_path} signedUrl={trip.cover_url} alt="" className="h-full w-full object-cover" loading="lazy" />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
                     {selectMode && (
                       <div className="absolute top-2 left-2">

@@ -130,6 +130,7 @@ export default function ChinaTrips() {
         const tripsWithCounts = data.map((trip, i) => ({
           ...trip,
           photo_count: photoCounts[i].count ?? 0,
+          cover_file_path: coverResults[i].data?.[0]?.file_path || undefined,
           cover_url: coverResults[i].data?.[0]?.file_path
             ? urlMap.get(coverResults[i].data![0].file_path)
             : undefined,

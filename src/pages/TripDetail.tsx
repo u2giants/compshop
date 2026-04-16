@@ -1137,11 +1137,14 @@ export default function TripDetail() {
               )}
               onClick={(e) => toggleSelectPhoto(photo.id, e)}
             >
-              {photo.signed_url ? (
-                <img src={photo.signed_url} alt={photo.product_name || "Photo"} className="h-full w-full object-cover transition-transform group-hover:scale-105" loading="lazy" />
-              ) : (
-                <div className="h-full w-full bg-muted animate-pulse" />
-              )}
+              <CachedImage
+                filePath={photo.thumbnail_path || photo.file_path}
+                signedUrl={photo.signed_thumbnail_url || photo.signed_url}
+                alt={photo.product_name || "Photo"}
+                className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                loading="lazy"
+                fallback={<div className="h-full w-full bg-muted animate-pulse" />}
+              />
               {photo.product_name && (
                 <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-1.5 pb-1 pt-4">
                   <p className="text-[10px] text-white leading-tight truncate">{photo.product_name}</p>
