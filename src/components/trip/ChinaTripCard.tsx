@@ -1,4 +1,5 @@
 import { useState } from "react";
+import CachedImage from "@/components/CachedImage";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -36,9 +37,9 @@ export default function ChinaTripCard({ trip, selectMode, isSelected, onToggleSe
         } ${selectMode && isSelected ? "ring-2 ring-primary" : ""}`}
         onClick={onClick}
       >
-        {trip.cover_url ? (
+        {trip.cover_file_path ? (
           <div className="relative h-36 w-full">
-            <img src={trip.cover_url} alt="" className="h-full w-full object-cover" loading="lazy" />
+            <CachedImage filePath={trip.cover_file_path} signedUrl={trip.cover_url} alt="" className="h-full w-full object-cover" loading="lazy" />
             <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
             {selectMode && (
               <div className="absolute top-2 left-2">
