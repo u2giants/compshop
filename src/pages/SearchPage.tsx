@@ -73,7 +73,7 @@ export default function SearchPage() {
 
     if (combined.length > 0) {
       const urlMap = await batchSignedUrls(combined);
-      setResults(combined.map(p => ({ ...p, signed_url: urlMap.get(p.file_path) })) as Photo[]);
+      setResults(combined.map(p => ({ ...p, signed_url: urlMap.get(p.file_path), signed_thumbnail_url: p.thumbnail_path ? urlMap.get(p.thumbnail_path) : undefined })) as Photo[]);
     } else {
       setResults([]);
     }
