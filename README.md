@@ -1,73 +1,51 @@
-# Welcome to your Lovable project
+# CompShop
 
-## Project info
+Trade show buying trip photo management for POP Creations product sourcing trips. The team
+photographs products at shows like Canton Fair and other China buying trips, and this app
+organizes those photos into trips, supports bulk tagging, and is built offline-first to
+work reliably in China where network conditions are poor.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## Tech stack
 
-## How can I edit this code?
+| Layer | Technology |
+|-------|-----------|
+| App | React + TypeScript + Vite |
+| UI | shadcn/ui + Tailwind CSS |
+| Backend | Supabase (Auth + Postgres + Storage) |
+| Mobile | Capacitor (iOS/Android wrapper) |
+| Offline | IndexedDB (stale-while-revalidate + signed URL caching) |
 
-There are several ways of editing your application.
+## Quick start
 
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+```bash
+npm install
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+Requires Supabase environment variables. Copy `.env.example` to `.env.local` and fill in
+the Supabase URL and anon key.
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## Key features
 
-**Use GitHub Codespaces**
+- **Trip management** — organize photos by buying trip (domestic and China trips tracked separately)
+- **Canton Fair support** — `CantonFairGroupCard` groups products by exhibition booth/group
+- **Bulk edit** — select and edit multiple photo records at once
+- **Offline-first** — IndexedDB caching with stale-while-revalidate; signed URLs cached for 24h
+- **Recycle bin** — soft-delete with recovery
+- **Admin panel** — manage categories, countries, image types, retailers, invites
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## Offline strategy
 
-## What technologies are used for this project?
+Critical for use in China where latency is 200–500ms per round-trip. The app:
+- shows cached data instantly (IndexedDB) then rehydrates from Supabase in the background
+- caches Supabase signed URLs for 24 hours to skip repeated signing calls
+- skips background refresh if data was synced within the last 5 minutes
+- pre-caches cover images when trip lists load
 
-This project is built with:
+See `.lovable/memory/architecture/performance-and-offline.md` for technical details.
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## Deployment
 
-## How can I deploy this project?
+Single-branch workflow. Push to `main` → GitHub Actions builds and triggers Coolify deployment.
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+AI operating rules (branch policy, secrets, deployment path): [docs/ai-operating-rules.md](docs/ai-operating-rules.md)
