@@ -7,6 +7,7 @@ import { uploadPhoto, hashFile, checkDuplicatePhoto } from "@/lib/supabase-helpe
 import { groupPhotos, groupBySection, batchSignedUrls } from "@/lib/photo-utils";
 import type { Photo, ChinaTrip } from "@/types/models";
 import { extractExif } from "@/lib/exif-utils";
+import { friendlyErrorMessage } from "@/lib/error-messages";
 import { isInAmericas } from "@/lib/geo-utils";
 import { useCategories } from "@/hooks/use-categories";
 import { useBulkUndo } from "@/hooks/use-bulk-undo";
@@ -606,8 +607,8 @@ export default function ChinaTripDetail() {
       if (data.material) setFormFields((f) => ({ ...f, material: data.material }));
       if (data.country_of_origin) setCountryValue(data.country_of_origin);
       toast({ title: "AI detection complete" });
-    } catch (err: any) {
-      toast({ title: "AI detection failed", description: err.message, variant: "destructive" });
+    } catch (err: unknown) {
+      toast({ title: "AI detection failed", description: friendlyErrorMessage(err), variant: "destructive" });
     }
     setAnalyzing(false);
   }

@@ -7,6 +7,7 @@ import { uploadPhoto, hashFile, checkDuplicatePhoto } from "@/lib/supabase-helpe
 import { groupPhotos, batchSignedUrls } from "@/lib/photo-utils";
 import type { Photo, Trip } from "@/types/models";
 import { extractExif, distanceKm } from "@/lib/exif-utils";
+import { friendlyErrorMessage } from "@/lib/error-messages";
 import { isInAsia } from "@/lib/geo-utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useCategories } from "@/hooks/use-categories";
@@ -681,8 +682,8 @@ export default function TripDetail() {
       if (data.country_of_origin) setCountryValue(data.country_of_origin);
 
       toast({ title: "AI analysis complete", description: "Fields have been pre-filled." });
-    } catch (err: any) {
-      toast({ title: "Analysis failed", description: err.message, variant: "destructive" });
+    } catch (err: unknown) {
+      toast({ title: "AI analysis failed", description: friendlyErrorMessage(err), variant: "destructive" });
     } finally {
       setAnalyzing(false);
     }

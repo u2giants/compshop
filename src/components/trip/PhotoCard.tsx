@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { getCachedImageBlob, cacheImageBlob } from "@/lib/offline-db";
+import { friendlyErrorMessage } from "@/lib/error-messages";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCategories } from "@/hooks/use-categories";
@@ -273,8 +274,8 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
           ? `Analyzed ${results.length} images and merged results.` 
           : "Fields have been pre-filled." 
       });
-    } catch (err: any) {
-      toast({ title: "Analysis failed", description: err.message, variant: "destructive" });
+    } catch (err: unknown) {
+      toast({ title: "AI analysis failed", description: friendlyErrorMessage(err), variant: "destructive" });
     } finally {
       setAnalyzing(false);
     }
