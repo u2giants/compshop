@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { getCachedImageBlob, cacheImageBlob } from "@/lib/offline-db";
+import { friendlyErrorMessage } from "@/lib/error-messages";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCategories } from "@/hooks/use-categories";

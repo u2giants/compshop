@@ -7,6 +7,7 @@ import { uploadPhoto, hashFile, checkDuplicatePhoto } from "@/lib/supabase-helpe
 import { groupPhotos, batchSignedUrls } from "@/lib/photo-utils";
 import type { Photo, Trip } from "@/types/models";
 import { extractExif, distanceKm } from "@/lib/exif-utils";
+import { friendlyErrorMessage } from "@/lib/error-messages";
 import { isInAsia } from "@/lib/geo-utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useCategories } from "@/hooks/use-categories";
