@@ -681,8 +681,8 @@ export default function TripDetail() {
       if (data.country_of_origin) setCountryValue(data.country_of_origin);
 
       toast({ title: "AI analysis complete", description: "Fields have been pre-filled." });
-    } catch (err: any) {
-      toast({ title: "Analysis failed", description: err.message, variant: "destructive" });
+    } catch (err: unknown) {
+      toast({ title: "AI analysis failed", description: friendlyErrorMessage(err), variant: "destructive" });
     } finally {
       setAnalyzing(false);
     }

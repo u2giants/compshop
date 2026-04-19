@@ -606,8 +606,8 @@ export default function ChinaTripDetail() {
       if (data.material) setFormFields((f) => ({ ...f, material: data.material }));
       if (data.country_of_origin) setCountryValue(data.country_of_origin);
       toast({ title: "AI detection complete" });
-    } catch (err: any) {
-      toast({ title: "AI detection failed", description: err.message, variant: "destructive" });
+    } catch (err: unknown) {
+      toast({ title: "AI detection failed", description: friendlyErrorMessage(err), variant: "destructive" });
     }
     setAnalyzing(false);
   }

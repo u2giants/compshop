@@ -273,8 +273,8 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
           ? `Analyzed ${results.length} images and merged results.` 
           : "Fields have been pre-filled." 
       });
-    } catch (err: any) {
-      toast({ title: "Analysis failed", description: err.message, variant: "destructive" });
+    } catch (err: unknown) {
+      toast({ title: "AI analysis failed", description: friendlyErrorMessage(err), variant: "destructive" });
     } finally {
       setAnalyzing(false);
     }
