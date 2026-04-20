@@ -25,6 +25,14 @@ export async function isAdmin(userId: string): Promise<boolean> {
   return !!data;
 }
 
+export async function getUserRoles(userId: string): Promise<string[]> {
+  const { data } = await supabase
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId);
+  return (data ?? []).map((r) => r.role as string);
+}
+
 export async function hashFile(file: File): Promise<string> {
   const buffer = await file.arrayBuffer();
   const hashBuffer = await crypto.subtle.digest("SHA-256", buffer);
