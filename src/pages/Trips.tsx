@@ -32,7 +32,7 @@ interface TripWithCover extends CachedTrip {
 }
 
 export default function Trips() {
-  const { user } = useAuth();
+  const { user, isStoreReadOnly } = useAuth();
   const navigate = useNavigate();
   const online = useOnlineStatus();
   const { toast } = useToast();
@@ -473,28 +473,34 @@ export default function Trips() {
               <Button variant="outline" size="sm" disabled={selected.size === 0 || bulkCaching} onClick={handleCacheSelected} className="gap-1">
                 <Download className="h-4 w-4" /> {bulkCaching ? `${bulkCacheProgress ? Math.round((bulkCacheProgress.done / bulkCacheProgress.total) * 100) || 0 : 0}%` : "Cache"}
               </Button>
-              <Button variant="destructive" size="sm" disabled={selected.size === 0} onClick={handleBulkDelete} className="gap-1">
-                <Trash2 className="h-4 w-4" /> Delete
-              </Button>
+              {!isStoreReadOnly && (
+                <Button variant="destructive" size="sm" disabled={selected.size === 0} onClick={handleBulkDelete} className="gap-1">
+                  <Trash2 className="h-4 w-4" /> Delete
+                </Button>
+              )}
               <Button variant="ghost" size="sm" onClick={exitSelectMode}>Cancel</Button>
             </>
           ) : (
             <>
-              <input ref={smartUploadRef} type="file" accept="image/*" multiple className="hidden" onChange={handleSmartUpload} />
-              <Button variant="outline" onClick={() => smartUploadRef.current?.click()} disabled={smartUploading} className="gap-2">
-                {smartUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                {smartUploading ? `${smartProgress}%` : "Smart Upload"}
-              </Button>
-              <Button onClick={() => navigate("/trips/new")} className="gap-2">
-                <Plus className="h-4 w-4" />
-                <span className="hidden sm:inline">New Trip</span>
-              </Button>
-              <Button variant="ghost" size="icon" onClick={() => setDraftsOpen(true)} title="Draft Trips">
-                <FileText className="h-4 w-4" />
-              </Button>
-              <Button variant="ghost" size="icon" onClick={() => setRecycleBinOpen(true)} title="Recycling Bin" className="hidden md:inline-flex">
-                <Trash2 className="h-4 w-4" />
-              </Button>
+              {!isStoreReadOnly && (
+                <>
+                  <input ref={smartUploadRef} type="file" accept="image/*" multiple className="hidden" onChange={handleSmartUpload} />
+                  <Button variant="outline" onClick={() => smartUploadRef.current?.click()} disabled={smartUploading} className="gap-2">
+                    {smartUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                    {smartUploading ? `${smartProgress}%` : "Smart Upload"}
+                  </Button>
+                  <Button onClick={() => navigate("/trips/new")} className="gap-2">
+                    <Plus className="h-4 w-4" />
+                    <span className="hidden sm:inline">New Trip</span>
+                  </Button>
+                  <Button variant="ghost" size="icon" onClick={() => setDraftsOpen(true)} title="Draft Trips">
+                    <FileText className="h-4 w-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" onClick={() => setRecycleBinOpen(true)} title="Recycling Bin" className="hidden md:inline-flex">
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </>
+              )}
               {trips.length > 0 && (
                 <Button variant="outline" size="sm" onClick={() => setSelectMode(true)} className="gap-1">
                   <CheckSquare className="h-4 w-4" /> Select
@@ -600,7 +606,7 @@ export default function Trips() {
                 ? "Try adjusting your filters."
                 : "Create your first shopping trip to start capturing competitor intel with your team."}
             </p>
-            {!hasFilters && (
+            {!hasFilters && !isStoreReadOnly && (
               <Button onClick={() => navigate("/trips/new")} className="mt-6 gap-2">
                 <Plus className="h-4 w-4" /> Create First Trip
               </Button>
