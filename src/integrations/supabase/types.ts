@@ -635,8 +635,10 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: never; Returns: boolean }
+      is_china_readonly: { Args: never; Returns: boolean }
       is_china_trip_member: { Args: { _trip_id: string }; Returns: boolean }
       is_email_invited: { Args: { _email: string }; Returns: boolean }
+      is_store_readonly: { Args: never; Returns: boolean }
       is_trip_member: { Args: { _trip_id: string }; Returns: boolean }
     }
     Enums: {
