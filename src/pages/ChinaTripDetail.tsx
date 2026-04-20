@@ -56,7 +56,7 @@ import AutocompleteInput from "@/components/ui/autocomplete-input";
 
 export default function ChinaTripDetail() {
   const { id } = useParams<{ id: string }>();
-  const { user } = useAuth();
+  const { user, isChinaReadOnly } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const online = useOnlineStatus();
@@ -955,7 +955,7 @@ export default function ChinaTripDetail() {
           <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileSelect} />
         )}
 
-        {isMobile ? (
+        {!isChinaReadOnly && (isMobile ? (
           <>
             <Button onClick={() => cameraInputRef.current?.click()} disabled={uploading} className="gap-2 flex-1">
               {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
@@ -975,7 +975,7 @@ export default function ChinaTripDetail() {
               <Images className="h-4 w-4" /> Bulk Upload
             </Button>
           </>
-        )}
+        ))}
 
         {photos.length > 0 && (
           <>

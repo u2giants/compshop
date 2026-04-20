@@ -2,7 +2,7 @@ import { useState, useRef, useCallback } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAppMode, type AppMode } from "@/contexts/AppModeContext";
-import { Home, Search, PlusCircle, User, LogOut, ChevronDown, Factory, Store } from "lucide-react";
+import { Home, Search, PlusCircle, User, LogOut, ChevronDown, Factory, Store, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 import SyncStatusIndicator from "@/components/SyncStatusIndicator";
 import SearchOverlay from "./SearchOverlay";
@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 export default function AppShell() {
-  const { user, signOut } = useAuth();
+  const { user, signOut, isStoreReadOnly, isChinaReadOnly } = useAuth();
   const { mode, setMode } = useAppMode();
   const navigate = useNavigate();
   const location = useLocation();
@@ -52,10 +52,12 @@ export default function AppShell() {
 
   if (!user) return null;
 
+  const isReadOnlyHere = (isChina && isChinaReadOnly) || (!isChina && isStoreReadOnly);
+
   const navItems = [
     { icon: Home, label: tripsLabel, path: isChina ? "/china" : "/", isTrips: true },
     { icon: Search, label: "Search", path: "__search__" },
-    { icon: PlusCircle, label: "New", path: isChina ? "/china/new" : "/trips/new" },
+    ...(isReadOnlyHere ? [] : [{ icon: PlusCircle, label: "New", path: isChina ? "/china/new" : "/trips/new" }]),
     { icon: User, label: "Profile", path: "/profile" },
   ];
 
@@ -103,6 +105,11 @@ export default function AppShell() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            {isReadOnlyHere && (
+              <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground" title="You have read-only access in this section">
+                <Eye className="h-3 w-3" /> Read-only
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-3">
             <SyncStatusIndicator />

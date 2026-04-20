@@ -56,7 +56,7 @@ import LinkToCardDialog from "@/components/trip/LinkToCardDialog";
 
 export default function TripDetail() {
   const { id } = useParams<{ id: string }>();
-  const { user } = useAuth();
+  const { user, isStoreReadOnly } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const online = useOnlineStatus();
@@ -901,7 +901,7 @@ export default function TripDetail() {
         {isMobile && (
           <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileSelect} />
         )}
-        {isMobile ? (
+        {!isStoreReadOnly && (isMobile ? (
           <>
             <Button onClick={() => cameraInputRef.current?.click()} className="gap-2">
               <Camera className="h-4 w-4" /> Take Photo
@@ -919,7 +919,7 @@ export default function TripDetail() {
               <Images className="h-4 w-4" /> Bulk Upload
             </Button>
           </>
-        )}
+        ))}
         {photos.length > 0 && (
           <>
             <Button variant="outline" onClick={handleDownloadAll} disabled={downloading} className="gap-2">

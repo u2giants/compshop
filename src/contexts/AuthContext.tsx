@@ -1,12 +1,14 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
-import { isAdmin as checkAdmin } from "@/lib/supabase-helpers";
+import { getUserRoles } from "@/lib/supabase-helpers";
 
 interface AuthContextType {
   session: Session | null;
   user: User | null;
   isAdmin: boolean;
+  isStoreReadOnly: boolean;
+  isChinaReadOnly: boolean;
   loading: boolean;
   signOut: () => Promise<void>;
 }
@@ -15,6 +17,8 @@ const AuthContext = createContext<AuthContextType>({
   session: null,
   user: null,
   isAdmin: false,
+  isStoreReadOnly: false,
+  isChinaReadOnly: false,
   loading: true,
   signOut: async () => {},
 });
@@ -22,8 +26,14 @@ const AuthContext = createContext<AuthContextType>({
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
-  const [isAdminUser, setIsAdminUser] = useState(false);
+  const [roles, setRoles] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+
+  function loadRoles(userId: string) {
+    getUserRoles(userId)
+      .then(setRoles)
+      .catch(() => setRoles([]));
+  }
 
   useEffect(() => {
     // 1. Set up listener FIRST (keep synchronous - no async/await)
@@ -33,13 +43,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(newSession?.user ?? null);
         setLoading(false);
 
-        // Check admin role in background (non-blocking)
         if (newSession?.user) {
-          checkAdmin(newSession.user.id)
-            .then(setIsAdminUser)
-            .catch(() => setIsAdminUser(false));
+          loadRoles(newSession.user.id);
         } else {
-          setIsAdminUser(false);
+          setRoles([]);
         }
       }
     );
@@ -51,9 +58,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
 
       if (initialSession?.user) {
-        checkAdmin(initialSession.user.id)
-          .then(setIsAdminUser)
-          .catch(() => setIsAdminUser(false));
+        loadRoles(initialSession.user.id);
       }
     });
 
@@ -64,8 +69,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await supabase.auth.signOut();
   };
 
+  const isAdmin = roles.includes("admin");
+  // Admin always bypasses readonly restrictions
+  const isStoreReadOnly = !isAdmin && roles.includes("store_readonly");
+  const isChinaReadOnly = !isAdmin && roles.includes("china_readonly");
+
   return (
-    <AuthContext.Provider value={{ session, user, isAdmin: isAdminUser, loading, signOut }}>
+    <AuthContext.Provider value={{ session, user, isAdmin, isStoreReadOnly, isChinaReadOnly, loading, signOut }}>
       {children}
     </AuthContext.Provider>
   );

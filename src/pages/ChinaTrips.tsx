@@ -30,7 +30,7 @@ import ChinaTripCard from "@/components/trip/ChinaTripCard";
 interface ChinaTrip extends ChinaTripListItem {}
 
 export default function ChinaTrips() {
-  const { user } = useAuth();
+  const { user, isChinaReadOnly } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const categories = useCategories();
@@ -613,41 +613,49 @@ export default function ChinaTrips() {
               <Button variant="outline" size="sm" disabled={selected.size === 0 || bulkCaching} onClick={handleCacheSelected} className="gap-1">
                 <Download className="h-4 w-4" /> {bulkCaching ? `${bulkCacheProgress ? Math.round((bulkCacheProgress.done / bulkCacheProgress.total) * 100) || 0 : 0}%` : "Cache"}
               </Button>
-              <Button variant="outline" size="sm" disabled={selected.size < 2} onClick={handleMergeTrips} className="gap-1">
-                <ArrowRightLeft className="h-4 w-4" /> Merge
-              </Button>
-              <Button variant="destructive" size="sm" disabled={selected.size === 0} onClick={handleBulkDelete} className="gap-1">
-                <Trash2 className="h-4 w-4" /> Delete
-              </Button>
+              {!isChinaReadOnly && (
+                <>
+                  <Button variant="outline" size="sm" disabled={selected.size < 2} onClick={handleMergeTrips} className="gap-1">
+                    <ArrowRightLeft className="h-4 w-4" /> Merge
+                  </Button>
+                  <Button variant="destructive" size="sm" disabled={selected.size === 0} onClick={handleBulkDelete} className="gap-1">
+                    <Trash2 className="h-4 w-4" /> Delete
+                  </Button>
+                </>
+              )}
               <Button variant="ghost" size="sm" onClick={exitSelectMode}>Cancel</Button>
             </>
           ) : (
             <>
-              <input ref={smartUploadRef} type="file" accept="image/*" multiple className="hidden" onChange={handleSmartUpload} />
-              <Button variant="outline" onClick={() => smartUploadRef.current?.click()} disabled={smartUploading} className="gap-2">
-                {smartUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                {smartUploading ? `${smartProgress}%` : "Smart Upload"}
-              </Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button className="gap-2">
-                    <Plus className="h-4 w-4" />
-                    <span className="hidden sm:inline">New</span>
-                    <ChevronDown className="h-3 w-3" />
+              {!isChinaReadOnly && (
+                <>
+                  <input ref={smartUploadRef} type="file" accept="image/*" multiple className="hidden" onChange={handleSmartUpload} />
+                  <Button variant="outline" onClick={() => smartUploadRef.current?.click()} disabled={smartUploading} className="gap-2">
+                    {smartUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                    {smartUploading ? `${smartProgress}%` : "Smart Upload"}
                   </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => navigate("/china/new?type=factory_visit")}>
-                    Factory Visit
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => navigate("/china/new?type=canton_fair_group")}>
-                    📦 Canton Fair Group
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <Button variant="ghost" size="icon" onClick={() => setDraftsOpen(true)} title="Draft Trips">
-                <FileText className="h-4 w-4" />
-              </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button className="gap-2">
+                        <Plus className="h-4 w-4" />
+                        <span className="hidden sm:inline">New</span>
+                        <ChevronDown className="h-3 w-3" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => navigate("/china/new?type=factory_visit")}>
+                        Factory Visit
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => navigate("/china/new?type=canton_fair_group")}>
+                        📦 Canton Fair Group
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <Button variant="ghost" size="icon" onClick={() => setDraftsOpen(true)} title="Draft Trips">
+                    <FileText className="h-4 w-4" />
+                  </Button>
+                </>
+              )}
               {trips.length > 0 && (
                 <Button variant="outline" size="sm" onClick={() => setSelectMode(true)} className="gap-1">
                   <CheckSquare className="h-4 w-4" /> Select
@@ -755,7 +763,7 @@ export default function ChinaTrips() {
                 ? "Try adjusting your filters."
                 : "Create your first Asia trip or use Smart Upload to auto-sort photos by Canton Fair session."}
             </p>
-            {!hasFilters && (
+            {!hasFilters && !isChinaReadOnly && (
               <Button onClick={() => navigate("/china/new?type=factory_visit")} className="mt-6 gap-2">
                 <Plus className="h-4 w-4" /> Create First Trip
               </Button>

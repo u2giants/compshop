@@ -635,12 +635,14 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: never; Returns: boolean }
+      is_china_readonly: { Args: never; Returns: boolean }
       is_china_trip_member: { Args: { _trip_id: string }; Returns: boolean }
       is_email_invited: { Args: { _email: string }; Returns: boolean }
+      is_store_readonly: { Args: never; Returns: boolean }
       is_trip_member: { Args: { _trip_id: string }; Returns: boolean }
     }
     Enums: {
-      app_role: "admin" | "user"
+      app_role: "admin" | "user" | "store_readonly" | "china_readonly"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -768,7 +770,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "user"],
+      app_role: ["admin", "user", "store_readonly", "china_readonly"],
     },
   },
 } as const
