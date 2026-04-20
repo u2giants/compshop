@@ -640,7 +640,7 @@ export type Database = {
       is_trip_member: { Args: { _trip_id: string }; Returns: boolean }
     }
     Enums: {
-      app_role: "admin" | "user"
+      app_role: "admin" | "user" | "store_readonly" | "china_readonly"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -768,7 +768,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "user"],
+      app_role: ["admin", "user", "store_readonly", "china_readonly"],
     },
   },
 } as const
