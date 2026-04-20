@@ -1,60 +1,63 @@
+## Part 1: One-time data migration (4 trips → Factory Visits)
 
+The 4 trips are sitting in `shopping_trips` (Store Shopping). They each have photos in the `photos` table:
 
-# Aggressive Offline-First: Cache Everything, Eliminate Round-Trips
+- Annie-yusen (18 photos)
+- Amy-Fengfan (37 photos)
+- Wendy-Sunway (33 photos)
+- Hidy (20 photos)
 
-## Problem
-The app makes full network round-trips on every page load — trip lists, photo metadata, signed URLs, and cover images all reload from scratch. In China, each round-trip takes 200-500ms, making the app feel sluggish. The ChinaTrips page has zero caching.
+There are NO matching `factories` records yet, and only Sunway exists as a `china_trips` factory visit. Since `china_photos` and `photos` are separate tables (with different storage paths), a true migration requires:
 
-## Strategy: Stale-While-Revalidate Everywhere
+1. **Create 4 `factories` records** — Annie (Yusen), Amy (Fengfan), Wendy (Sunway), Hidy. Contact name = first part, supplier/company = second part. The Wendy-Sunway one should link to existing "Sunway" factory if you confirm it's the same one (I'll ask).
+2. **Create 4 `china_trips` records** with `venue_type='factory_visit'`, dated 2026-04-13 / 2026-04-15, `created_by` = Elise (the original uploader).
+3. **Copy storage objects** in the `photos` bucket (the file paths are user-scoped, so they stay valid — we just re-reference them under new `china_photos` rows pointing to the new `china_trips.id`).
+4. **Insert `china_photos` rows** carrying over all metadata (product_name, category, price, brand, dimensions, country_of_origin, material, notes, image_type, file_path, thumbnail_path, GPS, file_hash, group_id, section, created_at, user_id).
+5. **Soft-delete the 4 `shopping_trips**` by setting `deleted_at = now()` (they go to the Recycle Bin for 30 days as a safety net before vanishing). Original `photos` rows stay attached to those soft-deleted trips so nothing is destroyed if we need to revert.
 
-Show cached data instantly, then update silently in the background. Users see content in <50ms on repeat visits.
+Reason for soft-delete instead of hard-delete: easy rollback. After you confirm the move looks correct in the Asia Trips section, the Recycle Bin auto-cleans them.
 
-## Plan
+## Part 2: Per-section read-only role
 
-### 1. Upgrade IndexedDB schema (offline-db.ts)
-- Bump DB version to 2
-- Add `china_trips` object store (mirrors `trips` store)
-- Add `china_photos` object store with `by-trip` index
-- Add `signed_urls` object store: `{ file_path, url, expires_at }` — cache signed URLs with their expiry timestamp
-- Add helper functions: `cacheChinaTrips`, `getCachedChinaTrips`, `getCachedChinaTrip`, `cacheChinaPhotos`, `getCachedChinaPhotos`, `cacheSignedUrl`, `getCachedSignedUrl`
+Currently the role system has only `admin` and `user`. We'll extend it so an admin can mark any user as read-only for one of the two sections.
 
-### 2. Extend signed URL TTL to 24 hours
-- Change all `createSignedUrls(paths, 3600)` calls to `createSignedUrls(paths, 86400)` in `batchSignedUrls` (photo-utils.ts)
-- Store generated URLs in the new `signed_urls` IndexedDB store with `expires_at = Date.now() + 86400000`
-- Before calling Supabase, check if we have unexpired cached URLs — skip the API call entirely if all URLs are still valid
+### New role model
 
-### 3. Add stale-while-revalidate to Trips.tsx
-- Current: shows cached trips, then waits for network to replace them
-- Change: show cached trips instantly and set `loading=false` immediately. Fire network refresh in background without blocking UI. Only update state if data actually changed.
+Add two new values to the `app_role` enum:
 
-### 4. Add full offline caching to ChinaTrips.tsx
-- Mirror the pattern from Trips.tsx: load from `getCachedChinaTrips()` first, render immediately
-- Background-fetch from Supabase, then `cacheChinaTrips()` on success
-- When offline, skip network entirely
+- `store_readonly` — can view Store Shopping but cannot create/edit/delete trips, photos, or comments there. Full access to Asia Trips/Factory Visits.
+- `china_readonly` — can view Asia Trips/Factory Visits but cannot create/edit/delete there. Full access to Store Shopping.
 
-### 5. Cache signed URLs in ChinaTripDetail.tsx and TripDetail.tsx
-- Before calling `batchSignedUrls`, check the `signed_urls` store for unexpired URLs
-- Only request URLs for paths not already cached
-- This eliminates the biggest per-page-load API call
+Users can hold either, both, or neither (additive on top of base `user`).
 
-### 6. Pre-cache cover images on trip list load
-- When Trips.tsx or ChinaTrips.tsx fetches cover photos, immediately cache the blob via `cacheImageInBackground` so the `CachedImage` component finds them on next visit
+### Database changes
 
-### 7. Add a `lastSyncedAt` timestamp per store
-- Store a simple `{ key: 'trips_last_sync', timestamp }` entry
-- If last sync was <5 minutes ago AND we have cached data, skip the background refresh entirely (saves bandwidth in China)
+- Extend `app_role` enum with the two values.
+- Add helper functions `is_store_readonly()` and `is_china_readonly()` mirroring `is_admin()`.
+- Update RLS policies on `shopping_trips`, `photos`, `comments`, `photo_annotations`, `trip_members` to block INSERT/UPDATE/DELETE when `is_store_readonly()` is true (admins still bypass).
+- Update RLS policies on `china_trips`, `china_photos`, `china_trip_members`, `factories` to block INSERT/UPDATE/DELETE when `is_china_readonly()` is true.
 
-## Files Changed
-- `src/lib/offline-db.ts` — new stores, version bump, new helpers
-- `src/lib/photo-utils.ts` — 24h TTL, signed URL caching layer
-- `src/pages/Trips.tsx` — stale-while-revalidate, cover image pre-caching
-- `src/pages/ChinaTrips.tsx` — full IndexedDB caching (currently zero)
-- `src/pages/TripDetail.tsx` — signed URL cache lookup before API
-- `src/pages/ChinaTripDetail.tsx` — signed URL cache lookup before API
-- `src/components/CachedImage.tsx` — check signed URL cache as fallback
+### UI changes
 
-## Technical Notes
-- DB version bump from 1→2 requires an `upgrade` handler that creates the new stores only if they don't exist
-- Signed URL cache uses a simple expiry check: `if (entry && entry.expires_at > Date.now()) return entry.url`
-- No changes to RLS, edge functions, or database schema
+- **Profile → Admin panel**: new "User Permissions" card listing all users with two toggles each: "Read-only in Store Shopping" / "Read-only in Asia Trips". Saves to `user_roles`.
+- **AuthContext**: expose `isStoreReadOnly` and `isChinaReadOnly` flags alongside `isAdmin`.
+- **Hide write actions** (New Trip button, Edit, Delete, Upload, Comment box, Move/Reclassify dialogs, etc.) on the relevant section based on these flags.
+- **Mode banner**: small "Read-only" badge in the header when viewing a section the user can't write to.
 
+## Files changed
+
+- New migration (enum extend + helper functions + updated RLS policies)
+- `src/contexts/AuthContext.tsx` — add the two flags
+- `src/components/admin/UserPermissionsManager.tsx` — new
+- `src/pages/Profile.tsx` — mount the new admin panel
+- Hide-action edits across: `Trips.tsx`, `TripDetail.tsx`, `ChinaTrips.tsx`, `ChinaTripDetail.tsx`, `Factories.tsx`, `FactoryDetail.tsx`, `PhotoCard.tsx`, `PhotoComments.tsx`, `AppShell.tsx` (header badge)
+
+## One question before I start
+
+**Wendy-Sunway** — is this the same "Sunway" factory you already have in Asia Trips (id `09357a16…`), or a different supplier with a coincidental name? Three options:
+
+1. Link to existing **Sunway** record
+2. Link to existing **Xianju Sunway** record
+3. Create a brand-new factory record for Wendy-Sunway
+
+-all factories that have the word sunway in them are the same factory and should be merged and use Sunway
