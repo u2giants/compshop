@@ -52,6 +52,9 @@ export default function NewChinaTrip() {
   const [selectedParentId, setSelectedParentId] = useState<string>(presetParent);
   const [suggestedParentId, setSuggestedParentId] = useState<string | null>(null);
 
+  // Factory/supplier name suggestions for autocomplete (prevents duplicate factories)
+  const [supplierSuggestions, setSupplierSuggestions] = useState<string[]>([]);
+
   const isGroupType = venueType === "canton_fair_group";
   const canHaveParent = venueType === "factory_visit" || venueType === "booth_visit" || venueType === "canton_fair";
 
