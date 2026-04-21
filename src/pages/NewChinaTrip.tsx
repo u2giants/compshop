@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, MapPin, Loader2, Store, Star, Info } from "lucide-react";
+import AutocompleteInput from "@/components/ui/autocomplete-input";
 
 interface NearbyStore {
   name: string;
