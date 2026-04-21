@@ -291,14 +291,29 @@ export default function Factories() {
       </div>
 
       {suppliers.length > 0 && (
-        <div className="relative mb-4">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search factories..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
+        <div className="mb-4 flex flex-col sm:flex-row gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search factories..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          <ToggleGroup
+            type="single"
+            value={groupMode}
+            onValueChange={(v) => v && setGroupMode(v as GroupMode)}
+            className="self-start sm:self-auto"
+          >
+            <ToggleGroupItem value="factory" aria-label="Group by factory" className="gap-1.5 px-3">
+              <Building2 className="h-4 w-4" /> By Factory
+            </ToggleGroupItem>
+            <ToggleGroupItem value="date" aria-label="Group by date" className="gap-1.5 px-3">
+              <CalendarIcon className="h-4 w-4" /> By Date
+            </ToggleGroupItem>
+          </ToggleGroup>
         </div>
       )}
 
