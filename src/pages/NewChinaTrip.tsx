@@ -61,6 +61,7 @@ export default function NewChinaTrip() {
   useEffect(() => {
     detectLocation();
     loadAvailableGroups();
+    loadSupplierSuggestions();
   }, []);
 
   // Auto-suggest parent when date changes
