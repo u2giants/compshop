@@ -232,13 +232,33 @@ export default function NewChinaTrip() {
 
             <div className="space-y-2">
               <Label htmlFor="supplier">{isGroupType ? "Trip Name" : "Supplier / Factory"}</Label>
-              <Input
-                id="supplier"
-                value={supplier}
-                onChange={(e) => setSupplier(e.target.value)}
-                placeholder={isGroupType ? "e.g. Canton Fair Autumn 2026" : "e.g. Shenzhen Lighting Co."}
-                required
-              />
+              {isGroupType ? (
+                <Input
+                  id="supplier"
+                  value={supplier}
+                  onChange={(e) => setSupplier(e.target.value)}
+                  placeholder="e.g. Canton Fair Autumn 2026"
+                  required
+                />
+              ) : (
+                <>
+                  <AutocompleteInput
+                    id="supplier"
+                    value={supplier}
+                    onChange={setSupplier}
+                    suggestions={supplierSuggestions}
+                    placeholder="e.g. Shenzhen Lighting Co."
+                  />
+                  {supplier.trim() &&
+                    supplierSuggestions.some(
+                      (s) => s.toLowerCase() === supplier.trim().toLowerCase()
+                    ) && (
+                      <p className="text-xs text-muted-foreground">
+                        ✓ Linking to existing factory record
+                      </p>
+                    )}
+                </>
+              )}
             </div>
 
             {/* Nearby Location Suggestions */}
