@@ -32,14 +32,27 @@ export default function AutocompleteInput({
       setFiltered([]);
       return;
     }
-    const lower = value.toLowerCase();
-    const matches = suggestions.filter((s) => s.toLowerCase().includes(lower));
-    matches.sort((a, b) => {
-      const aStarts = a.toLowerCase().startsWith(lower) ? 0 : 1;
-      const bStarts = b.toLowerCase().startsWith(lower) ? 0 : 1;
-      return aStarts - bStarts;
-    });
-    setFiltered(matches);
+    const lower = value.toLowerCase().trim();
+    // Fuzzy match: substring OR subsequence (in-order char match), then score
+    const scored: { s: string; score: number }[] = [];
+    for (const s of suggestions) {
+      const sl = s.toLowerCase();
+      let score = -1;
+      if (sl === lower) score = 0;
+      else if (sl.startsWith(lower)) score = 1;
+      else if (sl.includes(lower)) score = 2 + Math.abs(sl.length - lower.length) * 0.01;
+      else {
+        // Subsequence fuzzy match
+        let i = 0;
+        for (let j = 0; j < sl.length && i < lower.length; j++) {
+          if (sl[j] === lower[i]) i++;
+        }
+        if (i === lower.length) score = 5 + (sl.length - lower.length) * 0.05;
+      }
+      if (score >= 0) scored.push({ s, score });
+    }
+    scored.sort((a, b) => a.score - b.score);
+    setFiltered(scored.slice(0, 8).map((x) => x.s));
   }, [value, suggestions]);
 
   useEffect(() => {

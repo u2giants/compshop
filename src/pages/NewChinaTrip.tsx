@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, MapPin, Loader2, Store, Star, Info } from "lucide-react";
+import AutocompleteInput from "@/components/ui/autocomplete-input";
 
 interface NearbyStore {
   name: string;
@@ -51,12 +52,16 @@ export default function NewChinaTrip() {
   const [selectedParentId, setSelectedParentId] = useState<string>(presetParent);
   const [suggestedParentId, setSuggestedParentId] = useState<string | null>(null);
 
+  // Factory/supplier name suggestions for autocomplete (prevents duplicate factories)
+  const [supplierSuggestions, setSupplierSuggestions] = useState<string[]>([]);
+
   const isGroupType = venueType === "canton_fair_group";
   const canHaveParent = venueType === "factory_visit" || venueType === "booth_visit" || venueType === "canton_fair";
 
   useEffect(() => {
     detectLocation();
     loadAvailableGroups();
+    loadSupplierSuggestions();
   }, []);
 
   // Auto-suggest parent when date changes
@@ -88,6 +93,19 @@ export default function NewChinaTrip() {
       .is("deleted_at", null)
       .order("date", { ascending: false });
     if (data) setAvailableGroups(data as ParentGroup[]);
+  }
+
+  async function loadSupplierSuggestions() {
+    // Pull existing factory names + previously-used supplier names so the user can
+    // pick an existing record instead of creating a duplicate.
+    const [factoriesRes, tripsRes] = await Promise.all([
+      supabase.from("factories").select("name"),
+      supabase.from("china_trips").select("supplier").is("deleted_at", null),
+    ]);
+    const set = new Set<string>();
+    (factoriesRes.data || []).forEach((f: any) => f?.name && set.add(f.name.trim()));
+    (tripsRes.data || []).forEach((t: any) => t?.supplier && set.add(t.supplier.trim()));
+    setSupplierSuggestions(Array.from(set).sort((a, b) => a.localeCompare(b)));
   }
 
   const detectLocation = () => {
@@ -214,13 +232,33 @@ export default function NewChinaTrip() {
 
             <div className="space-y-2">
               <Label htmlFor="supplier">{isGroupType ? "Trip Name" : "Supplier / Factory"}</Label>
-              <Input
-                id="supplier"
-                value={supplier}
-                onChange={(e) => setSupplier(e.target.value)}
-                placeholder={isGroupType ? "e.g. Canton Fair Autumn 2026" : "e.g. Shenzhen Lighting Co."}
-                required
-              />
+              {isGroupType ? (
+                <Input
+                  id="supplier"
+                  value={supplier}
+                  onChange={(e) => setSupplier(e.target.value)}
+                  placeholder="e.g. Canton Fair Autumn 2026"
+                  required
+                />
+              ) : (
+                <>
+                  <AutocompleteInput
+                    id="supplier"
+                    value={supplier}
+                    onChange={setSupplier}
+                    suggestions={supplierSuggestions}
+                    placeholder="e.g. Shenzhen Lighting Co."
+                  />
+                  {supplier.trim() &&
+                    supplierSuggestions.some(
+                      (s) => s.toLowerCase() === supplier.trim().toLowerCase()
+                    ) && (
+                      <p className="text-xs text-muted-foreground">
+                        ✓ Linking to existing factory record
+                      </p>
+                    )}
+                </>
+              )}
             </div>
 
             {/* Nearby Location Suggestions */}
