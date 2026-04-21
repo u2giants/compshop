@@ -612,13 +612,22 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
                   onPointerUp={handlePointerUp}
                   onPointerCancel={handlePointerUp}
                 >
-                  <img
-                    src={allImages[activeImageIndex]?.signed_url || ""}
-                    alt={photo.product_name || "Photo"}
-                    className="w-full rounded-lg origin-top-left transition-transform duration-100"
-                    style={{ transform: `scale(${zoomScale})`, touchAction: "pinch-zoom" }}
-                    draggable={false}
-                  />
+                  {(allImages[activeImageIndex] as any)?.media_type === "video" ? (
+                    <video
+                      src={allImages[activeImageIndex]?.signed_url || ""}
+                      controls
+                      playsInline
+                      className="w-full rounded-lg max-h-[50vh] bg-black"
+                    />
+                  ) : (
+                    <img
+                      src={allImages[activeImageIndex]?.signed_url || ""}
+                      alt={photo.product_name || "Photo"}
+                      className="w-full rounded-lg origin-top-left transition-transform duration-100"
+                      style={{ transform: `scale(${zoomScale})`, touchAction: "pinch-zoom" }}
+                      draggable={false}
+                    />
+                  )}
                 </div>
                 {zoomScale !== 1 && (
                   <Badge className="absolute top-2 left-1/2 -translate-x-1/2 bg-background/80 text-foreground backdrop-blur-sm text-xs">
