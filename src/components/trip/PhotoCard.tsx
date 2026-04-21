@@ -687,6 +687,15 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
                 ))}
               </div>
             </>
+          ) : (photo as any).media_type === "video" && photo.signed_url ? (
+            <div className="relative">
+              <video
+                src={photo.signed_url}
+                controls
+                playsInline
+                className="w-full rounded-lg max-h-[50vh] bg-black"
+              />
+            </div>
           ) : photo.signed_url ? (
             <div
               ref={zoomContainerRef}
