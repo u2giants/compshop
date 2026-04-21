@@ -145,6 +145,15 @@ export default function Factories() {
           latestDate: firstTrip.date,
           coverUrl: coverPath ? urlMap.get(coverPath) : undefined,
           tripIds: supplierTrips.map(t => t.id),
+          trips: supplierTrips.map(t => {
+            const cp = tripCoverPath.get(t.id);
+            return {
+              id: t.id,
+              date: t.date,
+              photoCount: tripPhotoCount.get(t.id) ?? 0,
+              coverUrl: cp ? urlMap.get(cp) : undefined,
+            };
+          }),
         });
       }
 
@@ -159,6 +168,7 @@ export default function Factories() {
             photoCount: 0,
             latestDate: factory.created_at,
             tripIds: [],
+            trips: [],
           });
         }
       }
