@@ -4,7 +4,7 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { batchSignedUrls } from "@/lib/photo-utils";
-import { uploadPhoto, hashFile, checkDuplicatePhoto } from "@/lib/supabase-helpers";
+import { uploadPhoto, uploadVideo, hashFile, checkDuplicatePhoto, MAX_VIDEO_BYTES } from "@/lib/supabase-helpers";
 import { extractExif } from "@/lib/exif-utils";
 import { friendlyErrorMessage } from "@/lib/error-messages";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Phone, Mail, MessageCircle, Globe, MapPin, User, Calendar, Factory, ExternalLink, Camera, Images, Loader2 } from "lucide-react";
+import { ArrowLeft, Phone, Mail, MessageCircle, Globe, MapPin, User, Calendar, Factory, ExternalLink, Camera, Images, Loader2, Video, Play } from "lucide-react";
 import { format } from "date-fns";
 
 interface PhotoItem {
@@ -23,6 +23,9 @@ interface PhotoItem {
   trip_id: string;
   created_at: string;
   signed_url?: string;
+  thumbnail_path?: string | null;
+  signed_thumbnail_url?: string;
+  media_type?: string | null;
 }
 
 interface TripInfo {
@@ -64,6 +67,7 @@ export default function FactoryDetail() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
 
   const decodedName = decodeURIComponent(name ?? "");
 
