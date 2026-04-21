@@ -145,6 +145,8 @@ export async function uploadVideo(
 
   return { filePath, thumbnailPath };
 }
+
+export function getPhotoUrl(filePath: string) {
   const { data } = supabase.storage.from("photos").getPublicUrl(filePath);
   return data.publicUrl;
 }
