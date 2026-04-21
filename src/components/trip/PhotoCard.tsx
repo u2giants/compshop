@@ -41,6 +41,7 @@ interface Photo {
   group_id?: string | null;
   thumbnail_path?: string | null;
   signed_thumbnail_url?: string;
+  media_type?: string | null;
 }
 
 interface Props {
