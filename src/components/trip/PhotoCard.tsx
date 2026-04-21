@@ -402,18 +402,42 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
               {selected && <span className="text-xs">✓</span>}
             </button>
           )}
-          {(blobUrl || allImages[activeImageIndex]?.signed_url || photo.signed_url) ? (
-            <img
-              src={blobUrl || allImages[activeImageIndex]?.signed_thumbnail_url || allImages[activeImageIndex]?.signed_url || photo.signed_thumbnail_url || photo.signed_url}
-              alt={photo.product_name || "Photo"}
-              className="aspect-[4/3] w-full object-cover"
-              loading="lazy"
-            />
-          ) : (
-            <div className="flex aspect-[4/3] items-center justify-center bg-muted text-muted-foreground">
-              No preview
-            </div>
-          )}
+          {(() => {
+            const currentImg = allImages[activeImageIndex] || photo;
+            const isVideo = (currentImg as any).media_type === "video";
+            const previewSrc = blobUrl || currentImg.signed_thumbnail_url || (isVideo ? undefined : currentImg.signed_url) || photo.signed_thumbnail_url || (isVideo ? undefined : photo.signed_url);
+            if (isVideo) {
+              return (
+                <div className="relative aspect-[4/3] w-full bg-black">
+                  {previewSrc ? (
+                    <img src={previewSrc} alt={photo.product_name || "Video"} className="h-full w-full object-cover" loading="lazy" />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-white/50 text-xs">Video</div>
+                  )}
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="rounded-full bg-black/60 p-3 backdrop-blur-sm">
+                      <svg viewBox="0 0 24 24" className="h-6 w-6 fill-white"><path d="M8 5v14l11-7z" /></svg>
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+            if (previewSrc) {
+              return (
+                <img
+                  src={previewSrc}
+                  alt={photo.product_name || "Photo"}
+                  className="aspect-[4/3] w-full object-cover"
+                  loading="lazy"
+                />
+              );
+            }
+            return (
+              <div className="flex aspect-[4/3] items-center justify-center bg-muted text-muted-foreground">
+                No preview
+              </div>
+            );
+          })()}
           {photo.category && (
             <Badge className="absolute left-2 top-2 bg-background/80 text-foreground backdrop-blur-sm">
               {photo.category}
