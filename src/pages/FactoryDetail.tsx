@@ -370,31 +370,52 @@ export default function FactoryDetail() {
                     <span className="text-xs">· {tripPhotos.length} photos</span>
                   </button>
                   <div className="grid gap-2 grid-cols-3 sm:grid-cols-4 lg:grid-cols-6">
-                    {tripPhotos.map(photo => (
-                      <div
-                        key={photo.id}
-                        className="group relative aspect-square cursor-pointer overflow-hidden rounded-md bg-muted"
-                        onClick={() => navigate(`/china/${trip.id}`)}
-                      >
-                        <CachedImage
-                          filePath={photo.file_path}
-                          signedUrl={photo.signed_url}
-                          alt={photo.product_name || "Photo"}
-                          className="h-full w-full object-cover transition-transform group-hover:scale-105"
-                          loading="lazy"
-                          fallback={
-                            <div className="flex h-full w-full items-center justify-center">
-                              <Factory className="h-6 w-6 text-muted-foreground/30" />
+                    {tripPhotos.map(photo => {
+                      const isVideo = photo.media_type === "video";
+                      const thumb = photo.signed_thumbnail_url || photo.signed_url;
+                      return (
+                        <div
+                          key={photo.id}
+                          className="group relative aspect-square cursor-pointer overflow-hidden rounded-md bg-muted"
+                          onClick={() => navigate(`/china/${trip.id}`)}
+                        >
+                          {isVideo ? (
+                            <>
+                              {thumb ? (
+                                <img src={thumb} alt={photo.product_name || "Video"} className="h-full w-full object-cover transition-transform group-hover:scale-105" loading="lazy" />
+                              ) : (
+                                <div className="flex h-full w-full items-center justify-center bg-black/80">
+                                  <Video className="h-6 w-6 text-white/70" />
+                                </div>
+                              )}
+                              <div className="absolute inset-0 flex items-center justify-center">
+                                <div className="rounded-full bg-black/60 p-2 backdrop-blur-sm">
+                                  <Play className="h-4 w-4 fill-white text-white" />
+                                </div>
+                              </div>
+                            </>
+                          ) : (
+                            <CachedImage
+                              filePath={photo.file_path}
+                              signedUrl={photo.signed_url}
+                              alt={photo.product_name || "Photo"}
+                              className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                              loading="lazy"
+                              fallback={
+                                <div className="flex h-full w-full items-center justify-center">
+                                  <Factory className="h-6 w-6 text-muted-foreground/30" />
+                                </div>
+                              }
+                            />
+                          )}
+                          {photo.product_name && (
+                            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-1.5">
+                              <p className="text-[10px] text-white truncate">{photo.product_name}</p>
                             </div>
-                          }
-                        />
-                        {photo.product_name && (
-                          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-1.5">
-                            <p className="text-[10px] text-white truncate">{photo.product_name}</p>
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               );
