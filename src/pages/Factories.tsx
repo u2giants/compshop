@@ -340,7 +340,7 @@ export default function Factories() {
             </p>
           </CardContent>
         </Card>
-      ) : (
+      ) : groupMode === "factory" ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((s, i) => (
             <Card
@@ -413,6 +413,56 @@ export default function Factories() {
                 </div>
               </CardContent>
             </Card>
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {dateBuckets.map((bucket) => (
+            <div key={bucket.key}>
+              <div className="mb-2 flex items-baseline justify-between border-b pb-1.5">
+                <h2 className="font-sans text-lg font-semibold flex items-center gap-2">
+                  <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                  {bucket.label}
+                </h2>
+                <span className="text-xs text-muted-foreground">
+                  {bucket.visits.length} factor{bucket.visits.length === 1 ? "y" : "ies"} · {bucket.totalPhotos} photos
+                </span>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {bucket.visits.map((v, i) => (
+                  <Card
+                    key={i}
+                    className="cursor-pointer overflow-hidden transition-shadow hover:shadow-md"
+                    onClick={() => navigate(`/china/factories/${encodeURIComponent(v.supplier)}`, { state: { tripIds: v.tripIds, factory: v.factory } })}
+                  >
+                    <CardContent className="p-0">
+                      {v.coverUrl ? (
+                        <div className="h-24 w-full overflow-hidden bg-muted">
+                          <img src={v.coverUrl} alt={v.supplier} className="h-full w-full object-cover" />
+                        </div>
+                      ) : (
+                        <div className="flex h-24 w-full items-center justify-center bg-muted/50">
+                          <Factory className="h-8 w-8 text-muted-foreground/30" />
+                        </div>
+                      )}
+                      <div className="p-3">
+                        <h3 className="font-sans font-semibold text-sm truncate">{v.supplier}</h3>
+                        <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <ImageIcon className="h-3 w-3" /> {v.photoCount}
+                          </span>
+                          {v.factory?.contact_person && (
+                            <span className="flex items-center gap-1 truncate">
+                              <User className="h-3 w-3 shrink-0" /> {v.factory.contact_person}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
           ))}
         </div>
       )}
