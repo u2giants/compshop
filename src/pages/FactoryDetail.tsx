@@ -1,14 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import CachedImage from "@/components/CachedImage";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { batchSignedUrls } from "@/lib/photo-utils";
+import { uploadPhoto, hashFile, checkDuplicatePhoto } from "@/lib/supabase-helpers";
+import { extractExif } from "@/lib/exif-utils";
+import { friendlyErrorMessage } from "@/lib/error-messages";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, Phone, Mail, MessageCircle, Globe, MapPin, User, Calendar, Factory, ExternalLink } from "lucide-react";
+import { ArrowLeft, Phone, Mail, MessageCircle, Globe, MapPin, User, Calendar, Factory, ExternalLink, Camera, Images, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 
 interface PhotoItem {
@@ -45,7 +49,9 @@ export default function FactoryDetail() {
   const { name } = useParams<{ name: string }>();
   const location = useLocation();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, isChinaReadOnly } = useAuth();
+  const { toast } = useToast();
+  const isMobile = useIsMobile();
 
   const passedTripIds: string[] = (location.state as any)?.tripIds ?? [];
   const passedFactory: FactoryInfo | null = (location.state as any)?.factory ?? null;
@@ -54,6 +60,10 @@ export default function FactoryDetail() {
   const [trips, setTrips] = useState<TripInfo[]>([]);
   const [factory, setFactory] = useState<FactoryInfo | null>(passedFactory);
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const decodedName = decodeURIComponent(name ?? "");
 
@@ -129,6 +139,61 @@ export default function FactoryDetail() {
     setLoading(false);
   }
 
+  // Most recent trip = upload target
+  const sortedTrips = [...trips].sort((a, b) => b.date.localeCompare(a.date));
+  const targetTrip = sortedTrips[0];
+
+  async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = "";
+    if (files.length === 0 || !user || !targetTrip) return;
+
+    setUploading(true);
+    let uploaded = 0;
+    let skipped = 0;
+
+    try {
+      for (const file of files) {
+        try {
+          const fileHash = await hashFile(file);
+          const isDup = await checkDuplicatePhoto(fileHash);
+          if (isDup) { skipped++; continue; }
+
+          const { filePath, thumbnailPath } = await uploadPhoto(file, user.id, targetTrip.id);
+          const exif = await extractExif(file).catch(() => null);
+
+          const { error } = await supabase.from("china_photos").insert({
+            trip_id: targetTrip.id,
+            user_id: user.id,
+            file_path: filePath,
+            thumbnail_path: thumbnailPath,
+            file_hash: fileHash,
+            latitude: exif?.latitude ?? null,
+            longitude: exif?.longitude ?? null,
+          });
+          if (error) throw error;
+          uploaded++;
+        } catch (err) {
+          console.error("Upload failed for file", file.name, err);
+        }
+      }
+
+      if (uploaded > 0) {
+        toast({
+          title: `Uploaded ${uploaded} photo${uploaded !== 1 ? "s" : ""}`,
+          description: `Added to ${targetTrip.supplier} · ${format(new Date(targetTrip.date), "MMM d, yyyy")}${skipped > 0 ? ` · ${skipped} duplicate${skipped !== 1 ? "s" : ""} skipped` : ""}`,
+        });
+        await loadData();
+      } else if (skipped > 0) {
+        toast({ title: "All photos were duplicates", description: `${skipped} skipped` });
+      }
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: friendlyErrorMessage(err), variant: "destructive" });
+    } finally {
+      setUploading(false);
+    }
+  }
+
   const tripMap = new Map(trips.map(t => [t.id, t]));
 
   // Group photos by trip
@@ -138,6 +203,8 @@ export default function FactoryDetail() {
     list.push(p);
     photosByTrip.set(p.trip_id, list);
   });
+
+  const canUpload = !isChinaReadOnly && !!targetTrip;
 
   return (
     <div className="container py-6">
@@ -151,6 +218,37 @@ export default function FactoryDetail() {
           {trips.length} trip{trips.length !== 1 ? "s" : ""} · {photos.length} photo{photos.length !== 1 ? "s" : ""}
         </p>
       </div>
+
+      {/* Upload actions */}
+      {canUpload && (
+        <div className="mb-6 flex flex-wrap items-center gap-2">
+          <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFileSelect} />
+          {isMobile && (
+            <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileSelect} />
+          )}
+          {isMobile ? (
+            <>
+              <Button onClick={() => cameraInputRef.current?.click()} disabled={uploading} className="gap-2 flex-1">
+                {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+                {uploading ? "Uploading..." : "Take Photo"}
+              </Button>
+              <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={uploading} className="gap-2 flex-1">
+                <Images className="h-4 w-4" /> Upload
+              </Button>
+            </>
+          ) : (
+            <Button onClick={() => fileInputRef.current?.click()} disabled={uploading} className="gap-2">
+              {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+              {uploading ? "Uploading..." : "Add Photos"}
+            </Button>
+          )}
+          {trips.length > 1 && targetTrip && (
+            <span className="text-xs text-muted-foreground ml-1">
+              → most recent visit ({format(new Date(targetTrip.date), "MMM d, yyyy")})
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Contact card */}
       {factory && (
