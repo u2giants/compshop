@@ -3,7 +3,7 @@ import CachedImage from "@/components/CachedImage";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { uploadPhoto, hashFile, checkDuplicatePhoto } from "@/lib/supabase-helpers";
+import { uploadPhoto, uploadVideo, hashFile, checkDuplicatePhoto, MAX_VIDEO_BYTES } from "@/lib/supabase-helpers";
 import { groupPhotos, groupBySection, batchSignedUrls } from "@/lib/photo-utils";
 import type { Photo, ChinaTrip } from "@/types/models";
 import { extractExif } from "@/lib/exif-utils";
@@ -45,7 +45,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, Camera, Calendar, MapPin, Factory, Sparkles, Loader2, Download,
   Images, ArrowRightLeft, PenLine, Pencil, CalendarIcon, CloudOff, Plus, LayoutGrid, Layers, Undo2,
-  User, Phone, Mail, MessageCircle, Globe, Merge, CheckSquare, X,
+  User, Phone, Mail, MessageCircle, Globe, Merge, CheckSquare, X, Video,
 } from "lucide-react";
 import { format } from "date-fns";
 import PhotoCard from "@/components/trip/PhotoCard";
@@ -65,6 +65,7 @@ export default function ChinaTripDetail() {
   const isMobile = useIsMobile();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
   const { undoAction, undoing, captureSnapshot, setUndo, performUndo, clearUndo } = useBulkUndo();
 
   const [trip, setTrip] = useState<ChinaTrip | null>(null);
