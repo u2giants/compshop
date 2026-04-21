@@ -3,7 +3,7 @@ import CachedImage from "@/components/CachedImage";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { uploadPhoto, hashFile, checkDuplicatePhoto } from "@/lib/supabase-helpers";
+import { uploadPhoto, uploadVideo, hashFile, checkDuplicatePhoto, MAX_VIDEO_BYTES } from "@/lib/supabase-helpers";
 import { groupPhotos, groupBySection, batchSignedUrls } from "@/lib/photo-utils";
 import type { Photo, ChinaTrip } from "@/types/models";
 import { extractExif } from "@/lib/exif-utils";
@@ -45,7 +45,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, Camera, Calendar, MapPin, Factory, Sparkles, Loader2, Download,
   Images, ArrowRightLeft, PenLine, Pencil, CalendarIcon, CloudOff, Plus, LayoutGrid, Layers, Undo2,
-  User, Phone, Mail, MessageCircle, Globe, Merge, CheckSquare, X,
+  User, Phone, Mail, MessageCircle, Globe, Merge, CheckSquare, X, Video,
 } from "lucide-react";
 import { format } from "date-fns";
 import PhotoCard from "@/components/trip/PhotoCard";
@@ -65,6 +65,7 @@ export default function ChinaTripDetail() {
   const isMobile = useIsMobile();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
   const { undoAction, undoing, captureSnapshot, setUndo, performUndo, clearUndo } = useBulkUndo();
 
   const [trip, setTrip] = useState<ChinaTrip | null>(null);
@@ -551,6 +552,38 @@ export default function ChinaTripDetail() {
     if (pendingCount > 0) runSync();
   }
 
+  async function handleVideoSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files;
+    e.target.value = "";
+    if (!files || files.length === 0 || !user || !id) return;
+    setUploading(true);
+    let success = 0;
+    let tooLarge = 0;
+    for (const file of Array.from(files)) {
+      if (!file.type.startsWith("video/")) continue;
+      if (file.size > MAX_VIDEO_BYTES) { tooLarge++; continue; }
+      try {
+        const { filePath, thumbnailPath } = await uploadVideo(file, user.id, id);
+        await supabase.from("china_photos").insert({
+          trip_id: id,
+          user_id: user.id,
+          file_path: filePath,
+          thumbnail_path: thumbnailPath,
+          media_type: "video",
+        } as any);
+        success++;
+      } catch (err: any) {
+        toast({ title: "Video upload failed", description: friendlyErrorMessage(err), variant: "destructive" });
+      }
+    }
+    setUploading(false);
+    const parts: string[] = [];
+    if (success > 0) parts.push(`${success} video${success > 1 ? "s" : ""} uploaded`);
+    if (tooLarge > 0) parts.push(`${tooLarge} skipped (over 30MB)`);
+    if (parts.length > 0) toast({ title: parts.join(", ") });
+    loadPhotos();
+  }
+
   async function handleAnalyze() {
     if (!selectedFile) return;
     setAnalyzing(true);
@@ -954,6 +987,7 @@ export default function ChinaTripDetail() {
         {isMobile && (
           <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileSelect} />
         )}
+        <input ref={videoInputRef} type="file" accept="video/*" multiple className="hidden" onChange={handleVideoSelect} />
 
         {!isChinaReadOnly && (isMobile ? (
           <>
@@ -964,6 +998,9 @@ export default function ChinaTripDetail() {
             <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={uploading} className="gap-2 flex-1">
               <Images className="h-4 w-4" /> Upload
             </Button>
+            <Button variant="outline" onClick={() => videoInputRef.current?.click()} disabled={uploading} className="gap-2 flex-1" title="Upload video (max 30MB)">
+              <Video className="h-4 w-4" /> Video
+            </Button>
           </>
         ) : (
           <>
@@ -973,6 +1010,9 @@ export default function ChinaTripDetail() {
             </Button>
             <Button variant="outline" onClick={() => fileInputRef.current?.click()} className="gap-2">
               <Images className="h-4 w-4" /> Bulk Upload
+            </Button>
+            <Button variant="outline" onClick={() => videoInputRef.current?.click()} disabled={uploading} className="gap-2" title="Upload video (max 30MB)">
+              <Video className="h-4 w-4" /> Video
             </Button>
           </>
         ))}

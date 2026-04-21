@@ -47,6 +47,7 @@ export type Database = {
           latitude: number | null
           longitude: number | null
           material: string | null
+          media_type: string
           notes: string | null
           price: number | null
           product_name: string | null
@@ -70,6 +71,7 @@ export type Database = {
           latitude?: number | null
           longitude?: number | null
           material?: string | null
+          media_type?: string
           notes?: string | null
           price?: number | null
           product_name?: string | null
@@ -93,6 +95,7 @@ export type Database = {
           latitude?: number | null
           longitude?: number | null
           material?: string | null
+          media_type?: string
           notes?: string | null
           price?: number | null
           product_name?: string | null

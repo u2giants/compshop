@@ -4,7 +4,7 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { batchSignedUrls } from "@/lib/photo-utils";
-import { uploadPhoto, hashFile, checkDuplicatePhoto } from "@/lib/supabase-helpers";
+import { uploadPhoto, uploadVideo, hashFile, checkDuplicatePhoto, MAX_VIDEO_BYTES } from "@/lib/supabase-helpers";
 import { extractExif } from "@/lib/exif-utils";
 import { friendlyErrorMessage } from "@/lib/error-messages";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Phone, Mail, MessageCircle, Globe, MapPin, User, Calendar, Factory, ExternalLink, Camera, Images, Loader2 } from "lucide-react";
+import { ArrowLeft, Phone, Mail, MessageCircle, Globe, MapPin, User, Calendar, Factory, ExternalLink, Camera, Images, Loader2, Video, Play } from "lucide-react";
 import { format } from "date-fns";
 
 interface PhotoItem {
@@ -23,6 +23,9 @@ interface PhotoItem {
   trip_id: string;
   created_at: string;
   signed_url?: string;
+  thumbnail_path?: string | null;
+  signed_thumbnail_url?: string;
+  media_type?: string | null;
 }
 
 interface TripInfo {
@@ -64,6 +67,7 @@ export default function FactoryDetail() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
 
   const decodedName = decodeURIComponent(name ?? "");
 
@@ -125,15 +129,18 @@ export default function FactoryDetail() {
       const chunk = tripIds.slice(i, i + 10);
       const { data: photoData } = await supabase
         .from("china_photos")
-        .select("id, file_path, product_name, category, trip_id, created_at")
+        .select("id, file_path, product_name, category, trip_id, created_at, thumbnail_path, media_type")
         .in("trip_id", chunk)
         .order("created_at", { ascending: false });
       if (photoData) allPhotos.push(...(photoData as PhotoItem[]));
     }
 
-    // Get signed URLs
-    const urlMap = await batchSignedUrls(allPhotos.map(p => ({ file_path: p.file_path })));
-    allPhotos.forEach(p => { p.signed_url = urlMap.get(p.file_path); });
+    // Get signed URLs (originals + thumbnails)
+    const urlMap = await batchSignedUrls(allPhotos.map(p => ({ file_path: p.file_path, thumbnail_path: p.thumbnail_path ?? null })));
+    allPhotos.forEach(p => {
+      p.signed_url = urlMap.get(p.file_path);
+      if (p.thumbnail_path) p.signed_thumbnail_url = urlMap.get(p.thumbnail_path);
+    });
 
     setPhotos(allPhotos);
     setLoading(false);
@@ -194,7 +201,38 @@ export default function FactoryDetail() {
     }
   }
 
-  const tripMap = new Map(trips.map(t => [t.id, t]));
+  async function handleVideoSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = "";
+    if (files.length === 0 || !user || !targetTrip) return;
+    setUploading(true);
+    let uploaded = 0;
+    let tooLarge = 0;
+    for (const file of files) {
+      if (!file.type.startsWith("video/")) continue;
+      if (file.size > MAX_VIDEO_BYTES) { tooLarge++; continue; }
+      try {
+        const { filePath, thumbnailPath } = await uploadVideo(file, user.id, targetTrip.id);
+        const { error } = await supabase.from("china_photos").insert({
+          trip_id: targetTrip.id,
+          user_id: user.id,
+          file_path: filePath,
+          thumbnail_path: thumbnailPath,
+          media_type: "video",
+        } as any);
+        if (error) throw error;
+        uploaded++;
+      } catch (err: any) {
+        toast({ title: "Video upload failed", description: friendlyErrorMessage(err), variant: "destructive" });
+      }
+    }
+    setUploading(false);
+    const parts: string[] = [];
+    if (uploaded > 0) parts.push(`${uploaded} video${uploaded > 1 ? "s" : ""} uploaded`);
+    if (tooLarge > 0) parts.push(`${tooLarge} skipped (over 30MB)`);
+    if (parts.length > 0) toast({ title: parts.join(", ") });
+    await loadData();
+  }
 
   // Group photos by trip
   const photosByTrip = new Map<string, PhotoItem[]>();
@@ -226,6 +264,7 @@ export default function FactoryDetail() {
           {isMobile && (
             <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileSelect} />
           )}
+          <input ref={videoInputRef} type="file" accept="video/*" multiple className="hidden" onChange={handleVideoSelect} />
           {isMobile ? (
             <>
               <Button onClick={() => cameraInputRef.current?.click()} disabled={uploading} className="gap-2 flex-1">
@@ -235,12 +274,20 @@ export default function FactoryDetail() {
               <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={uploading} className="gap-2 flex-1">
                 <Images className="h-4 w-4" /> Upload
               </Button>
+              <Button variant="outline" onClick={() => videoInputRef.current?.click()} disabled={uploading} className="gap-2 flex-1" title="Upload video (max 30MB)">
+                <Video className="h-4 w-4" /> Video
+              </Button>
             </>
           ) : (
-            <Button onClick={() => fileInputRef.current?.click()} disabled={uploading} className="gap-2">
-              {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
-              {uploading ? "Uploading..." : "Add Photos"}
-            </Button>
+            <>
+              <Button onClick={() => fileInputRef.current?.click()} disabled={uploading} className="gap-2">
+                {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+                {uploading ? "Uploading..." : "Add Photos"}
+              </Button>
+              <Button variant="outline" onClick={() => videoInputRef.current?.click()} disabled={uploading} className="gap-2" title="Upload video (max 30MB)">
+                <Video className="h-4 w-4" /> Video
+              </Button>
+            </>
           )}
           {trips.length > 1 && targetTrip && (
             <span className="text-xs text-muted-foreground ml-1">
@@ -332,31 +379,52 @@ export default function FactoryDetail() {
                     <span className="text-xs">· {tripPhotos.length} photos</span>
                   </button>
                   <div className="grid gap-2 grid-cols-3 sm:grid-cols-4 lg:grid-cols-6">
-                    {tripPhotos.map(photo => (
-                      <div
-                        key={photo.id}
-                        className="group relative aspect-square cursor-pointer overflow-hidden rounded-md bg-muted"
-                        onClick={() => navigate(`/china/${trip.id}`)}
-                      >
-                        <CachedImage
-                          filePath={photo.file_path}
-                          signedUrl={photo.signed_url}
-                          alt={photo.product_name || "Photo"}
-                          className="h-full w-full object-cover transition-transform group-hover:scale-105"
-                          loading="lazy"
-                          fallback={
-                            <div className="flex h-full w-full items-center justify-center">
-                              <Factory className="h-6 w-6 text-muted-foreground/30" />
+                    {tripPhotos.map(photo => {
+                      const isVideo = photo.media_type === "video";
+                      const thumb = photo.signed_thumbnail_url || photo.signed_url;
+                      return (
+                        <div
+                          key={photo.id}
+                          className="group relative aspect-square cursor-pointer overflow-hidden rounded-md bg-muted"
+                          onClick={() => navigate(`/china/${trip.id}`)}
+                        >
+                          {isVideo ? (
+                            <>
+                              {thumb ? (
+                                <img src={thumb} alt={photo.product_name || "Video"} className="h-full w-full object-cover transition-transform group-hover:scale-105" loading="lazy" />
+                              ) : (
+                                <div className="flex h-full w-full items-center justify-center bg-black/80">
+                                  <Video className="h-6 w-6 text-white/70" />
+                                </div>
+                              )}
+                              <div className="absolute inset-0 flex items-center justify-center">
+                                <div className="rounded-full bg-black/60 p-2 backdrop-blur-sm">
+                                  <Play className="h-4 w-4 fill-white text-white" />
+                                </div>
+                              </div>
+                            </>
+                          ) : (
+                            <CachedImage
+                              filePath={photo.file_path}
+                              signedUrl={photo.signed_url}
+                              alt={photo.product_name || "Photo"}
+                              className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                              loading="lazy"
+                              fallback={
+                                <div className="flex h-full w-full items-center justify-center">
+                                  <Factory className="h-6 w-6 text-muted-foreground/30" />
+                                </div>
+                              }
+                            />
+                          )}
+                          {photo.product_name && (
+                            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-1.5">
+                              <p className="text-[10px] text-white truncate">{photo.product_name}</p>
                             </div>
-                          }
-                        />
-                        {photo.product_name && (
-                          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-1.5">
-                            <p className="text-[10px] text-white truncate">{photo.product_name}</p>
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               );
