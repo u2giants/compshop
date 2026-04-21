@@ -7,7 +7,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Factory, Search, MapPin, Phone, Mail, MessageCircle, Globe, User, ImageIcon, Building2 } from "lucide-react";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Factory, Search, MapPin, Phone, Mail, MessageCircle, Globe, User, ImageIcon, Building2, Calendar as CalendarIcon } from "lucide-react";
+import { format, parseISO, differenceInCalendarDays } from "date-fns";
 
 interface FactoryItem {
   id: string;
@@ -31,7 +33,20 @@ interface SupplierAgg {
   latestDate: string;
   coverUrl?: string;
   tripIds: string[];
+  // per-trip details for date grouping
+  trips: { id: string; date: string; photoCount: number; coverUrl?: string }[];
 }
+
+interface DateBucket {
+  key: string;
+  label: string;
+  startDate: string;
+  endDate: string;
+  visits: { supplier: string; factory: FactoryItem | null; tripIds: string[]; photoCount: number; coverUrl?: string }[];
+  totalPhotos: number;
+}
+
+type GroupMode = "factory" | "date";
 
 export default function Factories() {
   const { user } = useAuth();
@@ -39,6 +54,13 @@ export default function Factories() {
   const [suppliers, setSuppliers] = useState<SupplierAgg[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [groupMode, setGroupMode] = useState<GroupMode>(() => {
+    return (localStorage.getItem("factories.groupMode") as GroupMode) || "factory";
+  });
+
+  useEffect(() => {
+    localStorage.setItem("factories.groupMode", groupMode);
+  }, [groupMode]);
 
   useEffect(() => {
     if (!user) return;
@@ -123,6 +145,15 @@ export default function Factories() {
           latestDate: firstTrip.date,
           coverUrl: coverPath ? urlMap.get(coverPath) : undefined,
           tripIds: supplierTrips.map(t => t.id),
+          trips: supplierTrips.map(t => {
+            const cp = tripCoverPath.get(t.id);
+            return {
+              id: t.id,
+              date: t.date,
+              photoCount: tripPhotoCount.get(t.id) ?? 0,
+              coverUrl: cp ? urlMap.get(cp) : undefined,
+            };
+          }),
         });
       }
 
@@ -137,6 +168,7 @@ export default function Factories() {
             photoCount: 0,
             latestDate: factory.created_at,
             tripIds: [],
+            trips: [],
           });
         }
       }
@@ -156,6 +188,86 @@ export default function Factories() {
         s.factory?.address?.toLowerCase().includes(search.toLowerCase())
       )
     : suppliers;
+
+  // Build date buckets: cluster individual factory visits by adjacent dates (gap <= 2 days)
+  type Visit = {
+    date: string;
+    supplier: string;
+    factory: FactoryItem | null;
+    tripIds: string[];
+    photoCount: number;
+    coverUrl?: string;
+  };
+  const dateBuckets: DateBucket[] = (() => {
+    const visits: Visit[] = [];
+    for (const s of filtered) {
+      for (const t of s.trips) {
+        visits.push({
+          date: t.date,
+          supplier: s.supplier,
+          factory: s.factory,
+          tripIds: [t.id],
+          photoCount: t.photoCount,
+          coverUrl: t.coverUrl ?? s.coverUrl,
+        });
+      }
+    }
+    visits.sort((a, b) => a.date.localeCompare(b.date));
+
+    const makeBucket = (c: { startDate: string; endDate: string; visits: Visit[] }): DateBucket => {
+      const sameDay = c.startDate === c.endDate;
+      const start = parseISO(c.startDate);
+      const end = parseISO(c.endDate);
+      const sameYear = start.getFullYear() === end.getFullYear();
+      const label = sameDay
+        ? format(start, "EEE, MMM d, yyyy")
+        : sameYear
+          ? `${format(start, "MMM d")} – ${format(end, "MMM d, yyyy")}`
+          : `${format(start, "MMM d, yyyy")} – ${format(end, "MMM d, yyyy")}`;
+      const merged = new Map<string, Visit>();
+      for (const v of c.visits) {
+        const key = v.supplier.trim().toLowerCase();
+        const existing = merged.get(key);
+        if (existing) {
+          existing.tripIds.push(...v.tripIds);
+          existing.photoCount += v.photoCount;
+          if (!existing.coverUrl && v.coverUrl) existing.coverUrl = v.coverUrl;
+        } else {
+          merged.set(key, { ...v, tripIds: [...v.tripIds] });
+        }
+      }
+      const mergedVisits = Array.from(merged.values()).sort((a, b) =>
+        a.supplier.localeCompare(b.supplier)
+      );
+      return {
+        key: `${c.startDate}_${c.endDate}`,
+        label,
+        startDate: c.startDate,
+        endDate: c.endDate,
+        visits: mergedVisits,
+        totalPhotos: mergedVisits.reduce((s, v) => s + v.photoCount, 0),
+      };
+    };
+
+    const buckets: DateBucket[] = [];
+    let current: { startDate: string; endDate: string; visits: Visit[] } | null = null;
+    for (const v of visits) {
+      if (!current) {
+        current = { startDate: v.date, endDate: v.date, visits: [v] };
+        continue;
+      }
+      const gap = differenceInCalendarDays(parseISO(v.date), parseISO(current.endDate));
+      if (gap <= 2) {
+        current.endDate = v.date;
+        current.visits.push(v);
+      } else {
+        buckets.push(makeBucket(current));
+        current = { startDate: v.date, endDate: v.date, visits: [v] };
+      }
+    }
+    if (current) buckets.push(makeBucket(current));
+    return buckets.reverse();
+  })();
 
   return (
     <div className="container py-6">
@@ -179,14 +291,29 @@ export default function Factories() {
       </div>
 
       {suppliers.length > 0 && (
-        <div className="relative mb-4">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search factories..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
+        <div className="mb-4 flex flex-col sm:flex-row gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search factories..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          <ToggleGroup
+            type="single"
+            value={groupMode}
+            onValueChange={(v) => v && setGroupMode(v as GroupMode)}
+            className="self-start sm:self-auto"
+          >
+            <ToggleGroupItem value="factory" aria-label="Group by factory" className="gap-1.5 px-3">
+              <Building2 className="h-4 w-4" /> By Factory
+            </ToggleGroupItem>
+            <ToggleGroupItem value="date" aria-label="Group by date" className="gap-1.5 px-3">
+              <CalendarIcon className="h-4 w-4" /> By Date
+            </ToggleGroupItem>
+          </ToggleGroup>
         </div>
       )}
 
@@ -213,7 +340,7 @@ export default function Factories() {
             </p>
           </CardContent>
         </Card>
-      ) : (
+      ) : groupMode === "factory" ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((s, i) => (
             <Card
@@ -286,6 +413,56 @@ export default function Factories() {
                 </div>
               </CardContent>
             </Card>
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {dateBuckets.map((bucket) => (
+            <div key={bucket.key}>
+              <div className="mb-2 flex items-baseline justify-between border-b pb-1.5">
+                <h2 className="font-sans text-lg font-semibold flex items-center gap-2">
+                  <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                  {bucket.label}
+                </h2>
+                <span className="text-xs text-muted-foreground">
+                  {bucket.visits.length} factor{bucket.visits.length === 1 ? "y" : "ies"} · {bucket.totalPhotos} photos
+                </span>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {bucket.visits.map((v, i) => (
+                  <Card
+                    key={i}
+                    className="cursor-pointer overflow-hidden transition-shadow hover:shadow-md"
+                    onClick={() => navigate(`/china/factories/${encodeURIComponent(v.supplier)}`, { state: { tripIds: v.tripIds, factory: v.factory } })}
+                  >
+                    <CardContent className="p-0">
+                      {v.coverUrl ? (
+                        <div className="h-24 w-full overflow-hidden bg-muted">
+                          <img src={v.coverUrl} alt={v.supplier} className="h-full w-full object-cover" />
+                        </div>
+                      ) : (
+                        <div className="flex h-24 w-full items-center justify-center bg-muted/50">
+                          <Factory className="h-8 w-8 text-muted-foreground/30" />
+                        </div>
+                      )}
+                      <div className="p-3">
+                        <h3 className="font-sans font-semibold text-sm truncate">{v.supplier}</h3>
+                        <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <ImageIcon className="h-3 w-3" /> {v.photoCount}
+                          </span>
+                          {v.factory?.contact_person && (
+                            <span className="flex items-center gap-1 truncate">
+                              <User className="h-3 w-3 shrink-0" /> {v.factory.contact_person}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
           ))}
         </div>
       )}
