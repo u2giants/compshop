@@ -552,7 +552,37 @@ export default function ChinaTripDetail() {
     if (pendingCount > 0) runSync();
   }
 
-  async function handleAnalyze() {
+  async function handleVideoSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files;
+    e.target.value = "";
+    if (!files || files.length === 0 || !user || !id) return;
+    setUploading(true);
+    let success = 0;
+    let tooLarge = 0;
+    for (const file of Array.from(files)) {
+      if (!file.type.startsWith("video/")) continue;
+      if (file.size > MAX_VIDEO_BYTES) { tooLarge++; continue; }
+      try {
+        const { filePath, thumbnailPath } = await uploadVideo(file, user.id, id);
+        await supabase.from("china_photos").insert({
+          trip_id: id,
+          user_id: user.id,
+          file_path: filePath,
+          thumbnail_path: thumbnailPath,
+          media_type: "video",
+        } as any);
+        success++;
+      } catch (err: any) {
+        toast({ title: "Video upload failed", description: friendlyErrorMessage(err), variant: "destructive" });
+      }
+    }
+    setUploading(false);
+    const parts: string[] = [];
+    if (success > 0) parts.push(`${success} video${success > 1 ? "s" : ""} uploaded`);
+    if (tooLarge > 0) parts.push(`${tooLarge} skipped (over 30MB)`);
+    if (parts.length > 0) toast({ title: parts.join(", ") });
+    loadPhotos();
+  }
     if (!selectedFile) return;
     setAnalyzing(true);
     try {
