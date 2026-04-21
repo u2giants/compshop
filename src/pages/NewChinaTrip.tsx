@@ -95,6 +95,19 @@ export default function NewChinaTrip() {
     if (data) setAvailableGroups(data as ParentGroup[]);
   }
 
+  async function loadSupplierSuggestions() {
+    // Pull existing factory names + previously-used supplier names so the user can
+    // pick an existing record instead of creating a duplicate.
+    const [factoriesRes, tripsRes] = await Promise.all([
+      supabase.from("factories").select("name"),
+      supabase.from("china_trips").select("supplier").is("deleted_at", null),
+    ]);
+    const set = new Set<string>();
+    (factoriesRes.data || []).forEach((f: any) => f?.name && set.add(f.name.trim()));
+    (tripsRes.data || []).forEach((t: any) => t?.supplier && set.add(t.supplier.trim()));
+    setSupplierSuggestions(Array.from(set).sort((a, b) => a.localeCompare(b)));
+  }
+
   const detectLocation = () => {
     if (!navigator.geolocation) return;
     setLocatingDevice(true);
