@@ -129,15 +129,18 @@ export default function FactoryDetail() {
       const chunk = tripIds.slice(i, i + 10);
       const { data: photoData } = await supabase
         .from("china_photos")
-        .select("id, file_path, product_name, category, trip_id, created_at")
+        .select("id, file_path, product_name, category, trip_id, created_at, thumbnail_path, media_type")
         .in("trip_id", chunk)
         .order("created_at", { ascending: false });
       if (photoData) allPhotos.push(...(photoData as PhotoItem[]));
     }
 
-    // Get signed URLs
-    const urlMap = await batchSignedUrls(allPhotos.map(p => ({ file_path: p.file_path })));
-    allPhotos.forEach(p => { p.signed_url = urlMap.get(p.file_path); });
+    // Get signed URLs (originals + thumbnails)
+    const urlMap = await batchSignedUrls(allPhotos.map(p => ({ file_path: p.file_path, thumbnail_path: p.thumbnail_path ?? null })));
+    allPhotos.forEach(p => {
+      p.signed_url = urlMap.get(p.file_path);
+      if (p.thumbnail_path) p.signed_thumbnail_url = urlMap.get(p.thumbnail_path);
+    });
 
     setPhotos(allPhotos);
     setLoading(false);
