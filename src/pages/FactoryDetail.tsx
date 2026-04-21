@@ -201,7 +201,38 @@ export default function FactoryDetail() {
     }
   }
 
-  const tripMap = new Map(trips.map(t => [t.id, t]));
+  async function handleVideoSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = "";
+    if (files.length === 0 || !user || !targetTrip) return;
+    setUploading(true);
+    let uploaded = 0;
+    let tooLarge = 0;
+    for (const file of files) {
+      if (!file.type.startsWith("video/")) continue;
+      if (file.size > MAX_VIDEO_BYTES) { tooLarge++; continue; }
+      try {
+        const { filePath, thumbnailPath } = await uploadVideo(file, user.id, targetTrip.id);
+        const { error } = await supabase.from("china_photos").insert({
+          trip_id: targetTrip.id,
+          user_id: user.id,
+          file_path: filePath,
+          thumbnail_path: thumbnailPath,
+          media_type: "video",
+        } as any);
+        if (error) throw error;
+        uploaded++;
+      } catch (err: any) {
+        toast({ title: "Video upload failed", description: friendlyErrorMessage(err), variant: "destructive" });
+      }
+    }
+    setUploading(false);
+    const parts: string[] = [];
+    if (uploaded > 0) parts.push(`${uploaded} video${uploaded > 1 ? "s" : ""} uploaded`);
+    if (tooLarge > 0) parts.push(`${tooLarge} skipped (over 30MB)`);
+    if (parts.length > 0) toast({ title: parts.join(", ") });
+    await loadData();
+  }
 
   // Group photos by trip
   const photosByTrip = new Map<string, PhotoItem[]>();
