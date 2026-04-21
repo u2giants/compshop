@@ -583,6 +583,8 @@ export default function ChinaTripDetail() {
     if (parts.length > 0) toast({ title: parts.join(", ") });
     loadPhotos();
   }
+
+  async function handleAnalyze() {
     if (!selectedFile) return;
     setAnalyzing(true);
     try {
