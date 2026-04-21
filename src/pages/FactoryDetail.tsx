@@ -264,6 +264,7 @@ export default function FactoryDetail() {
           {isMobile && (
             <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileSelect} />
           )}
+          <input ref={videoInputRef} type="file" accept="video/*" multiple className="hidden" onChange={handleVideoSelect} />
           {isMobile ? (
             <>
               <Button onClick={() => cameraInputRef.current?.click()} disabled={uploading} className="gap-2 flex-1">
@@ -273,12 +274,20 @@ export default function FactoryDetail() {
               <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={uploading} className="gap-2 flex-1">
                 <Images className="h-4 w-4" /> Upload
               </Button>
+              <Button variant="outline" onClick={() => videoInputRef.current?.click()} disabled={uploading} className="gap-2 flex-1" title="Upload video (max 30MB)">
+                <Video className="h-4 w-4" /> Video
+              </Button>
             </>
           ) : (
-            <Button onClick={() => fileInputRef.current?.click()} disabled={uploading} className="gap-2">
-              {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
-              {uploading ? "Uploading..." : "Add Photos"}
-            </Button>
+            <>
+              <Button onClick={() => fileInputRef.current?.click()} disabled={uploading} className="gap-2">
+                {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+                {uploading ? "Uploading..." : "Add Photos"}
+              </Button>
+              <Button variant="outline" onClick={() => videoInputRef.current?.click()} disabled={uploading} className="gap-2" title="Upload video (max 30MB)">
+                <Video className="h-4 w-4" /> Video
+              </Button>
+            </>
           )}
           {trips.length > 1 && targetTrip && (
             <span className="text-xs text-muted-foreground ml-1">
