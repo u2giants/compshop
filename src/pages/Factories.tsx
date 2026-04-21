@@ -7,7 +7,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Factory, Search, MapPin, Phone, Mail, MessageCircle, Globe, User, ImageIcon, Building2 } from "lucide-react";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Factory, Search, MapPin, Phone, Mail, MessageCircle, Globe, User, ImageIcon, Building2, Calendar as CalendarIcon } from "lucide-react";
+import { format, parseISO, differenceInCalendarDays } from "date-fns";
 
 interface FactoryItem {
   id: string;
