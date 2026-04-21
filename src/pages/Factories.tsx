@@ -33,7 +33,20 @@ interface SupplierAgg {
   latestDate: string;
   coverUrl?: string;
   tripIds: string[];
+  // per-trip details for date grouping
+  trips: { id: string; date: string; photoCount: number; coverUrl?: string }[];
 }
+
+interface DateBucket {
+  key: string;
+  label: string;
+  startDate: string;
+  endDate: string;
+  visits: { supplier: string; factory: FactoryItem | null; tripIds: string[]; photoCount: number; coverUrl?: string }[];
+  totalPhotos: number;
+}
+
+type GroupMode = "factory" | "date";
 
 export default function Factories() {
   const { user } = useAuth();
@@ -41,6 +54,13 @@ export default function Factories() {
   const [suppliers, setSuppliers] = useState<SupplierAgg[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [groupMode, setGroupMode] = useState<GroupMode>(() => {
+    return (localStorage.getItem("factories.groupMode") as GroupMode) || "factory";
+  });
+
+  useEffect(() => {
+    localStorage.setItem("factories.groupMode", groupMode);
+  }, [groupMode]);
 
   useEffect(() => {
     if (!user) return;
