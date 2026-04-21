@@ -987,6 +987,7 @@ export default function ChinaTripDetail() {
         {isMobile && (
           <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileSelect} />
         )}
+        <input ref={videoInputRef} type="file" accept="video/*" multiple className="hidden" onChange={handleVideoSelect} />
 
         {!isChinaReadOnly && (isMobile ? (
           <>
@@ -997,6 +998,9 @@ export default function ChinaTripDetail() {
             <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={uploading} className="gap-2 flex-1">
               <Images className="h-4 w-4" /> Upload
             </Button>
+            <Button variant="outline" onClick={() => videoInputRef.current?.click()} disabled={uploading} className="gap-2 flex-1" title="Upload video (max 30MB)">
+              <Video className="h-4 w-4" /> Video
+            </Button>
           </>
         ) : (
           <>
@@ -1006,6 +1010,9 @@ export default function ChinaTripDetail() {
             </Button>
             <Button variant="outline" onClick={() => fileInputRef.current?.click()} className="gap-2">
               <Images className="h-4 w-4" /> Bulk Upload
+            </Button>
+            <Button variant="outline" onClick={() => videoInputRef.current?.click()} disabled={uploading} className="gap-2" title="Upload video (max 30MB)">
+              <Video className="h-4 w-4" /> Video
             </Button>
           </>
         ))}
