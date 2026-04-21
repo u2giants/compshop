@@ -189,6 +189,86 @@ export default function Factories() {
       )
     : suppliers;
 
+  // Build date buckets: cluster individual factory visits by adjacent dates (gap <= 2 days)
+  type Visit = {
+    date: string;
+    supplier: string;
+    factory: FactoryItem | null;
+    tripIds: string[];
+    photoCount: number;
+    coverUrl?: string;
+  };
+  const dateBuckets: DateBucket[] = (() => {
+    const visits: Visit[] = [];
+    for (const s of filtered) {
+      for (const t of s.trips) {
+        visits.push({
+          date: t.date,
+          supplier: s.supplier,
+          factory: s.factory,
+          tripIds: [t.id],
+          photoCount: t.photoCount,
+          coverUrl: t.coverUrl ?? s.coverUrl,
+        });
+      }
+    }
+    visits.sort((a, b) => a.date.localeCompare(b.date));
+
+    const makeBucket = (c: { startDate: string; endDate: string; visits: Visit[] }): DateBucket => {
+      const sameDay = c.startDate === c.endDate;
+      const start = parseISO(c.startDate);
+      const end = parseISO(c.endDate);
+      const sameYear = start.getFullYear() === end.getFullYear();
+      const label = sameDay
+        ? format(start, "EEE, MMM d, yyyy")
+        : sameYear
+          ? `${format(start, "MMM d")} – ${format(end, "MMM d, yyyy")}`
+          : `${format(start, "MMM d, yyyy")} – ${format(end, "MMM d, yyyy")}`;
+      const merged = new Map<string, Visit>();
+      for (const v of c.visits) {
+        const key = v.supplier.trim().toLowerCase();
+        const existing = merged.get(key);
+        if (existing) {
+          existing.tripIds.push(...v.tripIds);
+          existing.photoCount += v.photoCount;
+          if (!existing.coverUrl && v.coverUrl) existing.coverUrl = v.coverUrl;
+        } else {
+          merged.set(key, { ...v, tripIds: [...v.tripIds] });
+        }
+      }
+      const mergedVisits = Array.from(merged.values()).sort((a, b) =>
+        a.supplier.localeCompare(b.supplier)
+      );
+      return {
+        key: `${c.startDate}_${c.endDate}`,
+        label,
+        startDate: c.startDate,
+        endDate: c.endDate,
+        visits: mergedVisits,
+        totalPhotos: mergedVisits.reduce((s, v) => s + v.photoCount, 0),
+      };
+    };
+
+    const buckets: DateBucket[] = [];
+    let current: { startDate: string; endDate: string; visits: Visit[] } | null = null;
+    for (const v of visits) {
+      if (!current) {
+        current = { startDate: v.date, endDate: v.date, visits: [v] };
+        continue;
+      }
+      const gap = differenceInCalendarDays(parseISO(v.date), parseISO(current.endDate));
+      if (gap <= 2) {
+        current.endDate = v.date;
+        current.visits.push(v);
+      } else {
+        buckets.push(makeBucket(current));
+        current = { startDate: v.date, endDate: v.date, visits: [v] };
+      }
+    }
+    if (current) buckets.push(makeBucket(current));
+    return buckets.reverse();
+  })();
+
   return (
     <div className="container py-6">
       {/* Tabs navigation */}
