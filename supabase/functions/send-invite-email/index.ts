@@ -51,7 +51,8 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { email, inviterName, appUrl } = await req.json();
+    const { email, inviterName, appUrl: requestAppUrl } = await req.json();
+    const appUrl = requestAppUrl || Deno.env.get("SITE_URL") || "";
 
     if (!email) {
       return new Response(
@@ -92,7 +93,7 @@ Deno.serve(async (req) => {
               Click the button below to sign in with your Google account and start collaborating.
             </p>
             <div style="text-align: center; margin: 32px 0;">
-              <a href="${appUrl || 'https://compshop.lovable.app'}" 
+              <a href="${appUrl}"
                  style="background-color: #18181b; color: white; padding: 12px 32px; border-radius: 6px; text-decoration: none; font-size: 14px; font-weight: 500;">
                 Join CompShop
               </a>

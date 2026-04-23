@@ -6,15 +6,12 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const AI_GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    // Verify authentication
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(
@@ -38,8 +35,8 @@ Deno.serve(async (req) => {
       );
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+    const apiKey = Deno.env.get("GEMINI_API_KEY");
+    if (!apiKey) throw new Error("GEMINI_API_KEY is not configured");
 
     const { imageBase64, mimeType, categories } = await req.json();
     if (!imageBase64) throw new Error("No image provided");
@@ -48,21 +45,7 @@ Deno.serve(async (req) => {
       ? `\n  "category": "one of these categories that best fits: [${categories.join(", ")}]",`
       : `\n  "category": "general product category if identifiable",`;
 
-    const response = await fetch(AI_GATEWAY_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: `Analyze this image. First determine if this is a BUSINESS CARD or a PRODUCT PHOTO.
+    const prompt = `Analyze this image. First determine if this is a BUSINESS CARD or a PRODUCT PHOTO.
 
 If it is a BUSINESS CARD, return a JSON object with:
 {
@@ -81,46 +64,46 @@ If it is a PRODUCT PHOTO, return a JSON object with:
 {
   "is_business_card": false,
   "product_name": "name of the product if visible",${categoryInstruction}
-  "price": numeric price value only (no currency symbol), 
+  "price": numeric price value only (no currency symbol),
   "dimensions": "size/dimensions if shown on label",
   "brand": "brand name if visible",
   "material": "material if labeled",
   "country_of_origin": "country if shown (e.g. Made in China)"
 }
 
-Use null for any field not found. Return ONLY the JSON, no markdown, no explanation.`,
-              },
-              {
-                type: "image_url",
-                image_url: { url: `data:${mimeType || "image/jpeg"};base64,${imageBase64}` },
-              },
+Use null for any field not found. Return ONLY the JSON, no markdown, no explanation.`;
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { text: prompt },
+              { inline_data: { mime_type: mimeType || "image/jpeg", data: imageBase64 } },
             ],
-          },
-        ],
-        max_tokens: 500,
-      }),
-    });
+          }],
+          generationConfig: { maxOutputTokens: 500 },
+        }),
+      }
+    );
 
     if (!response.ok) {
       if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limits exceeded, please try again later." }), {
+        return new Response(JSON.stringify({ error: "Rate limit exceeded, please try again later." }), {
           status: 429,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "Payment required, please add funds to your workspace." }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
       const err = await response.text();
-      throw new Error(`AI gateway error [${response.status}]: ${err}`);
+      throw new Error(`Gemini API error [${response.status}]: ${err}`);
     }
 
     const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || "{}";
-    
+    const content = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+
     let parsed;
     try {
       const cleaned = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
