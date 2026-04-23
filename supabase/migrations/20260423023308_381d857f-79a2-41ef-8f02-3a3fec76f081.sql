@@ -1,0 +1,2 @@
+ALTER TABLE public.china_trips DROP CONSTRAINT china_trips_venue_type_check;
+ALTER TABLE public.china_trips ADD CONSTRAINT china_trips_venue_type_check CHECK (venue_type = ANY (ARRAY['canton_fair'::text, 'factory_visit'::text, 'booth_visit'::text]));
