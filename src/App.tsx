@@ -66,6 +66,7 @@ const App = () => (
                   }
                 >
                   <Route path="/" element={<ModeRedirect><Trips /></ModeRedirect>} />
+                  <Route path="/index" element={<Navigate to="/" replace />} />
                   <Route path="/trips/new" element={<NewTrip />} />
                   <Route path="/trips/:id" element={<TripDetail />} />
                   <Route path="/china" element={<ChinaTrips />} />
