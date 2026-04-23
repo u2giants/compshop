@@ -12,7 +12,7 @@ type: feature
 ## Stale-While-Revalidate (SWR)
 - Trip list pages (Trips.tsx, ChinaTrips.tsx) show cached data instantly, then refresh in background
 - `sync_meta` store tracks last sync timestamp per data type
-- If synced <5 minutes ago AND cache exists, background refresh is skipped entirely
+- If synced <30 seconds ago AND cache exists, background refresh is skipped entirely (kept short for cross-user collaboration)
 - Cover image blobs are pre-cached during list loads for instant display on next visit
 
 ## IndexedDB Schema (v2)
