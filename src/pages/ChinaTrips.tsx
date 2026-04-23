@@ -100,9 +100,9 @@ export default function ChinaTrips() {
       return;
     }
 
-    // 2. Skip background refresh if synced recently (<5 min)
+    // 2. Skip background refresh if synced very recently (<30s) — keeps collaboration near real-time
     const lastSync = await getSyncTimestamp("china_trips");
-    if (cached.length > 0 && lastSync && Date.now() - lastSync < 5 * 60 * 1000) {
+    if (cached.length > 0 && lastSync && Date.now() - lastSync < 30 * 1000) {
       setLoading(false);
       return;
     }
