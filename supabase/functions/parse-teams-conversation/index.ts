@@ -6,7 +6,10 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const AI_GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
+const AI_PROVIDER = (Deno.env.get("AI_PROVIDER") ?? "openrouter").toLowerCase();
+const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+const LOVABLE_AI_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
+const DEFAULT_MODEL = Deno.env.get("AI_MODEL") ?? "google/gemini-2.5-flash";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -14,7 +17,6 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Verify authentication
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(
@@ -38,20 +40,36 @@ Deno.serve(async (req) => {
       );
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+    let aiUrl: string;
+    let aiKey: string | undefined;
+    const extraHeaders: Record<string, string> = {};
+
+    if (AI_PROVIDER === "openrouter") {
+      aiUrl = OPENROUTER_URL;
+      aiKey = Deno.env.get("OPENROUTER_API_KEY");
+      if (!aiKey) throw new Error("OPENROUTER_API_KEY is not configured");
+      const referer = Deno.env.get("OPENROUTER_HTTP_REFERER");
+      const title = Deno.env.get("OPENROUTER_APP_TITLE") ?? "CompShop";
+      if (referer) extraHeaders["HTTP-Referer"] = referer;
+      extraHeaders["X-Title"] = title;
+    } else {
+      aiUrl = LOVABLE_AI_URL;
+      aiKey = Deno.env.get("LOVABLE_API_KEY");
+      if (!aiKey) throw new Error("LOVABLE_API_KEY is not configured");
+    }
 
     const { text } = await req.json();
     if (!text) throw new Error("No conversation text provided");
 
-    const response = await fetch(AI_GATEWAY_URL, {
+    const response = await fetch(aiUrl, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${aiKey}`,
         "Content-Type": "application/json",
+        ...extraHeaders,
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: DEFAULT_MODEL,
         messages: [
           {
             role: "user",
@@ -73,7 +91,7 @@ ${text.slice(0, 4000)}`,
 
     if (!response.ok) {
       const err = await response.text();
-      throw new Error(`AI error [${response.status}]: ${err}`);
+      throw new Error(`AI provider error [${response.status}]: ${err}`);
     }
 
     const data = await response.json();
