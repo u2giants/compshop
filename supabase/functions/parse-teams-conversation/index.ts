@@ -35,13 +35,28 @@ Deno.serve(async (req) => {
       );
     }
 
-    const apiKey = Deno.env.get("GEMINI_API_KEY");
-    if (!apiKey) throw new Error("GEMINI_API_KEY not configured");
+    const apiKey = Deno.env.get("OPENROUTER_API_KEY");
+    if (!apiKey) throw new Error("OPENROUTER_API_KEY not configured");
+
+    const model = Deno.env.get("OPENROUTER_TEXT_MODEL") || "google/gemini-2.0-flash-001";
 
     const { text } = await req.json();
     if (!text) throw new Error("No conversation text provided");
 
-    const prompt = `Analyze this Microsoft Teams conversation. The conversation title or first lines usually contain a store/retailer name and a date (sometimes in various formats). Extract:
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://comp.designflow.app",
+        "X-Title": "CompShop",
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          {
+            role: "user",
+            content: `Analyze this Microsoft Teams conversation. The conversation title or first lines usually contain a store/retailer name and a date (sometimes in various formats). Extract:
 
 1. "store" - the retail store name mentioned
 2. "date" - the date in YYYY-MM-DD format (if relative dates like "last Tuesday", estimate based on today being ${new Date().toISOString().split("T")[0]})
@@ -50,27 +65,20 @@ Deno.serve(async (req) => {
 Return ONLY a JSON object with these 3 fields. If you can't find a field, use null.
 
 Conversation:
-${text.slice(0, 4000)}`;
-
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: 300 },
-        }),
-      }
-    );
+${text.slice(0, 4000)}`,
+          },
+        ],
+        max_tokens: 300,
+      }),
+    });
 
     if (!response.ok) {
       const err = await response.text();
-      throw new Error(`Gemini API error [${response.status}]: ${err}`);
+      throw new Error(`OpenRouter API error [${response.status}]: ${err}`);
     }
 
     const data = await response.json();
-    const content = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+    const content = data.choices?.[0]?.message?.content || "{}";
 
     let parsed;
     try {

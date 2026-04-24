@@ -35,8 +35,10 @@ Deno.serve(async (req) => {
       );
     }
 
-    const apiKey = Deno.env.get("GEMINI_API_KEY");
-    if (!apiKey) throw new Error("GEMINI_API_KEY is not configured");
+    const apiKey = Deno.env.get("OPENROUTER_API_KEY");
+    if (!apiKey) throw new Error("OPENROUTER_API_KEY is not configured");
+
+    const model = Deno.env.get("OPENROUTER_VISION_MODEL") || "google/gemini-2.0-flash-001";
 
     const { imageBase64, mimeType, categories } = await req.json();
     if (!imageBase64) throw new Error("No image provided");
@@ -45,7 +47,23 @@ Deno.serve(async (req) => {
       ? `\n  "category": "one of these categories that best fits: [${categories.join(", ")}]",`
       : `\n  "category": "general product category if identifiable",`;
 
-    const prompt = `Analyze this image. First determine if this is a BUSINESS CARD or a PRODUCT PHOTO.
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://comp.designflow.app",
+        "X-Title": "CompShop",
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: `Analyze this image. First determine if this is a BUSINESS CARD or a PRODUCT PHOTO.
 
 If it is a BUSINESS CARD, return a JSON object with:
 {
@@ -71,24 +89,18 @@ If it is a PRODUCT PHOTO, return a JSON object with:
   "country_of_origin": "country if shown (e.g. Made in China)"
 }
 
-Use null for any field not found. Return ONLY the JSON, no markdown, no explanation.`;
-
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{
-            parts: [
-              { text: prompt },
-              { inline_data: { mime_type: mimeType || "image/jpeg", data: imageBase64 } },
+Use null for any field not found. Return ONLY the JSON, no markdown, no explanation.`,
+              },
+              {
+                type: "image_url",
+                image_url: { url: `data:${mimeType || "image/jpeg"};base64,${imageBase64}` },
+              },
             ],
-          }],
-          generationConfig: { maxOutputTokens: 500 },
-        }),
-      }
-    );
+          },
+        ],
+        max_tokens: 500,
+      }),
+    });
 
     if (!response.ok) {
       if (response.status === 429) {
@@ -98,11 +110,11 @@ Use null for any field not found. Return ONLY the JSON, no markdown, no explanat
         });
       }
       const err = await response.text();
-      throw new Error(`Gemini API error [${response.status}]: ${err}`);
+      throw new Error(`OpenRouter API error [${response.status}]: ${err}`);
     }
 
     const data = await response.json();
-    const content = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+    const content = data.choices?.[0]?.message?.content || "{}";
 
     let parsed;
     try {
