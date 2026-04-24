@@ -6,7 +6,14 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const AI_GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
+// AI provider configuration - switchable between Lovable AI Gateway and OpenRouter
+// Set AI_PROVIDER=openrouter to use OpenRouter (default), or AI_PROVIDER=lovable for Lovable AI Gateway.
+const AI_PROVIDER = (Deno.env.get("AI_PROVIDER") ?? "openrouter").toLowerCase();
+
+const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+const LOVABLE_AI_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
+
+const DEFAULT_MODEL = Deno.env.get("AI_MODEL") ?? "google/gemini-2.5-flash";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -38,8 +45,25 @@ Deno.serve(async (req) => {
       );
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+    // Pick provider config
+    let aiUrl: string;
+    let aiKey: string | undefined;
+    let extraHeaders: Record<string, string> = {};
+
+    if (AI_PROVIDER === "openrouter") {
+      aiUrl = OPENROUTER_URL;
+      aiKey = Deno.env.get("OPENROUTER_API_KEY");
+      if (!aiKey) throw new Error("OPENROUTER_API_KEY is not configured");
+      // Optional but recommended by OpenRouter for analytics/leaderboards.
+      const referer = Deno.env.get("OPENROUTER_HTTP_REFERER");
+      const title = Deno.env.get("OPENROUTER_APP_TITLE") ?? "CompShop";
+      if (referer) extraHeaders["HTTP-Referer"] = referer;
+      extraHeaders["X-Title"] = title;
+    } else {
+      aiUrl = LOVABLE_AI_URL;
+      aiKey = Deno.env.get("LOVABLE_API_KEY");
+      if (!aiKey) throw new Error("LOVABLE_API_KEY is not configured");
+    }
 
     const { imageBase64, mimeType, categories } = await req.json();
     if (!imageBase64) throw new Error("No image provided");
@@ -48,14 +72,15 @@ Deno.serve(async (req) => {
       ? `\n  "category": "one of these categories that best fits: [${categories.join(", ")}]",`
       : `\n  "category": "general product category if identifiable",`;
 
-    const response = await fetch(AI_GATEWAY_URL, {
+    const response = await fetch(aiUrl, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${aiKey}`,
         "Content-Type": "application/json",
+        ...extraHeaders,
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: DEFAULT_MODEL,
         messages: [
           {
             role: "user",
@@ -109,13 +134,13 @@ Use null for any field not found. Return ONLY the JSON, no markdown, no explanat
         });
       }
       if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "Payment required, please add funds to your workspace." }), {
+        return new Response(JSON.stringify({ error: "Payment required, please add funds to your AI provider account." }), {
           status: 402,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       const err = await response.text();
-      throw new Error(`AI gateway error [${response.status}]: ${err}`);
+      throw new Error(`AI provider error [${response.status}]: ${err}`);
     }
 
     const data = await response.json();
