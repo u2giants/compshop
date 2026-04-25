@@ -224,7 +224,7 @@ services:
       - /bin/sh
       - -c
       - |
-        printf '%s\n' "$KONG_DECLARATIVE_CONFIG_STRING" > /tmp/kong.yml
+        printf '%s\n' "$$KONG_DECLARATIVE_CONFIG_STRING" > /tmp/kong.yml
         unset KONG_DECLARATIVE_CONFIG_STRING
         export KONG_DECLARATIVE_CONFIG=/tmp/kong.yml
         exec /entrypoint.sh kong docker-start
