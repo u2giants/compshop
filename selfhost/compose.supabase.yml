@@ -214,7 +214,7 @@ services:
       auth: { condition: service_started }
       rest: { condition: service_started }
       realtime: { condition: service_started }
-      storage: { condition: service_healthy }
+      storage: { condition: service_started }
     environment:
       KONG_DATABASE: "off"
       KONG_DECLARATIVE_CONFIG: /var/lib/kong/kong.yml
