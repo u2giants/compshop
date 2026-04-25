@@ -128,17 +128,21 @@ services:
     depends_on:
       db: { condition: service_healthy }
       rest: { condition: service_started }
+      imgproxy: { condition: service_started }
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5000/status"]
       timeout: 5s
       interval: 5s
       retries: 3
+      start_period: 10s
     environment:
       ANON_KEY: ${ANON_KEY}
       SERVICE_KEY: ${SERVICE_ROLE_KEY}
       POSTGREST_URL: http://rest:3000
-      PGRST_JWT_SECRET: ${JWT_SECRET}
+      AUTH_JWT_SECRET: ${JWT_SECRET}
       DATABASE_URL: postgres://supabase_storage_admin:${POSTGRES_PASSWORD}@db:${POSTGRES_PORT}/${POSTGRES_DB}
+      STORAGE_PUBLIC_URL: ${SUPABASE_PUBLIC_URL}
+      REQUEST_ALLOW_X_FORWARDED_PATH: "true"
       FILE_SIZE_LIMIT: ${FILE_SIZE_LIMIT}
       STORAGE_BACKEND: ${STORAGE_BACKEND}
       FILE_STORAGE_BACKEND_PATH: /var/lib/storage
