@@ -19,7 +19,7 @@ ENV VITE_SUPABASE_PROJECT_ID=$VITE_SUPABASE_PROJECT_ID
 
 COPY package.json bun.lockb* package-lock.json* ./
 RUN if [ -f bun.lockb ]; then \
-      npm i -g bun && bun install --frozen-lockfile; \
+      npm i -g bun && bun install; \
     else \
       npm ci; \
     fi
