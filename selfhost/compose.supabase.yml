@@ -327,6 +327,18 @@ services:
                   allow:
                     - anon
                     - admin
+          - name: storage-v1-open
+            url: http://storage:5000/
+            routes:
+              - name: storage-v1-open-public
+                strip_path: true
+                paths:
+                  - /storage/v1/object/public
+                  - /storage/v1/object/sign
+                  - /storage/v1/render/image/public
+                  - /storage/v1/render/image/sign
+            plugins:
+              - name: cors
           - name: storage-v1
             url: http://storage:5000/
             routes:
