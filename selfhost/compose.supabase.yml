@@ -334,7 +334,7 @@ services:
                     - anon
                     - admin
           - name: functions-v1
-            url: http://functions:8081/
+            url: http://functions:9000/
             routes:
               - name: functions-v1-all
                 strip_path: true
