@@ -217,6 +217,17 @@ services:
       rest: { condition: service_started }
       realtime: { condition: service_started }
       storage: { condition: service_started }
+    # Write KONG_DECLARATIVE_CONFIG_STRING to a temp file then start Kong.
+    # KONG_DECLARATIVE_CONFIG_STRING is not loaded at startup in Kong 3.9.1;
+    # only the file-based KONG_DECLARATIVE_CONFIG is reliably read on boot.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        printf '%s\n' "$KONG_DECLARATIVE_CONFIG_STRING" > /tmp/kong.yml
+        unset KONG_DECLARATIVE_CONFIG_STRING
+        export KONG_DECLARATIVE_CONFIG=/tmp/kong.yml
+        exec /entrypoint.sh kong docker-start
     environment:
       KONG_DATABASE: "off"
       KONG_DECLARATIVE_CONFIG_STRING: |
