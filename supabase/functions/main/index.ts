@@ -3,7 +3,9 @@
 // /functions/v1/<name> request to the matching sub-function.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-const functions: Record<string, () => Promise<{ default: (req: Request) => Response | Promise<Response> }>> = {
+// Each sub-function calls Deno.serve() at module load, which registers its handler
+// with the runtime. We just need to import them so they get registered.
+const functions: Record<string, () => Promise<unknown>> = {
   "analyze-photo": () => import("../analyze-photo/index.ts"),
   "parse-teams-conversation": () => import("../parse-teams-conversation/index.ts"),
   "list-openrouter-models": () => import("../list-openrouter-models/index.ts"),
