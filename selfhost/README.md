@@ -1,38 +1,40 @@
 # CompShop self-hosting kit
 
-Everything you need to migrate CompShop from Lovable Cloud to a self-hosted
-Supabase + frontend on your Coolify VPS.
+This folder contains everything needed to run CompShop on a self-hosted Coolify VPS.
+**The migration from Lovable Cloud is complete** — the production instance is live at
+`https://comp.designflow.app`.
 
-**You should never need to touch the terminal directly. The runbook tells you
-exactly what to click in Coolify and what to copy-paste.**
-
-## What's in this folder
+## Files
 
 ```
 selfhost/
-├── README.md                  ← you are here
-├── runbook.md                 ← step-by-step Coolify clicks (start here)
-├── compose.supabase.yml       ← Docker Compose for self-hosted Supabase
-├── Dockerfile.frontend        ← builds the React app into an Nginx container
-├── nginx.conf                 ← SPA routing + cache headers
-├── .env.example               ← every env var with explanations
-├── .env.frontend.example      ← frontend build-time env vars
+├── compose.supabase.yml       ← Docker Compose for the Supabase stack (authoritative)
+├── Dockerfile.frontend        ← Builds the React app into an Nginx container
+├── nginx.conf                 ← SPA routing + asset cache headers
+├── .env.example               ← Every env var with explanations (set these in Coolify)
+├── .env.frontend.example      ← Frontend build-time env vars (VITE_*)
 └── scripts/
-    ├── 01-export-schema.sh    ← copies the 30 DB migrations
-    ├── 02-export-data.sh      ← exports table rows from Lovable Cloud
-    ├── 03-export-storage.sh   ← downloads photos + retailer-logos buckets
-    ├── 04-export-auth-users.sh← exports users + Google OAuth identities
-    ├── 05-import-all.sh       ← runs everything against your new DB
-    └── 06-incremental-sync.sh ← copies rows changed since timestamp
+    ├── 01-export-schema.sh    ← Bundles migrations into a single bootstrap SQL
+    ├── 02-export-data.sh      ← Exports table rows from the old Lovable Cloud DB
+    ├── 03-export-storage.sh   ← Downloads photo + retailer-logos buckets
+    ├── 04-export-auth-users.sh← Exports users + Google OAuth identities
+    ├── 05-import-all.sh       ← Imports everything into the new DB
+    └── 06-incremental-sync.sh ← Delta export since a given timestamp (used at cutover)
 ```
 
-## High-level migration timeline
+`runbook.md` at the root of this folder is the original step-by-step migration guide.
+It is preserved as reference but describes a completed one-time process.
 
-1. **DNS** — add A records for `comp`, `api.comp`, `db.comp`, `comp-staging` (5 min, then wait for propagation)
-2. **Coolify** — create `compshop` project, deploy Supabase stack from `compose.supabase.yml` (~30 min)
-3. **Migrate data** — run scripts 01-04 once, then 05 once (~1-3 hours depending on photo bucket size)
-4. **Test on staging** — `comp-staging.designflow.app` runs the new backend; team verifies (1-2 days)
-5. **Cutover** — run script 06 (incremental sync), then point `comp.designflow.app` at the new frontend
-6. **Decommission Lovable Cloud** — after 2 weeks of stable self-hosting
+## Running in production
 
-Open `runbook.md` for the actual instructions.
+See [docs/deployment.md](../docs/deployment.md) for the normal deploy workflow.
+
+The Supabase stack is deployed as Coolify application `h8nwhgk682eedokx8nh2eg1q`. All
+runtime env vars are configured in Coolify — use `.env.example` as the reference for
+what must be set.
+
+## If you need to re-run the migration
+
+The scripts in `scripts/` require the `LOVABLE_PG_*` and `LOVABLE_SUPABASE_URL` /
+`LOVABLE_SERVICE_ROLE_KEY` vars from the old Lovable Cloud project. Copy
+`.env.example` and fill in those values before running any script.
