@@ -8,56 +8,55 @@ on:
 jobs:
   redeploy:
     runs-on: ubuntu-latest
+    env:
+      TOKEN: "1|mlVx9mbwsN1Sga6eLtJEvmPioy6Sra9AnepnCe3K7d0a2927"
+      BASE:  "http://178.156.180.212:8000"
     steps:
-      - name: Find Supabase stack and redeploy
-        env:
-          COOLIFY_TOKEN: "1|mlVx9mbwsN1Sga6eLtJEvmPioy6Sra9AnepnCe3K7d0a2927"
-          COOLIFY_URL: "http://178.156.180.212:8000"
+      - name: Discover resources
         run: |
-          set -e
+          echo "=== /api/v1/resources ==="
+          curl -sf "$BASE/api/v1/resources" -H "Authorization: Bearer $TOKEN" | python3 -m json.tool || true
 
-          echo "=== Listing all resources ==="
-          resources=$(curl -sf "$COOLIFY_URL/api/v1/resources" \
-            -H "Authorization: Bearer $COOLIFY_TOKEN")
-          echo "$resources" | python3 -m json.tool
+          echo "=== /api/v1/compose ==="
+          curl -sf "$BASE/api/v1/compose" -H "Authorization: Bearer $TOKEN" | python3 -m json.tool || true
 
-          echo "=== Listing Docker Compose services ==="
-          composes=$(curl -sf "$COOLIFY_URL/api/v1/compose" \
-            -H "Authorization: Bearer $COOLIFY_TOKEN" 2>/dev/null || echo "[]")
-          echo "$composes" | python3 -m json.tool
+          echo "=== /api/v1/services ==="
+          curl -sf "$BASE/api/v1/services" -H "Authorization: Bearer $TOKEN" | python3 -m json.tool || true
 
-          echo "=== Triggering redeploy on each compose that matches supabase/compshop ==="
-          echo "$resources" | python3 -c "
+      - name: Restart Supabase stack
+        run: |
+          # Get all compose stacks and restart the one that contains 'compshop' or 'supabase'
+          compose=$(curl -sf "$BASE/api/v1/compose" -H "Authorization: Bearer $TOKEN" || echo "[]")
+          echo "Compose stacks raw: $compose"
+
+          echo "$compose" | python3 -c "
           import sys, json, subprocess, os
 
-          url   = os.environ['COOLIFY_URL']
-          token = os.environ['COOLIFY_TOKEN']
-          data  = json.load(sys.stdin)
+          base  = os.environ['BASE']
+          token = os.environ['TOKEN']
+          items = json.load(sys.stdin)
+          if not isinstance(items, list):
+              items = [items]
 
-          # flatten: data may be a list or dict with nested lists
-          items = data if isinstance(data, list) else []
-          for v in (data.values() if isinstance(data, dict) else []):
-              if isinstance(v, list):
-                  items.extend(v)
-
-          found = 0
           for item in items:
-              name = str(item.get('name', '')).lower()
-              uuid = item.get('uuid', '')
-              typ  = item.get('type', '')
-              print(f'  resource: {name!r} type={typ!r} uuid={uuid!r}')
-              if uuid and ('compshop' in name or 'supabase' in name or 'compose' in typ.lower()):
-                  print(f'  -> redeploying {uuid}')
-                  r = subprocess.run([
-                      'curl', '-sf', '-X', 'POST',
-                      f'{url}/api/v1/resources/{uuid}/restart',
-                      '-H', f'Authorization: Bearer {token}',
-                      '-H', 'Content-Type: application/json',
-                  ], capture_output=True, text=True)
-                  print('  restart response:', r.stdout or r.stderr)
-                  found += 1
+              name = str(item.get('name','') or item.get('project_name','')).lower()
+              uuid = item.get('uuid','')
+              print(f'stack: {name!r} uuid={uuid!r}')
 
-          if not found:
-              print('No matching resource found — printing full list for inspection')
-              print(json.dumps(data, indent=2))
+              if uuid:
+                  # Try restart, then deploy, then start
+                  for verb in ('restart', 'deploy', 'start'):
+                      r = subprocess.run(
+                          ['curl','-sv','-X','POST',
+                           f'{base}/api/v1/compose/{uuid}/{verb}',
+                           '-H', f'Authorization: Bearer {token}',
+                           '-H', 'Content-Type: application/json'],
+                          capture_output=True, text=True
+                      )
+                      print(f'  POST /compose/{uuid}/{verb} →', r.returncode)
+                      print('  stdout:', r.stdout[:500] if r.stdout else '')
+                      print('  stderr:', r.stderr[:300] if r.stderr else '')
+                      if r.returncode == 0 and ('deployment_uuid' in r.stdout or '200' in r.stderr or '201' in r.stderr):
+                          print(f'  => SUCCESS with {verb}')
+                          break
           "
