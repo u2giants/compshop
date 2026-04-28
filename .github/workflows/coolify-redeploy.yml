@@ -1,7 +1,9 @@
 name: Coolify redeploy
 
 on:
-  workflow_dispatch:
+  push:
+    branches: ["claude/fix-google-signin-error-pCgGJ"]
+    paths: [".github/workflows/coolify-redeploy.yml"]
 
 jobs:
   redeploy:
