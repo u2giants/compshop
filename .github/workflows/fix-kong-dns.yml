@@ -1,0 +1,124 @@
+name: Fix Kong DNS in Coolify
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    env:
+      TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+      BASE: "http://178.156.180.212:8000"
+    steps:
+      - name: Find compose UUID
+        id: uuid
+        run: |
+          RESOURCES=$(curl -sf --max-time 15 "$BASE/api/v1/resources" \
+            -H "Authorization: Bearer $TOKEN")
+          echo "$RESOURCES" | python3 -m json.tool >&2 || true
+
+          UUID=$(echo "$RESOURCES" | python3 -c "
+          import sys, json
+          data = json.load(sys.stdin)
+          items = data if isinstance(data, list) else [data]
+          for item in items:
+              name = str(item.get('name','') or item.get('project_name','')).lower()
+              t    = str(item.get('type','')).lower()
+              uuid = item.get('uuid','')
+              print(f'  candidate: name={name!r} type={t!r} uuid={uuid!r}', file=sys.stderr)
+              if uuid and ('compose' in t or 'supabase' in name or 'compshop' in name):
+                  print(uuid)
+                  sys.exit(0)
+          sys.exit(1)
+          ")
+          echo "UUID=$UUID" >> "$GITHUB_OUTPUT"
+          echo "Found UUID: $UUID"
+
+      - name: Inspect stored compose YAML
+        id: inspect
+        run: |
+          UUID="${{ steps.uuid.outputs.UUID }}"
+          curl -sf --max-time 15 "$BASE/api/v1/compose/$UUID" \
+            -H "Authorization: Bearer $TOKEN" > /tmp/compose_info.json
+          python3 -c "
+          import json
+          d = json.load(open('/tmp/compose_info.json'))
+          print('Top-level keys:', list(d.keys()))
+          for k in ('docker_compose_raw','compose_raw','docker_compose'):
+              val = d.get(k,'')
+              print(f'  {k}: {len(val)} chars')
+              if val:
+                  print('    Contains KONG_DNS_RESOLVER:', 'KONG_DNS_RESOLVER' in val)
+                  print('    Contains KONG_DNS_ORDER LAST:', 'LAST,A,CNAME' in val)
+          "
+
+      - name: Patch compose YAML with DNS fix
+        run: |
+          UUID="${{ steps.uuid.outputs.UUID }}"
+          python3 << 'PYEOF'
+          import json, re, sys, subprocess, os
+
+          base  = os.environ["BASE"]
+          token = os.environ["TOKEN"]
+          uuid  = os.environ["UUID"]
+
+          d = json.load(open('/tmp/compose_info.json'))
+
+          yaml_field = None
+          for k in ('docker_compose_raw', 'compose_raw', 'docker_compose'):
+              if d.get(k):
+                  yaml_field = k
+                  break
+
+          if not yaml_field:
+              print("ERROR: cannot find YAML field in compose info")
+              print("Available keys:", list(d.keys()))
+              sys.exit(1)
+
+          original = d[yaml_field]
+          print(f"Using field: {yaml_field!r}  ({len(original)} chars)")
+          print(f"Has KONG_DNS_RESOLVER: {'KONG_DNS_RESOLVER' in original}")
+          print(f"Has LAST order: {'LAST,A,CNAME' in original}")
+
+          fixed = original
+          # Remove LAST from DNS order if present
+          fixed = fixed.replace('KONG_DNS_ORDER: LAST,A,CNAME', 'KONG_DNS_ORDER: A,CNAME')
+          # Add KONG_DNS_RESOLVER before KONG_DNS_ORDER if missing
+          if 'KONG_DNS_RESOLVER' not in fixed:
+              fixed = re.sub(
+                  r'( +)(KONG_DNS_ORDER:)',
+                  r'\1KONG_DNS_RESOLVER: 127.0.0.11\n\1\2',
+                  fixed
+              )
+
+          if fixed == original:
+              print("Fix already applied or pattern not found — forcing a redeploy anyway.")
+          else:
+              print("Applying fix...")
+              patch = json.dumps({yaml_field: fixed})
+              r = subprocess.run(
+                  ['curl', '-sf', '--max-time', '15', '-X', 'PATCH',
+                   f'{base}/api/v1/compose/{uuid}',
+                   '-H', f'Authorization: Bearer {token}',
+                   '-H', 'Content-Type: application/json',
+                   '-d', patch],
+                  capture_output=True, text=True
+              )
+              print("PATCH rc:", r.returncode)
+              print("PATCH out:", (r.stdout + r.stderr)[:500])
+              if r.returncode != 0:
+                  sys.exit(1)
+              print("Compose YAML patched successfully.")
+          PYEOF
+        env:
+          UUID: ${{ steps.uuid.outputs.UUID }}
+
+      - name: Deploy
+        run: |
+          UUID="${{ steps.uuid.outputs.UUID }}"
+          echo "Deploying $UUID ..."
+          curl -sf --max-time 30 -X POST \
+            "$BASE/api/v1/compose/$UUID/deploy" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json"
+          echo "Deploy triggered."
