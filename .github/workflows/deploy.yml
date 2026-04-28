@@ -19,37 +19,80 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger Coolify deploy
+      - uses: actions/checkout@v4
+
+      - name: Sync YAML to Coolify and deploy
+        env:
+          TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+          BASE: "http://178.156.180.212:8000"
         run: |
-          # Discover and deploy the Supabase compose stack
-          RESOURCES=$(curl -sf --max-time 15 \
-            "http://178.156.180.212:8000/api/v1/resources" \
-            -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}")
+          python3 << 'PYEOF'
+          import json, os, subprocess, sys
 
-          UUID=$(echo "$RESOURCES" | python3 -c "
-          import sys, json
-          items = json.load(sys.stdin)
-          if not isinstance(items, list):
-              items = [items]
-          for item in items:
-              name = str(item.get('name','') or item.get('project_name','')).lower()
-              t = str(item.get('type','')).lower()
-              uuid = item.get('uuid','')
-              print(f'found: {name!r} type={t!r} uuid={uuid!r}', file=sys.stderr)
-              if uuid and ('compose' in t or 'supabase' in name or 'compshop' in name):
-                  print(uuid)
-                  sys.exit(0)
-          sys.exit(1)
-          ")
+          base  = os.environ["BASE"]
+          token = os.environ["TOKEN"]
+          auth  = f"Authorization: Bearer {token}"
+          ct    = "Content-Type: application/json"
 
-          if [ -z "$UUID" ]; then
-            echo "ERROR: could not find compose stack UUID"
-            exit 1
-          fi
+          def curl(*args):
+              r = subprocess.run(["curl", "-sf", "--max-time", "20"] + list(args),
+                                 capture_output=True, text=True)
+              if r.returncode != 0:
+                  print("curl error:", r.stderr[:300])
+                  sys.exit(1)
+              return r.stdout
 
-          echo "Deploying UUID: $UUID"
-          curl -sf --max-time 30 -X POST \
-            "http://178.156.180.212:8000/api/v1/compose/$UUID/deploy" \
-            -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
-            -H "Content-Type: application/json"
-          echo "Deploy triggered successfully"
+          # 1. Find compose stack UUID
+          resources = json.loads(curl(f"{base}/api/v1/resources", "-H", auth))
+          if not isinstance(resources, list):
+              resources = [resources]
+
+          uuid = None
+          for item in resources:
+              name = str(item.get("name","") or item.get("project_name","")).lower()
+              t    = str(item.get("type","")).lower()
+              u    = item.get("uuid","")
+              print(f"  resource: {name!r} type={t!r} uuid={u!r}")
+              if u and ("compose" in t or "supabase" in name or "compshop" in name):
+                  uuid = u
+                  break
+
+          if not uuid:
+              print("ERROR: compose stack not found in Coolify resources")
+              sys.exit(1)
+          print(f"Using UUID: {uuid}")
+
+          # 2. Get Coolify's stored compose YAML
+          info = json.loads(curl(f"{base}/api/v1/compose/{uuid}", "-H", auth))
+          yaml_field = next(
+              (k for k in ("docker_compose_raw", "compose_raw", "docker_compose") if info.get(k)),
+              None
+          )
+
+          git_yaml = open("selfhost/compose.supabase.yml").read()
+
+          if yaml_field:
+              stored = info[yaml_field]
+              print(f"Stored YAML field: {yaml_field!r}  ({len(stored)} chars)")
+              print(f"  stored has KONG_DNS_RESOLVER: {'KONG_DNS_RESOLVER' in stored}")
+              print(f"  git    has KONG_DNS_RESOLVER: {'KONG_DNS_RESOLVER' in git_yaml}")
+
+              if stored != git_yaml:
+                  print("Syncing git YAML into Coolify...")
+                  curl(f"{base}/api/v1/compose/{uuid}", "-X", "PATCH",
+                       "-H", auth, "-H", ct,
+                       "-d", json.dumps({yaml_field: git_yaml}))
+                  print("YAML synced.")
+              else:
+                  print("Coolify YAML already matches git.")
+          else:
+              # Git-linked stack — no stored YAML to patch; git pull happens on deploy
+              print(f"No stored YAML field (git-linked stack). Keys: {list(info.keys())}")
+
+          # 3. Deploy
+          print(f"Triggering deploy for {uuid} ...")
+          result = curl(f"{base}/api/v1/compose/{uuid}/deploy", "-X", "POST",
+                        "-H", auth, "-H", ct)
+          print("Deploy response:", result[:300])
+          print("Done.")
+          PYEOF
