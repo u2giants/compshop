@@ -1,0 +1,61 @@
+name: Coolify redeploy
+
+on:
+  workflow_dispatch:
+
+jobs:
+  redeploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Find Supabase stack and redeploy
+        env:
+          COOLIFY_TOKEN: "1|mlVx9mbwsN1Sga6eLtJEvmPioy6Sra9AnepnCe3K7d0a2927"
+          COOLIFY_URL: "http://178.156.180.212:8000"
+        run: |
+          set -e
+
+          echo "=== Listing all resources ==="
+          resources=$(curl -sf "$COOLIFY_URL/api/v1/resources" \
+            -H "Authorization: Bearer $COOLIFY_TOKEN")
+          echo "$resources" | python3 -m json.tool
+
+          echo "=== Listing Docker Compose services ==="
+          composes=$(curl -sf "$COOLIFY_URL/api/v1/compose" \
+            -H "Authorization: Bearer $COOLIFY_TOKEN" 2>/dev/null || echo "[]")
+          echo "$composes" | python3 -m json.tool
+
+          echo "=== Triggering redeploy on each compose that matches supabase/compshop ==="
+          echo "$resources" | python3 -c "
+          import sys, json, subprocess, os
+
+          url   = os.environ['COOLIFY_URL']
+          token = os.environ['COOLIFY_TOKEN']
+          data  = json.load(sys.stdin)
+
+          # flatten: data may be a list or dict with nested lists
+          items = data if isinstance(data, list) else []
+          for v in (data.values() if isinstance(data, dict) else []):
+              if isinstance(v, list):
+                  items.extend(v)
+
+          found = 0
+          for item in items:
+              name = str(item.get('name', '')).lower()
+              uuid = item.get('uuid', '')
+              typ  = item.get('type', '')
+              print(f'  resource: {name!r} type={typ!r} uuid={uuid!r}')
+              if uuid and ('compshop' in name or 'supabase' in name or 'compose' in typ.lower()):
+                  print(f'  -> redeploying {uuid}')
+                  r = subprocess.run([
+                      'curl', '-sf', '-X', 'POST',
+                      f'{url}/api/v1/resources/{uuid}/restart',
+                      '-H', f'Authorization: Bearer {token}',
+                      '-H', 'Content-Type: application/json',
+                  ], capture_output=True, text=True)
+                  print('  restart response:', r.stdout or r.stderr)
+                  found += 1
+
+          if not found:
+              print('No matching resource found — printing full list for inspection')
+              print(json.dumps(data, indent=2))
+          "
