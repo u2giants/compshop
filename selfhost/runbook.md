@@ -120,6 +120,9 @@ When done you'll have a `migration-export/` folder with:
 **Write down the timestamp now** — you'll need it for the incremental sync. Example: `2026-04-25T14:00:00Z`.
 
 ### 4d. Upload to the VPS
+
+> **Note:** Steps 4d–4e are a one-time data migration only. SSH access is not part of the normal deployment path (which is push to `main` → GitHub Actions → Coolify). Do not use SSH for routine changes.
+
 ```bash
 # Replace VPS_USER@VPS_IP with your actual SSH user + IP
 scp -r migration-export VPS_USER@VPS_IP:/tmp/

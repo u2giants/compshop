@@ -24,7 +24,7 @@ jobs:
       - name: Sync YAML to Coolify and deploy
         env:
           TOKEN: ${{ secrets.COOLIFY_TOKEN }}
-          BASE: "http://178.156.180.212:8000"
+          BASE: ${{ secrets.COOLIFY_BASE_URL }}
         run: |
           python3 << 'PYEOF'
           import json, os, subprocess, sys
