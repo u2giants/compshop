@@ -12,53 +12,22 @@ jobs:
       TOKEN: "1|mlVx9mbwsN1Sga6eLtJEvmPioy6Sra9AnepnCe3K7d0a2927"
       BASE:  "http://178.156.180.212:8000"
     steps:
-      - name: Check connectivity
+      - name: Check connectivity to Coolify
         run: |
-          echo "Runner IP: $(curl -sf https://api.ipify.org)"
-          echo "TCP check port 8000:"
-          timeout 5 bash -c 'echo >/dev/tcp/178.156.180.212/8000' && echo "PORT 8000 OPEN" || echo "PORT 8000 UNREACHABLE"
+          echo "Runner public IP: $(curl -sf https://api.ipify.org)"
+          timeout 5 bash -c 'echo >/dev/tcp/178.156.180.212/8000' \
+            && echo "PORT 8000 OPEN" \
+            || { echo "PORT 8000 UNREACHABLE"; exit 1; }
 
-      - name: List all resources (must succeed)
+      - name: List resources
         run: |
-          resources=$(curl -sf --max-time 10 "$BASE/api/v1/resources" \
-            -H "Authorization: Bearer $TOKEN")
-          echo "$resources" | python3 -m json.tool
+          curl -f --max-time 10 "$BASE/api/v1/resources" \
+            -H "Authorization: Bearer $TOKEN" | tee /tmp/resources.json | python3 -m json.tool
+          curl -f --max-time 10 "$BASE/api/v1/compose" \
+            -H "Authorization: Bearer $TOKEN" | tee /tmp/compose.json | python3 -m json.tool || true
 
       - name: Restart Supabase compose stack
         run: |
-          # Try compose endpoint first, then services, then resources
-          for endpoint in compose services; do
-            echo "=== $endpoint ==="
-            data=$(curl -sf --max-time 10 "$BASE/api/v1/$endpoint" \
-              -H "Authorization: Bearer $TOKEN" || echo "[]")
-            echo "$data" | python3 -m json.tool
-
-            echo "$data" | python3 - <<'PYEOF'
-import sys, json, subprocess, os
-base  = os.environ["BASE"]
-token = os.environ["TOKEN"]
-items = json.load(sys.stdin)
-if isinstance(items, dict):
-    items = list(items.values()) if not items.get("uuid") else [items]
-if not isinstance(items, list):
-    items = []
-for item in (items if items else []):
-    name = str(item.get("name","") or item.get("project_name","")).lower()
-    uuid = item.get("uuid","")
-    print(f"  item: name={name!r} uuid={uuid!r}")
-    if not uuid:
-        continue
-    for verb in ("restart", "deploy"):
-        r = subprocess.run(
-            ["curl","-sf","--max-time","10","-X","POST",
-             f"{base}/api/v1/{os.environ.get('endpoint','compose')}/{uuid}/{verb}",
-             "-H", f"Authorization: Bearer {token}",
-             "-H", "Content-Type: application/json"],
-            capture_output=True, text=True
-        )
-        print(f"    POST /{uuid}/{verb} rc={r.returncode}: {r.stdout[:300]}")
-        if r.returncode == 0:
-            print(f"    => triggered via {verb}")
-            break
-PYEOF
-          done
+          echo "aW1wb3J0IHN5cywganNvbiwgc3VicHJvY2Vzcywgb3MKCmJhc2UgID0gb3MuZW52aXJvblsiQkFTRSJdCnRva2VuID0gb3MuZW52aXJvblsiVE9LRU4iXQphdXRoICA9IGYiQXV0aG9yaXphdGlvbjogQmVhcmVyIHt0b2tlbn0iCgpmb3VuZCA9IEZhbHNlCmZvciBwYXRoIGluIHN5cy5hcmd2WzE6XToKICAgIHRyeToKICAgICAgICBkYXRhID0ganNvbi5sb2FkcyhvcGVuKHBhdGgpLnJlYWQoKSkKICAgIGV4Y2VwdCBFeGNlcHRpb24gYXMgZToKICAgICAgICBwcmludChmInNraXAge3BhdGh9OiB7ZX0iKQogICAgICAgIGNvbnRpbnVlCiAgICBpdGVtcyA9IGRhdGEgaWYgaXNpbnN0YW5jZShkYXRhLCBsaXN0KSBlbHNlIFtkYXRhXQogICAgZm9yIGl0ZW0gaW4gaXRlbXM6CiAgICAgICAgbmFtZSA9IHN0cihpdGVtLmdldCgibmFtZSIsIiIpIG9yIGl0ZW0uZ2V0KCJwcm9qZWN0X25hbWUiLCIiKSkubG93ZXIoKQogICAgICAgIHV1aWQgPSBpdGVtLmdldCgidXVpZCIsIiIpCiAgICAgICAgdHlwICA9IHN0cihpdGVtLmdldCgidHlwZSIsIiIpKS5sb3dlcigpCiAgICAgICAgcHJpbnQoZiJpdGVtOiB7bmFtZSFyfSB1dWlkPXt1dWlkIXJ9IHR5cGU9e3R5cCFyfSIpCiAgICAgICAgaWYgbm90IHV1aWQ6CiAgICAgICAgICAgIGNvbnRpbnVlCiAgICAgICAgZm9yIHJ0IGluICgiY29tcG9zZSIsICJhcHBsaWNhdGlvbnMiLCAic2VydmljZXMiKToKICAgICAgICAgICAgZm9yIHZlcmIgaW4gKCJyZXN0YXJ0IiwgImRlcGxveSIsICJzdGFydCIpOgogICAgICAgICAgICAgICAgciA9IHN1YnByb2Nlc3MucnVuKAogICAgICAgICAgICAgICAgICAgIFsiY3VybCIsIi1zZiIsIi0tbWF4LXRpbWUiLCIxMCIsIi1YIiwiUE9TVCIsCiAgICAgICAgICAgICAgICAgICAgIGYie2Jhc2V9L2FwaS92MS97cnR9L3t1dWlkfS97dmVyYn0iLAogICAgICAgICAgICAgICAgICAgICAiLUgiLCBhdXRoLCAiLUgiLCAiQ29udGVudC1UeXBlOiBhcHBsaWNhdGlvbi9qc29uIl0sCiAgICAgICAgICAgICAgICAgICAgY2FwdHVyZV9vdXRwdXQ9VHJ1ZSwgdGV4dD1UcnVlCiAgICAgICAgICAgICAgICApCiAgICAgICAgICAgICAgICBvdXQgPSAoci5zdGRvdXQgKyByLnN0ZGVycilbOjUwMF0KICAgICAgICAgICAgICAgIHByaW50KGYiICBQT1NUIC97cnR9L3t1dWlkfS97dmVyYn0gcmM9e3IucmV0dXJuY29kZX06IHtvdXR9IikKICAgICAgICAgICAgICAgIGlmIHIucmV0dXJuY29kZSA9PSAwOgogICAgICAgICAgICAgICAgICAgIHByaW50KCIgID0+IFNVQ0NFU1MiKQogICAgICAgICAgICAgICAgICAgIGZvdW5kID0gVHJ1ZQogICAgICAgICAgICAgICAgICAgIGJyZWFrCiAgICAgICAgICAgIGlmIGZvdW5kOgogICAgICAgICAgICAgICAgYnJlYWsKICAgICAgICBpZiBmb3VuZDoKICAgICAgICAgICAgYnJlYWsKICAgIGlmIGZvdW5kOgogICAgICAgIGJyZWFrCgppZiBub3QgZm91bmQ6CiAgICBwcmludCgiTm8gc3VjY2Vzc2Z1bCByZXN0YXJ0LiIpCiAgICBzeXMuZXhpdCgxKQo=" \
+            | base64 -d > /tmp/restart.py
+          python3 /tmp/restart.py /tmp/compose.json /tmp/resources.json
