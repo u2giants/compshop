@@ -12,51 +12,53 @@ jobs:
       TOKEN: "1|mlVx9mbwsN1Sga6eLtJEvmPioy6Sra9AnepnCe3K7d0a2927"
       BASE:  "http://178.156.180.212:8000"
     steps:
-      - name: Discover resources
+      - name: Check connectivity
         run: |
-          echo "=== /api/v1/resources ==="
-          curl -sf "$BASE/api/v1/resources" -H "Authorization: Bearer $TOKEN" | python3 -m json.tool || true
+          echo "Runner IP: $(curl -sf https://api.ipify.org)"
+          echo "TCP check port 8000:"
+          timeout 5 bash -c 'echo >/dev/tcp/178.156.180.212/8000' && echo "PORT 8000 OPEN" || echo "PORT 8000 UNREACHABLE"
 
-          echo "=== /api/v1/compose ==="
-          curl -sf "$BASE/api/v1/compose" -H "Authorization: Bearer $TOKEN" | python3 -m json.tool || true
-
-          echo "=== /api/v1/services ==="
-          curl -sf "$BASE/api/v1/services" -H "Authorization: Bearer $TOKEN" | python3 -m json.tool || true
-
-      - name: Restart Supabase stack
+      - name: List all resources (must succeed)
         run: |
-          # Get all compose stacks and restart the one that contains 'compshop' or 'supabase'
-          compose=$(curl -sf "$BASE/api/v1/compose" -H "Authorization: Bearer $TOKEN" || echo "[]")
-          echo "Compose stacks raw: $compose"
+          resources=$(curl -sf --max-time 10 "$BASE/api/v1/resources" \
+            -H "Authorization: Bearer $TOKEN")
+          echo "$resources" | python3 -m json.tool
 
-          echo "$compose" | python3 -c "
-          import sys, json, subprocess, os
+      - name: Restart Supabase compose stack
+        run: |
+          # Try compose endpoint first, then services, then resources
+          for endpoint in compose services; do
+            echo "=== $endpoint ==="
+            data=$(curl -sf --max-time 10 "$BASE/api/v1/$endpoint" \
+              -H "Authorization: Bearer $TOKEN" || echo "[]")
+            echo "$data" | python3 -m json.tool
 
-          base  = os.environ['BASE']
-          token = os.environ['TOKEN']
-          items = json.load(sys.stdin)
-          if not isinstance(items, list):
-              items = [items]
-
-          for item in items:
-              name = str(item.get('name','') or item.get('project_name','')).lower()
-              uuid = item.get('uuid','')
-              print(f'stack: {name!r} uuid={uuid!r}')
-
-              if uuid:
-                  # Try restart, then deploy, then start
-                  for verb in ('restart', 'deploy', 'start'):
-                      r = subprocess.run(
-                          ['curl','-sv','-X','POST',
-                           f'{base}/api/v1/compose/{uuid}/{verb}',
-                           '-H', f'Authorization: Bearer {token}',
-                           '-H', 'Content-Type: application/json'],
-                          capture_output=True, text=True
-                      )
-                      print(f'  POST /compose/{uuid}/{verb} →', r.returncode)
-                      print('  stdout:', r.stdout[:500] if r.stdout else '')
-                      print('  stderr:', r.stderr[:300] if r.stderr else '')
-                      if r.returncode == 0 and ('deployment_uuid' in r.stdout or '200' in r.stderr or '201' in r.stderr):
-                          print(f'  => SUCCESS with {verb}')
-                          break
-          "
+            echo "$data" | python3 - <<'PYEOF'
+import sys, json, subprocess, os
+base  = os.environ["BASE"]
+token = os.environ["TOKEN"]
+items = json.load(sys.stdin)
+if isinstance(items, dict):
+    items = list(items.values()) if not items.get("uuid") else [items]
+if not isinstance(items, list):
+    items = []
+for item in (items if items else []):
+    name = str(item.get("name","") or item.get("project_name","")).lower()
+    uuid = item.get("uuid","")
+    print(f"  item: name={name!r} uuid={uuid!r}")
+    if not uuid:
+        continue
+    for verb in ("restart", "deploy"):
+        r = subprocess.run(
+            ["curl","-sf","--max-time","10","-X","POST",
+             f"{base}/api/v1/{os.environ.get('endpoint','compose')}/{uuid}/{verb}",
+             "-H", f"Authorization: Bearer {token}",
+             "-H", "Content-Type: application/json"],
+            capture_output=True, text=True
+        )
+        print(f"    POST /{uuid}/{verb} rc={r.returncode}: {r.stdout[:300]}")
+        if r.returncode == 0:
+            print(f"    => triggered via {verb}")
+            break
+PYEOF
+          done
