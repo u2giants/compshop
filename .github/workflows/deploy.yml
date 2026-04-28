@@ -21,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Sync YAML to Coolify and deploy
+      - name: Deploy to Coolify
         env:
           TOKEN: ${{ secrets.COOLIFY_TOKEN }}
           BASE: ${{ secrets.COOLIFY_BASE_URL }}
@@ -29,20 +29,20 @@ jobs:
           python3 << 'PYEOF'
           import json, os, subprocess, sys
 
-          base  = os.environ["BASE"]
+          base  = os.environ["BASE"].rstrip("/")
           token = os.environ["TOKEN"]
           auth  = f"Authorization: Bearer {token}"
           ct    = "Content-Type: application/json"
 
           def curl(*args):
-              r = subprocess.run(["curl", "-sf", "--max-time", "20"] + list(args),
+              r = subprocess.run(["curl", "-sf", "--max-time", "30"] + list(args),
                                  capture_output=True, text=True)
               if r.returncode != 0:
-                  print("curl error:", r.stderr[:300])
+                  print("curl error:", r.stderr[:300] or "(no stderr)")
                   sys.exit(1)
               return r.stdout
 
-          # 1. Find compose stack UUID
+          # Find the Supabase compose stack UUID (skip frontend/service resources)
           resources = json.loads(curl(f"{base}/api/v1/resources", "-H", auth))
           if not isinstance(resources, list):
               resources = [resources]
@@ -50,49 +50,20 @@ jobs:
           uuid = None
           for item in resources:
               name = str(item.get("name","") or item.get("project_name","")).lower()
-              t    = str(item.get("type","")).lower()
               u    = item.get("uuid","")
-              print(f"  resource: {name!r} type={t!r} uuid={u!r}")
-              if u and ("compose" in t or "supabase" in name or "compshop" in name):
+              print(f"  resource: {name!r} uuid={u!r}")
+              # Match the Supabase stack by name; skip the frontend application
+              if u and "compshop" in name and "frontend" not in name:
                   uuid = u
                   break
 
           if not uuid:
-              print("ERROR: compose stack not found in Coolify resources")
+              print("ERROR: Supabase compose stack not found in Coolify resources")
               sys.exit(1)
-          print(f"Using UUID: {uuid}")
+          print(f"Deploying UUID: {uuid}")
 
-          # 2. Get Coolify's stored compose YAML
-          info = json.loads(curl(f"{base}/api/v1/compose/{uuid}", "-H", auth))
-          yaml_field = next(
-              (k for k in ("docker_compose_raw", "compose_raw", "docker_compose") if info.get(k)),
-              None
-          )
-
-          git_yaml = open("selfhost/compose.supabase.yml").read()
-
-          if yaml_field:
-              stored = info[yaml_field]
-              print(f"Stored YAML field: {yaml_field!r}  ({len(stored)} chars)")
-              print(f"  stored has KONG_DNS_RESOLVER: {'KONG_DNS_RESOLVER' in stored}")
-              print(f"  git    has KONG_DNS_RESOLVER: {'KONG_DNS_RESOLVER' in git_yaml}")
-
-              if stored != git_yaml:
-                  print("Syncing git YAML into Coolify...")
-                  curl(f"{base}/api/v1/compose/{uuid}", "-X", "PATCH",
-                       "-H", auth, "-H", ct,
-                       "-d", json.dumps({yaml_field: git_yaml}))
-                  print("YAML synced.")
-              else:
-                  print("Coolify YAML already matches git.")
-          else:
-              # Git-linked stack — no stored YAML to patch; git pull happens on deploy
-              print(f"No stored YAML field (git-linked stack). Keys: {list(info.keys())}")
-
-          # 3. Deploy
-          print(f"Triggering deploy for {uuid} ...")
-          result = curl(f"{base}/api/v1/compose/{uuid}/deploy", "-X", "POST",
-                        "-H", auth, "-H", ct)
+          # Trigger deploy — Coolify pulls compose.supabase.yml from git automatically
+          result = curl(f"{base}/api/v1/deploy?uuid={uuid}", "-H", auth)
           print("Deploy response:", result[:300])
           print("Done.")
           PYEOF
