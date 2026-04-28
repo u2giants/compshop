@@ -370,7 +370,7 @@ services:
                   hide_groups_header: true
                   allow:
                     - admin
-      KONG_DNS_RESOLVER: 127.0.0.11
+      KONG_DNS_RESOLVER: "127.0.0.11"
       KONG_DNS_ORDER: A,CNAME
       KONG_PLUGINS: request-transformer,cors,key-auth,acl,basic-auth
       KONG_NGINX_PROXY_PROXY_BUFFER_SIZE: 160k
