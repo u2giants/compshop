@@ -1,0 +1,33 @@
+name: Coolify audit
+
+on:
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dump all Coolify resources, servers, and applications
+        env:
+          TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+          BASE: ${{ secrets.COOLIFY_BASE_URL }}
+        run: |
+          echo "=== SERVERS ==="
+          curl -sf --max-time 15 "$BASE/api/v1/servers" \
+            -H "Authorization: Bearer $TOKEN" | python3 -m json.tool || echo "failed"
+
+          echo "=== RESOURCES ==="
+          curl -sf --max-time 15 "$BASE/api/v1/resources" \
+            -H "Authorization: Bearer $TOKEN" | python3 -m json.tool || echo "failed"
+
+          echo "=== APPLICATIONS ==="
+          curl -sf --max-time 15 "$BASE/api/v1/applications" \
+            -H "Authorization: Bearer $TOKEN" | python3 -m json.tool || echo "failed"
+
+          echo "=== COMPOSE STACKS ==="
+          curl -sf --max-time 15 "$BASE/api/v1/compose" \
+            -H "Authorization: Bearer $TOKEN" | python3 -m json.tool || echo "failed"
+
+          echo "=== PROJECTS ==="
+          curl -sf --max-time 15 "$BASE/api/v1/projects" \
+            -H "Authorization: Bearer $TOKEN" | python3 -m json.tool || echo "failed"
