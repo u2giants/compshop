@@ -1,0 +1,54 @@
+name: Deploy to Coolify
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "selfhost/compose.supabase.yml"
+      - "selfhost/Dockerfile.frontend"
+      - "selfhost/nginx.conf"
+      - "supabase/functions/**"
+      - "src/**"
+      - "package.json"
+      - "bun.lockb"
+      - "package-lock.json"
+      - ".github/workflows/deploy.yml"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Coolify deploy
+        run: |
+          # Discover and deploy the Supabase compose stack
+          RESOURCES=$(curl -sf --max-time 15 \
+            "http://178.156.180.212:8000/api/v1/resources" \
+            -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}")
+
+          UUID=$(echo "$RESOURCES" | python3 -c "
+          import sys, json
+          items = json.load(sys.stdin)
+          if not isinstance(items, list):
+              items = [items]
+          for item in items:
+              name = str(item.get('name','') or item.get('project_name','')).lower()
+              t = str(item.get('type','')).lower()
+              uuid = item.get('uuid','')
+              print(f'found: {name!r} type={t!r} uuid={uuid!r}', file=sys.stderr)
+              if uuid and ('compose' in t or 'supabase' in name or 'compshop' in name):
+                  print(uuid)
+                  sys.exit(0)
+          sys.exit(1)
+          ")
+
+          if [ -z "$UUID" ]; then
+            echo "ERROR: could not find compose stack UUID"
+            exit 1
+          fi
+
+          echo "Deploying UUID: $UUID"
+          curl -sf --max-time 30 -X POST \
+            "http://178.156.180.212:8000/api/v1/compose/$UUID/deploy" \
+            -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
+            -H "Content-Type: application/json"
+          echo "Deploy triggered successfully"
