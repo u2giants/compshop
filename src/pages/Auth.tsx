@@ -37,6 +37,16 @@ export default function Auth() {
     }
   };
 
+  const handleAuthentikSignIn = async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "openidconnect",
+      options: { redirectTo: window.location.origin },
+    });
+    if (error) {
+      toast({ title: "Sign-in failed", description: String(error), variant: "destructive" });
+    }
+  };
+
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim()) return;
@@ -140,6 +150,20 @@ export default function Auth() {
             </>
           ) : (
             <>
+              {/* Company Account (Authentik SSO) */}
+              <Button
+                type="button"
+                variant="outline"
+                className="mb-2 w-full gap-2"
+                onClick={handleAuthentikSignIn}
+              >
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="11" stroke="currentColor" strokeWidth="2" />
+                  <path d="M12 6v6l4 2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+                Continue with Company Account
+              </Button>
+
               {/* Google SSO */}
               <Button
                 type="button"
