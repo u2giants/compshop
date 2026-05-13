@@ -161,30 +161,30 @@ export default function NewChinaTrip() {
     if (!user || !supplier.trim()) return;
     setSubmitting(true);
 
+    const insertData: any = {
+      name: supplier.trim(),
+      supplier: supplier.trim(),
+      venue_type: isGroupType ? "canton_fair" : venueType,
+      date,
+      location: location || null,
+      notes: notes || null,
+      created_by: user.id,
+    };
+
+    if (isGroupType && endDate) insertData.end_date = endDate;
+    if (canHaveParent && selectedParentId && selectedParentId !== "none") {
+      insertData.parent_id = selectedParentId;
+    }
+
     try {
-      const insertData: any = {
-        name: supplier.trim(),
-        supplier: supplier.trim(),
-        venue_type: isGroupType ? "canton_fair" : venueType,
-        date,
-        location: location || null,
-        notes: notes || null,
-        created_by: user.id,
-      };
-
-      if (isGroupType && endDate) {
-        insertData.end_date = endDate;
-      }
-
-      if (canHaveParent && selectedParentId && selectedParentId !== "none") {
-        insertData.parent_id = selectedParentId;
-      }
-
-      const { data: trip, error } = await supabase
-        .from("china_trips")
-        .insert(insertData)
-        .select()
-        .single();
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Request timed out")), 8_000)
+      );
+      const result = await Promise.race([
+        supabase.from("china_trips").insert(insertData).select().single(),
+        timeout,
+      ]) as Awaited<ReturnType<typeof supabase.from<"china_trips", any>>["insert"]>;
+      const { data: trip, error } = result as any;
 
       if (error) throw error;
 
@@ -193,26 +193,29 @@ export default function NewChinaTrip() {
       toast({ title: isGroupType ? "Canton Fair group created!" : "Asia trip created!" });
       navigate(isGroupType ? "/china" : `/china/${trip.id}`);
     } catch (err: any) {
-      if (!isGroupType && (!navigator.onLine || err?.message?.includes("fetch"))) {
+      // Network failure (GFW, no signal, timeout) — create locally and sync later
+      const isNetworkErr = !err?.code || err?.message?.includes("fetch") || err?.message?.includes("timed out");
+      if (isNetworkErr) {
         const localId = crypto.randomUUID();
         const now = new Date().toISOString();
         const parentId = canHaveParent && selectedParentId && selectedParentId !== "none" ? selectedParentId : null;
+        const localVenueType = isGroupType ? "canton_fair" : venueType;
         await cacheChinaTrips([{
           id: localId, name: supplier.trim(), supplier: supplier.trim(),
-          venue_type: venueType, date, end_date: endDate || null,
+          venue_type: localVenueType, date, end_date: isGroupType ? (endDate || null) : null,
           location: location || null, notes: notes || null, parent_id: parentId,
           factory_id: null, created_by: user.id, created_at: now, updated_at: now,
           deleted_at: null, is_draft: false, photo_count: 0,
         }]);
         await addPendingChinaTrip({
           id: localId, name: supplier.trim(), supplier: supplier.trim(),
-          venue_type: venueType, date, end_date: endDate || null,
+          venue_type: localVenueType, date, end_date: isGroupType ? (endDate || null) : null,
           location: location || null, notes: notes || null, parent_id: parentId,
           created_by: user.id, created_at: now, user_id: user.id,
         });
         runSync();
-        toast({ title: "Trip saved offline", description: "Will sync when you're back online." });
-        navigate(`/china/${localId}`);
+        toast({ title: isGroupType ? "Group saved offline" : "Trip saved offline", description: "Will sync when you're back online." });
+        navigate(isGroupType ? "/china" : `/china/${localId}`);
       } else {
         toast({ title: "Error", description: err.message, variant: "destructive" });
       }

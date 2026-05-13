@@ -103,11 +103,16 @@ export default function NewTrip() {
     const notes = form.get("notes") as string;
 
     try {
-      const { data: trip, error } = await supabase
-        .from("shopping_trips")
-        .insert({ name: store.trim(), store: store.trim(), date, location: location || null, notes: notes || null, created_by: user.id })
-        .select()
-        .single();
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Request timed out")), 8_000)
+      );
+      const result = await Promise.race([
+        supabase.from("shopping_trips")
+          .insert({ name: store.trim(), store: store.trim(), date, location: location || null, notes: notes || null, created_by: user.id })
+          .select().single(),
+        timeout,
+      ]) as any;
+      const { data: trip, error } = result;
 
       if (error) throw error;
 
@@ -116,7 +121,8 @@ export default function NewTrip() {
       toast({ title: "Trip created!" });
       navigate(`/trips/${trip.id}`);
     } catch (err: any) {
-      if (!navigator.onLine || err?.message?.includes("fetch")) {
+      const isNetworkErr = !err?.code || err?.message?.includes("fetch") || err?.message?.includes("timed out");
+      if (isNetworkErr) {
         const localId = crypto.randomUUID();
         const now = new Date().toISOString();
         await cacheTrips([{
@@ -134,7 +140,7 @@ export default function NewTrip() {
         toast({ title: "Trip saved offline", description: "Will sync when you're back online." });
         navigate(`/trips/${localId}`);
       } else {
-        toast({ title: "Error", description: err.message, variant: "destructive" });
+        toast({ title: "Couldn't create trip", description: err.message, variant: "destructive" });
       }
     } finally {
       setSubmitting(false);
