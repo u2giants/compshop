@@ -9,7 +9,6 @@ import { useOnlineStatus } from "@/hooks/use-online-status";
 import { useRetailers } from "@/hooks/use-retailers";
 import { useCategories } from "@/hooks/use-categories";
 import { uploadPhoto, hashFile, checkDuplicatePhoto } from "@/lib/supabase-helpers";
-import { batchSignedUrls } from "@/lib/photo-utils";
 import { extractExif, distanceKm } from "@/lib/exif-utils";
 import { cacheTripPhotos, type BulkCacheProgress } from "@/lib/bulk-cache";
 import { Card, CardContent } from "@/components/ui/card";
@@ -142,19 +141,24 @@ export default function Trips() {
           Promise.all(coverPromises),
         ]);
 
-        const coverPaths = coverResults
-          .map(r => r.data?.[0]?.file_path)
-          .filter(Boolean) as string[];
-        const urlMap = await batchSignedUrls(coverPaths.map(fp => ({ file_path: fp })));
+        // Generate thumbnail-sized signed URLs for covers (400×400 via imgproxy)
+        const coverSignedUrls = await Promise.all(
+          coverResults.map(async (r) => {
+            const fp = r.data?.[0]?.file_path;
+            if (!fp) return undefined;
+            const { data } = await supabase.storage
+              .from("photos")
+              .createSignedUrl(fp, 86400, { transform: { width: 400, height: 400, resize: "cover" } });
+            return data?.signedUrl ?? undefined;
+          })
+        );
 
         const tripsWithCounts = data.map((trip, i) => ({
           ...trip,
           photo_count: photoCounts[i].count ?? 0,
           member_count: memberCounts[i].count ?? 0,
           cover_file_path: coverResults[i].data?.[0]?.file_path || undefined,
-          cover_url: coverResults[i].data?.[0]?.file_path
-            ? urlMap.get(coverResults[i].data![0].file_path)
-            : undefined,
+          cover_url: coverSignedUrls[i],
         }));
         setTrips(tripsWithCounts);
 
@@ -177,8 +181,8 @@ export default function Trips() {
 
   function preCacheCoverImage(filePath: string, url: string) {
     getCachedImageBlob(filePath).then((existing) => {
-      if (existing) return;
-      fetch(url).then(r => r.blob()).then(b => cacheImageBlob(filePath, b)).catch(() => {});
+      if (existing && (existing.type.startsWith("image/") || existing.type.startsWith("video/"))) return;
+      fetch(url).then(r => { if (!r.ok) throw new Error(); return r.blob(); }).then(b => cacheImageBlob(filePath, b)).catch(() => {});
     });
   }
 

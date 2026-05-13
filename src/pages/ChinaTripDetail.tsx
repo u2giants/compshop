@@ -3,6 +3,7 @@ import CachedImage from "@/components/CachedImage";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { resizeToBase64 } from "@/lib/image-utils";
 import { uploadPhoto, uploadVideo, hashFile, checkDuplicatePhoto, MAX_VIDEO_BYTES } from "@/lib/supabase-helpers";
 import { groupPhotos, groupBySection, batchSignedUrls } from "@/lib/photo-utils";
 import type { Photo, ChinaTrip } from "@/types/models";
@@ -214,14 +215,9 @@ export default function ChinaTripDetail() {
       try {
         const res = await fetch(photo.signed_url!);
         const blob = await res.blob();
-        const reader = new FileReader();
-        const base64 = await new Promise<string>((resolve, reject) => {
-          reader.onload = () => resolve((reader.result as string).split(",")[1]);
-          reader.onerror = reject;
-          reader.readAsDataURL(blob);
-        });
+        const { base64, mimeType } = await resizeToBase64(blob);
         const { data, error } = await supabase.functions.invoke("analyze-photo", {
-          body: { imageBase64: base64, mimeType: blob.type, categories },
+          body: { imageBase64: base64, mimeType, categories },
         });
         if (error) continue;
 
@@ -388,7 +384,7 @@ export default function ChinaTripDetail() {
       const withUrls = await Promise.all(
         cached.map(async (p) => {
           const blob = await getCachedImageBlob(p.file_path);
-          if (blob) return { ...p, signed_url: URL.createObjectURL(blob) };
+          if (blob && (blob.type.startsWith("image/") || blob.type.startsWith("video/"))) return { ...p, signed_url: URL.createObjectURL(blob) };
           return { ...p, signed_url: undefined };
         })
       );
@@ -424,8 +420,9 @@ export default function ChinaTripDetail() {
   async function cacheImageInBackground(filePath: string, url: string) {
     try {
       const existing = await getCachedImageBlob(filePath);
-      if (existing) return;
+      if (existing && (existing.type.startsWith("image/") || existing.type.startsWith("video/"))) return;
       const res = await fetch(url);
+      if (!res.ok) return;
       const blob = await res.blob();
       await cacheImageBlob(filePath, blob);
     } catch {}
@@ -588,14 +585,9 @@ export default function ChinaTripDetail() {
     if (!selectedFile) return;
     setAnalyzing(true);
     try {
-      const reader = new FileReader();
-      const base64 = await new Promise<string>((resolve, reject) => {
-        reader.onload = () => resolve((reader.result as string).split(",")[1]);
-        reader.onerror = reject;
-        reader.readAsDataURL(selectedFile);
-      });
+      const { base64, mimeType } = await resizeToBase64(selectedFile);
       const { data, error } = await supabase.functions.invoke("analyze-photo", {
-        body: { imageBase64: base64, mimeType: selectedFile.type, categories },
+        body: { imageBase64: base64, mimeType, categories },
       });
       if (error) throw error;
 

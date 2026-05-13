@@ -30,9 +30,8 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    const token = authHeader.replace("Bearer ", "");
-    const { data: claimsData, error: claimsError } = await supabaseClient.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims) {
+    const { data: userData, error: userError } = await supabaseClient.auth.getUser();
+    if (userError || !userData?.user) {
       return new Response(
         JSON.stringify({ error: "Unauthorized" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -40,13 +39,7 @@ Deno.serve(async (req) => {
     }
 
     // Admin-only: this endpoint exposes account-level model availability.
-    const userId = claimsData.claims.sub as string | undefined;
-    if (!userId) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    const userId = userData.user.id;
 
     const { data: isAdmin, error: roleError } = await supabaseClient.rpc("has_role", {
       _user_id: userId,

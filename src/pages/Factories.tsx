@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { Factory, Search, MapPin, Phone, Mail, MessageCircle, Globe, User, ImageIcon, Building2, Calendar as CalendarIcon } from "lucide-react";
+import { Factory, Search, MapPin, Phone, Mail, MessageCircle, Globe, User, ImageIcon, Building2, Calendar as CalendarIcon, Images } from "lucide-react";
 import { format, parseISO, differenceInCalendarDays } from "date-fns";
 
 interface FactoryItem {
@@ -419,14 +419,35 @@ export default function Factories() {
         <div className="space-y-6">
           {dateBuckets.map((bucket) => (
             <div key={bucket.key}>
-              <div className="mb-2 flex items-baseline justify-between border-b pb-1.5">
+              <div className="mb-2 flex items-center justify-between border-b pb-1.5 gap-2">
                 <h2 className="font-sans text-lg font-semibold flex items-center gap-2">
                   <CalendarIcon className="h-4 w-4 text-muted-foreground" />
                   {bucket.label}
                 </h2>
-                <span className="text-xs text-muted-foreground">
-                  {bucket.visits.length} factor{bucket.visits.length === 1 ? "y" : "ies"} · {bucket.totalPhotos} photos
-                </span>
+                <div className="flex items-center gap-3 shrink-0">
+                  <span className="text-xs text-muted-foreground">
+                    {bucket.visits.length} factor{bucket.visits.length === 1 ? "y" : "ies"} · {bucket.totalPhotos} photos
+                  </span>
+                  {bucket.totalPhotos > 0 && (
+                    <button
+                      className="flex items-center gap-1 text-xs text-primary hover:underline font-medium"
+                      onClick={() =>
+                        navigate("/china/factories/week", {
+                          state: {
+                            label: bucket.label,
+                            visits: bucket.visits.map((v) => ({
+                              supplier: v.supplier,
+                              tripIds: v.tripIds,
+                              factory: v.factory,
+                            })),
+                          },
+                        })
+                      }
+                    >
+                      <Images className="h-3.5 w-3.5" /> View all photos
+                    </button>
+                  )}
+                </div>
               </div>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {bucket.visits.map((v, i) => (

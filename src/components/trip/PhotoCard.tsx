@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { getCachedImageBlob, cacheImageBlob } from "@/lib/offline-db";
 import { friendlyErrorMessage } from "@/lib/error-messages";
+import { resizeToBase64 } from "@/lib/image-utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCategories } from "@/hooks/use-categories";
@@ -88,28 +89,16 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
     let revoke: string | undefined;
     let cancelled = false;
     (async () => {
-      // Check blob cache for the original file
+      // Only read from the blob cache — don't fetch here (TripDetail handles background caching).
+      // Fetching for every card simultaneously causes a thundering herd that blocks the img tags.
       const blob = await getCachedImageBlob(photo.file_path);
       if (cancelled) return;
-      if (blob) {
+      if (blob && (blob.type.startsWith("image/") || blob.type.startsWith("video/"))) {
         const url = URL.createObjectURL(blob);
         revoke = url;
         setBlobUrl(url);
-        return;
       }
-      // No blob cached — if we have a signed URL, fetch & cache it
-      const signedUrl = photo.signed_thumbnail_url || photo.signed_url;
-      if (signedUrl) {
-        try {
-          const res = await fetch(signedUrl);
-          const b = await res.blob();
-          await cacheImageBlob(photo.file_path, b);
-          if (cancelled) return;
-          const url = URL.createObjectURL(b);
-          revoke = url;
-          setBlobUrl(url);
-        } catch {}
-      }
+      // If no valid blob, the render falls back to signed_url directly on the <img> tag.
     })();
     return () => { cancelled = true; if (revoke) URL.revokeObjectURL(revoke); };
   }, [photo.id, photo.file_path]);
@@ -213,15 +202,10 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
         try {
           const res = await fetch(img.signed_url!);
           const blob = await res.blob();
-          const base64 = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve((reader.result as string).split(",")[1]);
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
-          });
+          const { base64, mimeType } = await resizeToBase64(blob);
 
           const { data, error } = await supabase.functions.invoke("analyze-photo", {
-            body: { imageBase64: base64, mimeType: blob.type, categories },
+            body: { imageBase64: base64, mimeType, categories },
           });
 
           if (error) {

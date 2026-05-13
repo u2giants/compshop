@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Calendar, MapPin, Factory, ChevronDown, ChevronRight, Users, Plus } from "lucide-react";
+import { Calendar, MapPin, Factory, ChevronDown, ChevronRight, Users, Plus, Images } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { format } from "date-fns";
@@ -98,6 +98,14 @@ export default function CantonFairGroupCard({
                     </span>
                     <span>{totalPhotos} photos</span>
                     <span>{children.length} sub-trip{children.length !== 1 ? "s" : ""}</span>
+                    {totalPhotos > 0 && !selectMode && (
+                      <button
+                        className="flex items-center gap-1 text-amber-700 dark:text-amber-400 hover:underline font-medium"
+                        onClick={(e) => { e.stopPropagation(); navigate(`/china/${group.id}/stream`); }}
+                      >
+                        <Images className="h-3 w-3" /> View all photos
+                      </button>
+                    )}
                     {group.location && (
                       <span className="flex items-center gap-1">
                         <MapPin className="h-3 w-3" /> {group.location}
