@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { cacheChinaTrips, addPendingChinaTrip } from "@/lib/offline-db";
+import { runSync } from "@/lib/sync-service";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -191,7 +193,29 @@ export default function NewChinaTrip() {
       toast({ title: isGroupType ? "Canton Fair group created!" : "Asia trip created!" });
       navigate(isGroupType ? "/china" : `/china/${trip.id}`);
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      if (!isGroupType && (!navigator.onLine || err?.message?.includes("fetch"))) {
+        const localId = crypto.randomUUID();
+        const now = new Date().toISOString();
+        const parentId = canHaveParent && selectedParentId && selectedParentId !== "none" ? selectedParentId : null;
+        await cacheChinaTrips([{
+          id: localId, name: supplier.trim(), supplier: supplier.trim(),
+          venue_type: venueType, date, end_date: endDate || null,
+          location: location || null, notes: notes || null, parent_id: parentId,
+          factory_id: null, created_by: user.id, created_at: now, updated_at: now,
+          deleted_at: null, is_draft: false, photo_count: 0,
+        }]);
+        await addPendingChinaTrip({
+          id: localId, name: supplier.trim(), supplier: supplier.trim(),
+          venue_type: venueType, date, end_date: endDate || null,
+          location: location || null, notes: notes || null, parent_id: parentId,
+          created_by: user.id, created_at: now, user_id: user.id,
+        });
+        runSync();
+        toast({ title: "Trip saved offline", description: "Will sync when you're back online." });
+        navigate(`/china/${localId}`);
+      } else {
+        toast({ title: "Error", description: err.message, variant: "destructive" });
+      }
     } finally {
       setSubmitting(false);
     }

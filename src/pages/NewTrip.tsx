@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { cacheTrips, addPendingTrip } from "@/lib/offline-db";
+import { runSync } from "@/lib/sync-service";
 import { useRetailers } from "@/hooks/use-retailers";
 import AutocompleteInput from "@/components/ui/autocomplete-input";
 import { Button } from "@/components/ui/button";
@@ -114,7 +116,26 @@ export default function NewTrip() {
       toast({ title: "Trip created!" });
       navigate(`/trips/${trip.id}`);
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      if (!navigator.onLine || err?.message?.includes("fetch")) {
+        const localId = crypto.randomUUID();
+        const now = new Date().toISOString();
+        await cacheTrips([{
+          id: localId, name: store.trim(), store: store.trim(), date,
+          location: location || null, notes: notes || null,
+          created_by: user.id, created_at: now, updated_at: now,
+          photo_count: 0, member_count: 1,
+        }]);
+        await addPendingTrip({
+          id: localId, name: store.trim(), store: store.trim(), date,
+          location: location || null, notes: notes || null,
+          created_by: user.id, created_at: now, user_id: user.id,
+        });
+        runSync();
+        toast({ title: "Trip saved offline", description: "Will sync when you're back online." });
+        navigate(`/trips/${localId}`);
+      } else {
+        toast({ title: "Error", description: err.message, variant: "destructive" });
+      }
     } finally {
       setSubmitting(false);
     }

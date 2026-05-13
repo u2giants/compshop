@@ -108,6 +108,33 @@ export interface PendingUpload {
   extra?: Record<string, unknown>;
 }
 
+export interface PendingTrip {
+  id: string;
+  name: string;
+  store: string;
+  date: string;
+  location: string | null;
+  notes: string | null;
+  created_by: string;
+  created_at: string;
+  user_id: string;
+}
+
+export interface PendingChinaTrip {
+  id: string;
+  name: string;
+  supplier: string;
+  venue_type: string;
+  date: string;
+  end_date: string | null;
+  location: string | null;
+  notes: string | null;
+  parent_id: string | null;
+  created_by: string;
+  created_at: string;
+  user_id: string;
+}
+
 interface CompShopDB extends DBSchema {
   trips: {
     key: string;
@@ -144,13 +171,21 @@ interface CompShopDB extends DBSchema {
     key: string;
     value: SyncMeta;
   };
+  pending_trips: {
+    key: string;
+    value: PendingTrip;
+  };
+  pending_china_trips: {
+    key: string;
+    value: PendingChinaTrip;
+  };
 }
 
 let dbPromise: Promise<IDBPDatabase<CompShopDB>> | null = null;
 
 function getDB() {
   if (!dbPromise) {
-    dbPromise = openDB<CompShopDB>("compshop-offline", 2, {
+    dbPromise = openDB<CompShopDB>("compshop-offline", 3, {
       upgrade(db, oldVersion) {
         if (oldVersion < 1) {
           db.createObjectStore("trips", { keyPath: "id" });
@@ -167,6 +202,10 @@ function getDB() {
           chinaPhotoStore.createIndex("by-trip", "trip_id");
           db.createObjectStore("signed_urls", { keyPath: "file_path" });
           db.createObjectStore("sync_meta", { keyPath: "key" });
+        }
+        if (oldVersion < 3) {
+          db.createObjectStore("pending_trips", { keyPath: "id" });
+          db.createObjectStore("pending_china_trips", { keyPath: "id" });
         }
       },
     });
@@ -346,4 +385,36 @@ export async function updatePendingUploadStatus(id: string, status: PendingUploa
 export async function removePendingUpload(id: string) {
   const db = await getDB();
   await db.delete("pending_uploads", id);
+}
+
+// --- Pending trips ---
+export async function addPendingTrip(trip: PendingTrip) {
+  const db = await getDB();
+  await db.put("pending_trips", trip);
+}
+
+export async function getPendingTrips(): Promise<PendingTrip[]> {
+  const db = await getDB();
+  return db.getAll("pending_trips");
+}
+
+export async function removePendingTrip(id: string) {
+  const db = await getDB();
+  await db.delete("pending_trips", id);
+}
+
+// --- Pending china trips ---
+export async function addPendingChinaTrip(trip: PendingChinaTrip) {
+  const db = await getDB();
+  await db.put("pending_china_trips", trip);
+}
+
+export async function getPendingChinaTrips(): Promise<PendingChinaTrip[]> {
+  const db = await getDB();
+  return db.getAll("pending_china_trips");
+}
+
+export async function removePendingChinaTrip(id: string) {
+  const db = await getDB();
+  await db.delete("pending_china_trips", id);
 }

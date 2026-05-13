@@ -5,6 +5,10 @@ import {
   updatePendingUploadStatus,
   removePendingUpload,
   type PendingUpload,
+  getPendingTrips,
+  removePendingTrip,
+  getPendingChinaTrips,
+  removePendingChinaTrip,
 } from "@/lib/offline-db";
 
 type SyncListener = (status: SyncStatus) => void;
@@ -65,11 +69,47 @@ async function syncOne(upload: PendingUpload): Promise<boolean> {
   }
 }
 
+async function syncPendingTrips() {
+  const trips = await getPendingTrips();
+  for (const t of trips) {
+    try {
+      const { error } = await supabase.from("shopping_trips").insert({
+        id: t.id, name: t.name, store: t.store, date: t.date,
+        location: t.location, notes: t.notes, created_by: t.created_by, created_at: t.created_at,
+      });
+      // Ignore duplicate key — already synced (e.g. by another device)
+      if (error && !error.message.includes("duplicate key")) throw error;
+      await supabase.from("trip_members").insert({ trip_id: t.id, user_id: t.user_id }).catch(() => {});
+      await removePendingTrip(t.id);
+    } catch (err) {
+      console.error("[Sync] Failed to sync pending trip", t.id, err);
+    }
+  }
+
+  const chinaTrips = await getPendingChinaTrips();
+  for (const t of chinaTrips) {
+    try {
+      const { error } = await supabase.from("china_trips").insert({
+        id: t.id, name: t.name, supplier: t.supplier, venue_type: t.venue_type,
+        date: t.date, end_date: t.end_date, location: t.location, notes: t.notes,
+        parent_id: t.parent_id, created_by: t.created_by, created_at: t.created_at,
+      });
+      if (error && !error.message.includes("duplicate key")) throw error;
+      await supabase.from("china_trip_members").insert({ trip_id: t.id, user_id: t.user_id }).catch(() => {});
+      await removePendingChinaTrip(t.id);
+    } catch (err) {
+      console.error("[Sync] Failed to sync pending china trip", t.id, err);
+    }
+  }
+}
+
 export async function runSync() {
   if (syncing) return;
   syncing = true;
 
   try {
+    await syncPendingTrips();
+
     const pending = await getPendingUploads();
     if (pending.length === 0) {
       setStatus("idle");
