@@ -4,7 +4,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { resizeToBase64 } from "@/lib/image-utils";
-import { uploadPhoto, hashFile, checkDuplicatePhoto } from "@/lib/supabase-helpers";
+import { hashFile, checkDuplicatePhoto } from "@/lib/supabase-helpers";
 import { groupPhotos, batchSignedUrls } from "@/lib/photo-utils";
 import type { Photo, Trip } from "@/types/models";
 import { extractExif, distanceKm } from "@/lib/exif-utils";
@@ -562,90 +562,60 @@ export default function TripDetail() {
   async function handleBulkUpload(files: File[]) {
     if (!user || !id) return;
     setUploading(true);
-    let successCount = 0;
-    let failCount = 0;
+    let queuedCount = 0;
     let dupCount = 0;
-    let pendingCount = 0;
 
     for (const file of files) {
-      try {
-        const fileHash = await hashFile(file);
-        if (await checkDuplicatePhoto(fileHash)) {
-          dupCount++;
-          continue;
-        }
-        const exif = await extractExif(file);
-        const lat = exif.latitude ?? null;
-        const lng = exif.longitude ?? null;
-
-        const { filePath, thumbnailPath } = await uploadPhoto(file, user.id, id);
-        const { error } = await supabase.from("photos").insert({
-          trip_id: id, user_id: user.id, file_path: filePath, thumbnail_path: thumbnailPath, file_hash: fileHash,
-          ...(lat != null && lng != null ? { latitude: lat, longitude: lng } : {}),
-        });
-        if (error) throw error;
-        successCount++;
-      } catch {
-        // Queue for background sync on any failure (network, timeout, etc.)
-        const pendingId = crypto.randomUUID();
-        await addPendingUpload({
-          id: pendingId, trip_id: id, file_blob: file, file_name: file.name,
-          metadata: { product_name: null, category: null, price: null, dimensions: null, country_of_origin: null, material: null, brand: null, notes: null },
-          user_id: user.id, created_at: new Date().toISOString(), status: "pending", retry_count: 0,
-        });
-        pendingCount++;
-      }
+      const fileHash = await hashFile(file);
+      if (await checkDuplicatePhoto(fileHash)) { dupCount++; continue; }
+      const exif = await extractExif(file);
+      const lat = exif.latitude ?? null;
+      const lng = exif.longitude ?? null;
+      await addPendingUpload({
+        id: crypto.randomUUID(), trip_id: id, file_blob: file, file_name: file.name,
+        metadata: { product_name: null, category: null, price: null, dimensions: null, country_of_origin: null, material: null, brand: null, notes: null },
+        extra: lat != null && lng != null ? { latitude: lat, longitude: lng } : undefined,
+        user_id: user.id, created_at: new Date().toISOString(), status: "pending", retry_count: 0,
+      });
+      queuedCount++;
     }
 
     setUploading(false);
     const parts: string[] = [];
-    if (successCount > 0) parts.push(`${successCount} uploaded`);
+    if (queuedCount > 0) parts.push(`${queuedCount} queued for upload`);
     if (dupCount > 0) parts.push(`${dupCount} duplicate${dupCount > 1 ? "s" : ""} skipped`);
-    if (pendingCount > 0) parts.push(`${pendingCount} queued for sync`);
-    if (failCount > 0) parts.push(`${failCount} failed`);
     toast({
       title: `Bulk upload complete`,
       description: `${parts.join(", ")}. You can add details to each photo individually.`,
     });
     loadPhotos();
     loadPendingPhotos();
-    // Trigger sync immediately for any queued items
-    if (pendingCount > 0) runSync();
-    // Check for GPS interpolation after upload
+    runSync();
     runGpsInterpolation();
   }
 
   async function handleFileDropOnCard(files: File[], targetPhotoId: string) {
     if (!user || !id) return;
     setUploading(true);
-    let successCount = 0;
+    let queuedCount = 0;
 
     for (const file of files) {
-      try {
-        const fileHash = await hashFile(file);
-        if (await checkDuplicatePhoto(fileHash)) continue;
-        const { filePath, thumbnailPath } = await uploadPhoto(file, user.id, id);
-        const { error } = await supabase.from("photos").insert({
-          trip_id: id, user_id: user.id, file_path: filePath, thumbnail_path: thumbnailPath, group_id: targetPhotoId, file_hash: fileHash,
-        });
-        if (error) throw error;
-        successCount++;
-      } catch {
-        const pendingId = crypto.randomUUID();
-        await addPendingUpload({
-          id: pendingId, trip_id: id, file_blob: file, file_name: file.name,
-          metadata: { product_name: null, category: null, price: null, dimensions: null, country_of_origin: null, material: null, brand: null, notes: null },
-          user_id: user.id, created_at: new Date().toISOString(), status: "pending", retry_count: 0,
-        });
-      }
+      const fileHash = await hashFile(file);
+      if (await checkDuplicatePhoto(fileHash)) continue;
+      await addPendingUpload({
+        id: crypto.randomUUID(), trip_id: id, file_blob: file, file_name: file.name,
+        metadata: { product_name: null, category: null, price: null, dimensions: null, country_of_origin: null, material: null, brand: null, notes: null },
+        extra: { group_id: targetPhotoId },
+        user_id: user.id, created_at: new Date().toISOString(), status: "pending", retry_count: 0,
+      });
+      queuedCount++;
     }
 
     setUploading(false);
-    toast({
-      title: `${successCount} photo${successCount !== 1 ? "s" : ""} added to card`,
-    });
+    toast({ title: `${queuedCount} photo${queuedCount !== 1 ? "s" : ""} queued for upload` });
     loadPhotos();
     loadPendingPhotos();
+    runSync();
   }
 
   async function handleAnalyze() {
@@ -701,52 +671,26 @@ export default function TripDetail() {
       notes: formFields.notes || null,
     };
 
-    if (!navigator.onLine) {
-      const pendingId = crypto.randomUUID();
-      await addPendingUpload({
-        id: pendingId, trip_id: id, file_blob: selectedFile, file_name: selectedFile.name,
-        metadata, user_id: user.id, created_at: new Date().toISOString(), status: "pending", retry_count: 0,
-      });
-      toast({ title: "Saved offline", description: "Photo will upload when you're back online." });
-      setShowUploadDialog(false); setSelectedFile(null); setPreviewUrl(null); setUploading(false);
-      loadPendingPhotos();
+    const fileHash = await hashFile(selectedFile);
+    if (await checkDuplicatePhoto(fileHash)) {
+      toast({ title: "Duplicate detected", description: "This photo has already been uploaded.", variant: "destructive" });
+      setUploading(false);
       return;
     }
-
-    try {
-      const fileHash = await hashFile(selectedFile);
-      if (await checkDuplicatePhoto(fileHash)) {
-        toast({ title: "Duplicate detected", description: "This photo has already been uploaded.", variant: "destructive" });
-        setUploading(false);
-        return;
-      }
-      const exif = await extractExif(selectedFile);
-      const lat = exif.latitude ?? null;
-      const lng = exif.longitude ?? null;
-
-      const { filePath, thumbnailPath } = await uploadPhoto(selectedFile, user.id, id);
-      const { error } = await supabase.from("photos").insert({
-        trip_id: id, user_id: user.id, file_path: filePath, thumbnail_path: thumbnailPath, file_hash: fileHash, ...metadata,
-        ...(lat != null && lng != null ? { latitude: lat, longitude: lng } : {}),
-      });
-      if (error) throw error;
-      toast({ title: "Photo uploaded!" });
-      setShowUploadDialog(false); setSelectedFile(null); setPreviewUrl(null);
-      loadPhotos();
-      // Run GPS interpolation after upload
-      runGpsInterpolation();
-    } catch (err: any) {
-      const pendingId = crypto.randomUUID();
-      await addPendingUpload({
-        id: pendingId, trip_id: id, file_blob: selectedFile, file_name: selectedFile.name,
-        metadata, user_id: user.id, created_at: new Date().toISOString(), status: "pending", retry_count: 0,
-      });
-      toast({ title: "Saved for later sync", description: "Upload failed, but your photo is saved locally." });
-      setShowUploadDialog(false); setSelectedFile(null); setPreviewUrl(null);
-      loadPendingPhotos();
-    } finally {
-      setUploading(false);
-    }
+    const exif = await extractExif(selectedFile);
+    const lat = exif.latitude ?? null;
+    const lng = exif.longitude ?? null;
+    await addPendingUpload({
+      id: crypto.randomUUID(), trip_id: id, file_blob: selectedFile, file_name: selectedFile.name,
+      metadata, extra: lat != null && lng != null ? { latitude: lat, longitude: lng } : undefined,
+      user_id: user.id, created_at: new Date().toISOString(), status: "pending", retry_count: 0,
+    });
+    toast({ title: "Photo saved", description: "Uploading in background." });
+    setShowUploadDialog(false); setSelectedFile(null); setPreviewUrl(null);
+    loadPendingPhotos();
+    runSync();
+    runGpsInterpolation();
+    setUploading(false);
   }
 
   const handleDragOver = useCallback((e: React.DragEvent) => {

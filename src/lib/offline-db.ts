@@ -104,6 +104,8 @@ export interface PendingUpload {
   created_at: string;
   status: "pending" | "uploading" | "failed";
   retry_count: number;
+  table?: "photos" | "china_photos";
+  extra?: Record<string, unknown>;
 }
 
 interface CompShopDB extends DBSchema {

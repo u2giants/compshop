@@ -44,13 +44,14 @@ async function syncOne(upload: PendingUpload): Promise<boolean> {
     }
     const { filePath, thumbnailPath } = await uploadPhoto(file, upload.user_id, upload.trip_id);
 
-    const { error } = await supabase.from("photos").insert({
+    const { error } = await supabase.from(upload.table ?? "photos").insert({
       trip_id: upload.trip_id,
       user_id: upload.user_id,
       file_path: filePath,
       thumbnail_path: thumbnailPath,
       file_hash: fileHash,
       ...upload.metadata,
+      ...(upload.extra ?? {}),
     });
 
     if (error) throw error;

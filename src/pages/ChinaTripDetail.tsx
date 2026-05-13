@@ -4,7 +4,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { resizeToBase64 } from "@/lib/image-utils";
-import { uploadPhoto, uploadVideo, hashFile, checkDuplicatePhoto, MAX_VIDEO_BYTES } from "@/lib/supabase-helpers";
+import { uploadVideo, hashFile, checkDuplicatePhoto, MAX_VIDEO_BYTES } from "@/lib/supabase-helpers";
 import { groupPhotos, groupBySection, batchSignedUrls } from "@/lib/photo-utils";
 import type { Photo, ChinaTrip } from "@/types/models";
 import { extractExif } from "@/lib/exif-utils";
@@ -515,38 +515,27 @@ export default function ChinaTripDetail() {
   async function handleBulkUpload(files: File[]) {
     if (!user || !id) return;
     setUploading(true);
-    let successCount = 0;
+    let queuedCount = 0;
     let dupCount = 0;
-    let pendingCount = 0;
     for (const file of files) {
-      try {
-        const fileHash = await hashFile(file);
-        if (await checkDuplicatePhoto(fileHash)) { dupCount++; continue; }
-        const { filePath, thumbnailPath } = await uploadPhoto(file, user.id, id);
-        await supabase.from("china_photos").insert({ trip_id: id, user_id: user.id, file_path: filePath, thumbnail_path: thumbnailPath, file_hash: fileHash });
-        successCount++;
-      } catch {
-        const pendingId = crypto.randomUUID();
-        await addPendingUpload({
-          id: pendingId, trip_id: id, file_blob: file, file_name: file.name,
-          metadata: { product_name: null, category: null, price: null, dimensions: null, country_of_origin: null, material: null, brand: null, notes: null },
-          user_id: user.id, created_at: new Date().toISOString(), status: "pending", retry_count: 0,
-        });
-        pendingCount++;
-      }
+      const fileHash = await hashFile(file);
+      if (await checkDuplicatePhoto(fileHash)) { dupCount++; continue; }
+      await addPendingUpload({
+        id: crypto.randomUUID(), trip_id: id, file_blob: file, file_name: file.name,
+        metadata: { product_name: null, category: null, price: null, dimensions: null, country_of_origin: null, material: null, brand: null, notes: null },
+        table: "china_photos",
+        user_id: user.id, created_at: new Date().toISOString(), status: "pending", retry_count: 0,
+      });
+      queuedCount++;
     }
     setUploading(false);
     const parts: string[] = [];
-    if (successCount > 0) parts.push(`${successCount} uploaded`);
+    if (queuedCount > 0) parts.push(`${queuedCount} queued for upload`);
     if (dupCount > 0) parts.push(`${dupCount} duplicates skipped`);
-    if (pendingCount > 0) parts.push(`${pendingCount} queued for sync`);
-    toast({
-      title: `Bulk upload complete`,
-      description: `${parts.join(", ")}.`,
-    });
+    toast({ title: `Bulk upload complete`, description: `${parts.join(", ")}.` });
     loadPhotos();
     loadPendingPhotos();
-    if (pendingCount > 0) runSync();
+    runSync();
   }
 
   async function handleVideoSelect(e: React.ChangeEvent<HTMLInputElement>) {
@@ -654,44 +643,21 @@ export default function ChinaTripDetail() {
       country_of_origin: countryValue || null,
     };
 
-    if (!navigator.onLine) {
-      const pendingId = crypto.randomUUID();
-      await addPendingUpload({
-        id: pendingId, trip_id: id, file_blob: selectedFile, file_name: selectedFile.name,
-        metadata, user_id: user.id, created_at: new Date().toISOString(), status: "pending", retry_count: 0,
-      });
-      toast({ title: "Saved offline", description: "Photo will upload when you're back online." });
-      setShowUploadDialog(false); setSelectedFile(null); setPreviewUrl(null); setUploading(false);
-      loadPendingPhotos();
+    const fileHash = await hashFile(selectedFile);
+    if (await checkDuplicatePhoto(fileHash)) {
+      toast({ title: "Duplicate photo", description: "Already uploaded.", variant: "destructive" });
+      setUploading(false);
       return;
     }
-
-    try {
-      const fileHash = await hashFile(selectedFile);
-      if (await checkDuplicatePhoto(fileHash)) {
-        toast({ title: "Duplicate photo", description: "Already uploaded.", variant: "destructive" });
-        setUploading(false);
-        return;
-      }
-      const { filePath, thumbnailPath } = await uploadPhoto(selectedFile, user.id, id);
-      await supabase.from("china_photos").insert({
-        trip_id: id, user_id: user.id, file_path: filePath, thumbnail_path: thumbnailPath, file_hash: fileHash, ...metadata,
-      });
-      toast({ title: "Photo uploaded!" });
-      setShowUploadDialog(false);
-      setSelectedFile(null);
-      setPreviewUrl(null);
-      loadPhotos();
-    } catch (err: any) {
-      const pendingId = crypto.randomUUID();
-      await addPendingUpload({
-        id: pendingId, trip_id: id, file_blob: selectedFile, file_name: selectedFile.name,
-        metadata, user_id: user.id, created_at: new Date().toISOString(), status: "pending", retry_count: 0,
-      });
-      toast({ title: "Saved for later sync", description: "Upload failed, photo saved locally." });
-      setShowUploadDialog(false); setSelectedFile(null); setPreviewUrl(null);
-      loadPendingPhotos();
-    }
+    await addPendingUpload({
+      id: crypto.randomUUID(), trip_id: id, file_blob: selectedFile, file_name: selectedFile.name,
+      metadata, table: "china_photos",
+      user_id: user.id, created_at: new Date().toISOString(), status: "pending", retry_count: 0,
+    });
+    toast({ title: "Photo saved", description: "Uploading in background." });
+    setShowUploadDialog(false); setSelectedFile(null); setPreviewUrl(null);
+    loadPendingPhotos();
+    runSync();
     setUploading(false);
   }
 
@@ -1215,15 +1181,16 @@ export default function ChinaTripDetail() {
                     userName={primary.user_id ? userProfiles[primary.user_id] : undefined}
                     onFileDrop={(files, targetId) => {
                       if (!user || !id) return;
-                      files.forEach(async (file) => {
+                      Promise.all(files.map(async (file) => {
                         const fileHash = await hashFile(file);
                         if (await checkDuplicatePhoto(fileHash)) return;
-                        const { filePath, thumbnailPath } = await uploadPhoto(file, user.id, id);
-                        await supabase.from("china_photos").insert({
-                          trip_id: id, user_id: user.id, file_path: filePath, thumbnail_path: thumbnailPath, file_hash: fileHash, group_id: targetId,
+                        await addPendingUpload({
+                          id: crypto.randomUUID(), trip_id: id, file_blob: file, file_name: file.name,
+                          metadata: { product_name: null, category: null, price: null, dimensions: null, country_of_origin: null, material: null, brand: null, notes: null },
+                          table: "china_photos", extra: { group_id: targetId },
+                          user_id: user.id, created_at: new Date().toISOString(), status: "pending", retry_count: 0,
                         });
-                      });
-                      setTimeout(loadPhotos, 1000);
+                      })).then(() => { runSync(); loadPendingPhotos(); });
                     }}
                   />
                 ))}

@@ -6,7 +6,7 @@
  */
 export async function compressForUpload(
   file: File,
-  maxPx = 2048,
+  maxPx = 3000,
   quality = 0.88
 ): Promise<File> {
   if (!file.type.startsWith("image/")) return file;
