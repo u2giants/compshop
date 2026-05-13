@@ -14,6 +14,7 @@ export type SyncStatus = "idle" | "syncing" | "error";
 let listeners: SyncListener[] = [];
 let currentStatus: SyncStatus = "idle";
 let syncInterval: ReturnType<typeof setInterval> | null = null;
+let syncing = false;
 
 function setStatus(s: SyncStatus) {
   currentStatus = s;
@@ -64,52 +65,73 @@ async function syncOne(upload: PendingUpload): Promise<boolean> {
 }
 
 export async function runSync() {
-  // Don't rely on navigator.onLine — it's unreliable on iOS
-  // Instead, just try to sync and let individual uploads fail gracefully
+  if (syncing) return;
+  syncing = true;
+
+  try {
+    const pending = await getPendingUploads();
+    if (pending.length === 0) {
+      setStatus("idle");
+      return;
+    }
+
+    setStatus("syncing");
+    let allOk = true;
+
+    const retryable = pending.filter((u) => u.retry_count < 5);
+    const abandoned = pending.filter((u) => u.retry_count >= 5);
+
+    for (const u of abandoned) {
+      console.warn("[Sync] Removing permanently failed upload", u.id);
+      await removePendingUpload(u.id);
+    }
+
+    if (retryable.length === 0) {
+      setStatus("idle");
+      return;
+    }
+
+    for (const upload of retryable) {
+      const ok = await syncOne(upload);
+      if (!ok) allOk = false;
+    }
+
+    setStatus(allOk ? "idle" : "error");
+  } finally {
+    syncing = false;
+  }
+}
+
+async function resetStuckUploads() {
   const pending = await getPendingUploads();
-  if (pending.length === 0) {
-    setStatus("idle");
-    return;
+  for (const u of pending) {
+    // Uploads stuck as "uploading" mean the tab was closed or crashed mid-upload
+    if (u.status === "uploading") {
+      await updatePendingUploadStatus(u.id, "failed", u.retry_count + 1);
+    }
   }
-
-  setStatus("syncing");
-  let allOk = true;
-
-  const retryable = pending.filter((u) => u.retry_count < 5);
-  const abandoned = pending.filter((u) => u.retry_count >= 5);
-
-  // Remove permanently failed uploads so they stop blocking status
-  for (const u of abandoned) {
-    console.warn("[Sync] Removing permanently failed upload", u.id);
-    await removePendingUpload(u.id);
-  }
-
-  if (retryable.length === 0) {
-    setStatus("idle");
-    return;
-  }
-
-  for (const upload of retryable) {
-    const ok = await syncOne(upload);
-    if (!ok) allOk = false;
-  }
-
-  setStatus(allOk ? "idle" : "error");
 }
 
 export function startSyncService() {
   if (syncInterval) return;
 
-  // Sync whenever we come back online
+  // Reset any uploads stuck in "uploading" from a previous session, then sync
+  resetStuckUploads().then(() => runSync());
+
+  // Sync when network comes back (reliable on Android/desktop; iOS sometimes
+  // misses this, which is why the interval below doesn't check navigator.onLine)
   window.addEventListener("online", () => runSync());
 
-  // Periodic check every 30s
-  syncInterval = setInterval(() => {
-    if (navigator.onLine) runSync();
-  }, 30_000);
+  // Sync when app comes back to foreground — critical for iOS PWA where the
+  // online event often doesn't fire after regaining connectivity
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") runSync();
+  });
 
-  // Initial sync
-  if (navigator.onLine) runSync();
+  // Poll every 30s without navigator.onLine check — that flag is unreliable on
+  // iOS. Uploads that fail due to no connectivity fail fast (90s timeout in
+  // uploadPhoto) and retry next cycle rather than hanging indefinitely.
+  syncInterval = setInterval(() => runSync(), 30_000);
 }
 
 export function getPendingCount(): Promise<number> {

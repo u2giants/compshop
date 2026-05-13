@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { createAndUploadThumbnail } from "@/lib/thumbnail-utils";
+import { compressForUpload } from "@/lib/image-utils";
 
 export async function getCurrentUser() {
   const { data: { user } } = await supabase.auth.getUser();
@@ -49,12 +50,15 @@ export async function checkDuplicatePhoto(fileHash: string): Promise<boolean> {
 }
 
 export async function uploadPhoto(file: File, userId: string, tripId: string): Promise<{ filePath: string; thumbnailPath: string | null }> {
-  const fileExt = file.name.split(".").pop();
+  const compressed = await compressForUpload(file);
+  const fileExt = compressed.name.split(".").pop();
   const filePath = `${userId}/${tripId}/${crypto.randomUUID()}.${fileExt}`;
 
-  const { error } = await supabase.storage
-    .from("photos")
-    .upload(filePath, file);
+  const uploadPromise = supabase.storage.from("photos").upload(filePath, compressed);
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error("Upload timed out after 90s")), 90_000)
+  );
+  const { error } = await Promise.race([uploadPromise, timeout]) as Awaited<typeof uploadPromise>;
 
   if (error) throw error;
 
