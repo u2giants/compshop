@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { uploadPhoto, hashFile, checkDuplicatePhoto } from "@/lib/supabase-helpers";
-import { batchSignedUrls } from "@/lib/photo-utils";
 import { extractExif, distanceKm } from "@/lib/exif-utils";
 import { getCantonFairSession, sessionKey } from "@/lib/canton-fair-utils";
 import { cacheChinaTripPhotos, type BulkCacheProgress } from "@/lib/bulk-cache";
@@ -146,18 +145,22 @@ export default function ChinaTrips() {
           }
         }
 
-        const coverPaths = coverResults
-          .map(r => r.data?.[0]?.file_path)
-          .filter(Boolean) as string[];
-        const urlMap = await batchSignedUrls(coverPaths.map(fp => ({ file_path: fp })));
+        const coverSignedUrls = await Promise.all(
+          coverResults.map(async (r) => {
+            const fp = r.data?.[0]?.file_path;
+            if (!fp) return undefined;
+            const { data } = await supabase.storage
+              .from("photos")
+              .createSignedUrl(fp, 86400, { transform: { width: 400, height: 400, resize: "cover" } });
+            return data?.signedUrl ?? undefined;
+          })
+        );
 
         const tripsWithCounts: CachedChinaTrip[] = data.map((trip, i) => ({
           ...trip,
           photo_count: photoCounts[i].count ?? 0,
           cover_file_path: coverResults[i].data?.[0]?.file_path || undefined,
-          cover_url: coverResults[i].data?.[0]?.file_path
-            ? urlMap.get(coverResults[i].data![0].file_path)
-            : undefined,
+          cover_url: coverSignedUrls[i],
           photographer: trip.created_by ? profileMap[trip.created_by] ?? null : null,
         }));
         setTrips(tripsWithCounts as ChinaTrip[]);
@@ -575,8 +578,10 @@ export default function ChinaTrips() {
   const childTrips = filteredTrips.filter(t => t.parent_id != null);
   const standaloneTrips = filteredTrips.filter(t => !t.parent_id && t.end_date == null && t.venue_type !== "factory_visit");
 
+  // Build from unfiltered trips so venue/date filters don't strip children and break
+  // the photo count used by CantonFairGroupCard to show the "view all photos" button.
   const childrenByParent = new Map<string, ChinaTrip[]>();
-  childTrips.forEach(c => {
+  trips.filter(t => t.parent_id != null).forEach(c => {
     const list = childrenByParent.get(c.parent_id!) || [];
     list.push(c);
     childrenByParent.set(c.parent_id!, list);
