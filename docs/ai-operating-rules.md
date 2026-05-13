@@ -24,24 +24,22 @@ The only normal deployment path is:
 
 1. change files in this repo
 2. commit to `main`
-3. GitHub Actions builds and pushes the image
-4. GitHub Actions triggers Coolify
-5. Coolify deploys the new image
+3. GitHub Actions (`deploy.yml`) triggers on push to `main` for relevant paths
+4. The workflow calls the Coolify API to sync the compose YAML and trigger deployment
 
-Do not propose alternate routine deployment methods.
+GitHub Actions workflows exist in `.github/workflows/` and are part of the deployment
+pipeline. Do not propose alternate routine deployment methods.
 
 ## Allowed AI actions
 
 AI may help with:
 
 - editing application code
-- editing `docker-compose.yml`
-- editing Dockerfiles
-- editing GitHub Actions workflows
+- editing `selfhost/compose.supabase.yml` and `selfhost/Dockerfile.frontend`
+- editing `.github/workflows/` files
 - editing documentation
-- recommending GitHub Secrets usage for CI/CD
 - recommending Coolify runtime environment variable changes
-- triggering deployment through the approved GitHub -> Coolify path
+- triggering deployment via the Coolify API (`/api/v1/deploy?uuid=…`)
 
 ## Forbidden AI actions
 

@@ -1,0 +1,77 @@
+name: Deploy to Coolify
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+    paths:
+      - "selfhost/compose.supabase.yml"
+      - "selfhost/Dockerfile.frontend"
+      - "selfhost/nginx.conf"
+      - "supabase/functions/**"
+      - "src/**"
+      - "package.json"
+      - "bun.lockb"
+      - "package-lock.json"
+      - ".github/workflows/deploy.yml"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to Coolify
+        env:
+          TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+          BASE: ${{ secrets.COOLIFY_BASE_URL }}
+        run: |
+          python3 << 'PYEOF'
+          import json, os, subprocess, sys
+
+          base  = os.environ["BASE"].rstrip("/")
+          token = os.environ["TOKEN"]
+          auth  = f"Authorization: Bearer {token}"
+          ct    = "Content-Type: application/json"
+
+          def curl(*args):
+              r = subprocess.run(["curl", "-sf", "--max-time", "30"] + list(args),
+                                 capture_output=True, text=True)
+              if r.returncode != 0:
+                  print("curl error:", r.stderr[:300] or "(no stderr)")
+                  sys.exit(1)
+              return r.stdout
+
+          # Find the Supabase compose stack UUID (skip frontend/service resources)
+          resources = json.loads(curl(f"{base}/api/v1/resources", "-H", auth))
+          if not isinstance(resources, list):
+              resources = [resources]
+
+          supabase_uuid = None
+          frontend_uuid = None
+          for item in resources:
+              name = str(item.get("name","") or item.get("project_name","")).lower()
+              u    = item.get("uuid","")
+              print(f"  resource: {name!r} uuid={u!r}")
+              if u and "compshop" in name and "frontend" in name:
+                  frontend_uuid = u
+              elif u and "compshop" in name and "frontend" not in name and "supabase" in name:
+                  supabase_uuid = u
+
+          if not supabase_uuid:
+              print("ERROR: Supabase compose stack not found in Coolify resources")
+              sys.exit(1)
+
+          print(f"Deploying Supabase stack UUID: {supabase_uuid}")
+          result = curl(f"{base}/api/v1/deploy?uuid={supabase_uuid}", "-H", auth)
+          print("Supabase deploy response:", result[:300])
+
+          if frontend_uuid:
+              print(f"Deploying frontend UUID: {frontend_uuid}")
+              result = curl(f"{base}/api/v1/deploy?uuid={frontend_uuid}", "-H", auth)
+              print("Frontend deploy response:", result[:300])
+          else:
+              print("WARNING: Frontend app not found in resources, skipping")
+
+          print("Done.")
+          PYEOF

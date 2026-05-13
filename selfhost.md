@@ -8,6 +8,8 @@
 
 > **Read this whole document once before touching anything.** The order matters. Several steps depend on values generated in earlier steps (JWT secret, anon key, service role key, project URL).
 
+> **You do not need to buy the server yet to start preparing.** See [§3.5 — Preparation you can do before provisioning the VPS](#35-preparation-you-can-do-before-provisioning-the-vps). About 60% of this runbook can be done on your laptop against a local staging Supabase with zero risk to the running Lovable Cloud app.
+
 ---
 
 ## Table of Contents
@@ -15,6 +17,7 @@
 1. [Architecture overview](#1-architecture-overview)
 2. [What we are NOT migrating (and why)](#2-what-we-are-not-migrating-and-why)
 3. [Prerequisites & cost estimate](#3-prerequisites--cost-estimate)
+3.5. [Preparation you can do before provisioning the VPS](#35-preparation-you-can-do-before-provisioning-the-vps)
 4. [Phase 0 — VPS & Coolify setup](#4-phase-0--vps--coolify-setup)
 5. [Phase 1 — Domains & DNS](#5-phase-1--domains--dns)
 6. [Phase 2 — Deploy self-hosted Supabase](#6-phase-2--deploy-self-hosted-supabase)
@@ -71,10 +74,12 @@ You asked whether this should be **1 frontend container + 1 self-hosted Supabase
 | Thing | Decision | Why |
 |---|---|---|
 | Lovable AI Gateway (`LOVABLE_API_KEY`) | **Replace with direct Google Gemini API key** | The Lovable gateway only works for projects on Lovable Cloud. You'll need a Google AI Studio key for `analyze-photo` and `parse-teams-conversation`. |
+| `@lovable.dev/cloud-auth-js` (frontend OAuth wrapper) | **Replace with direct `supabase.auth.signInWithOAuth`** | `src/integrations/lovable/index.ts` wraps Google sign-in through Lovable's OAuth gateway, then installs the resulting session into Supabase. On self-hosted Supabase, Lovable's gateway has no knowledge of your GoTrue instance — tokens it issues will fail signature verification. Must be replaced in frontend code. See §7.4. |
 | Lovable's managed migrations UI | **Replaced by `supabase/migrations/` + `supabase db push`** | Coolify doesn't know about Lovable. You'll run migrations from your laptop with the Supabase CLI. |
 | Lovable's "Connectors" (Google Maps, Brevo) | **Re-add as plain env vars on the edge functions container** | Same keys, just configured manually in Coolify instead of Lovable's Secrets UI. |
-| Capacitor mobile build pointing at `lovableproject.com` | **Update `capacitor.config.ts` to point at your new domain** | See Phase 8. |
+| Capacitor mobile build pointing at `lovableproject.com` | **Update `capacitor.config.ts` + rebuild & resubmit the iOS/Android binaries** | See Phase 8. A config change alone does nothing for users who already installed the app — they need an app-store update. |
 | Lovable's automatic GitHub sync | **Stays the same** for the codebase, but you stop using Lovable's "Publish" button — Coolify auto-deploys from GitHub instead. |
+| `.env` committed to git (current Lovable Cloud anon key) | **Rotate + remove from tracked files** | The current anon key is in git history. Before cutover, `git rm --cached .env`, add to `.gitignore`, generate a new key Lovable-side, and commit the change. On the self-hosted side the anon key is generated fresh from your new `JWT_SECRET`, so that one is never exposed. |
 
 ---
 
@@ -122,6 +127,139 @@ brew install node                     # for build verification
 | Brevo (existing) | $0 (free tier) |
 | Google AI / Maps (existing) | usage-based |
 | **Total** | **~$25–40/month** |
+
+---
+
+## 3.5 Preparation you can do before provisioning the VPS
+
+Everything in this section is **safe to do on your laptop against a local staging environment**. The running Lovable Cloud app is completely untouched. You can knock out most of the hard work here before spending a dollar on infrastructure.
+
+### 3.5.1 Run a local Supabase staging environment
+
+The Supabase CLI can spin up a full local stack (Postgres, GoTrue, PostgREST, Realtime, Storage, Edge Functions, Studio) on your laptop. This is your staging environment.
+
+```bash
+# Install CLI if you haven't already
+brew install supabase/tap/supabase
+
+# In the repo root
+supabase start
+# First run pulls ~2 GB of images — takes 5–10 min
+```
+
+It prints something like:
+```
+API URL:      http://127.0.0.1:54321
+anon key:     eyJhbGc...
+service_role: eyJhbGc...
+Studio:       http://127.0.0.1:54323
+DB:           postgresql://postgres:postgres@127.0.0.1:54322/postgres
+```
+
+Create a `.env.local` file (never committed — already in `.gitignore`) and point the app at local:
+
+```env
+VITE_SUPABASE_URL=http://127.0.0.1:54321
+VITE_SUPABASE_PUBLISHABLE_KEY=<local anon key from above>
+VITE_SUPABASE_PROJECT_ID=local
+```
+
+Run `npm run dev` — the app now talks to your local Supabase. `.env` (pointing at Lovable Cloud) is untouched and still works when you `npm run dev` without the `.env.local` override.
+
+### 3.5.2 Apply the schema to local staging
+
+```bash
+supabase db reset   # applies all 29 migrations in supabase/migrations/ to local DB
+```
+
+This is a complete dry run of Phase 4. If it fails, you find out now.
+
+### 3.5.3 Replace the Lovable OAuth wrapper (safe code change)
+
+This is the most important frontend code change (see §7.4 for full details). You can write and test it locally now:
+
+1. In `src/pages/Auth.tsx`, the Google sign-in button calls `lovable.auth.signInWithOAuth("google", ...)`. Replace that with `supabase.auth.signInWithOAuth(...)` directly.
+2. Test sign-in against your local Supabase (you'll need to configure Google OAuth locally or use email OTP for the test).
+3. Once satisfied, keep the change on a feature branch — it merges into `main` at cutover time.
+
+### 3.5.4 Rewrite the two AI edge functions
+
+See §11.1 for full details. Do the Gemini rewrite locally and test against `supabase functions serve`:
+
+```bash
+supabase functions serve analyze-photo --env-file .env.local
+```
+
+Verify the function returns a valid response before cutover.
+
+### 3.5.5 Rotate keys and remove `.env` from git tracking
+
+The current `.env` file is committed to the repo, meaning the Lovable Cloud anon key is in git history.
+
+```bash
+# 1. Remove from git tracking (the file stays on disk)
+git rm --cached .env
+echo ".env" >> .gitignore
+git commit -m "stop tracking .env"
+
+# 2. Create .env.example so future devs know what's needed
+cp .env .env.example
+# Edit .env.example — replace actual values with placeholder strings
+git add .env.example && git commit -m "add .env.example"
+
+# 3. Rotate the Lovable Cloud anon key
+# In Lovable → Cloud → Database → API → Rotate anon key
+# This invalidates the key that's now in git history.
+# Update your local .env with the new key.
+```
+
+> The self-hosted anon key is generated fresh from your new `JWT_SECRET` in §6.1, so it's never in git.
+
+### 3.5.6 Add Dockerfile + nginx.conf (inert until deployed)
+
+Create these files now (Phase 8 details) — they are just static files in the repo, they don't affect Lovable's build or the running app.
+
+### 3.5.7 Test a schema + data dump (read-only, safe to run any time)
+
+```bash
+export OLD_DB_URL="postgresql://postgres.xxxxx:PASSWORD@aws-0-us-east-1.pooler.supabase.com:5432/postgres"
+pg_dump "$OLD_DB_URL" --schema=public --schema=storage --no-owner --no-privileges --schema-only > /tmp/test-schema.sql
+```
+
+Just dumps and throws away. Lets you confirm the connection string works and the dump is clean.
+
+### 3.5.8 Pre-register the new Google OAuth redirect URI
+
+You don't need the VPS to do this. In Google Cloud Console → APIs & Services → Credentials → your OAuth 2.0 Client:
+
+Add the redirect URI you'll use:
+```
+https://api.compshop.example.com/auth/v1/callback
+```
+
+Google credentials can have multiple redirect URIs — the old one stays, the new one is just added. Zero impact on the live app.
+
+### 3.5.9 Verify Brevo SMTP sender domain
+
+In Brevo → Senders & IPs → Domains: confirm your sender domain is authenticated with SPF + DKIM. Self-hosted GoTrue will send email from this domain. Any deliverability issues are better found now than at 2 AM during cutover.
+
+### Summary: what you can do before the server arrives
+
+| Task | Safe to do now? |
+|---|---|
+| Run local Supabase (`supabase start`) | ✅ Yes |
+| Test all 29 migrations locally | ✅ Yes |
+| Write + test Lovable OAuth replacement | ✅ Yes (feature branch) |
+| Rewrite + test Gemini edge functions | ✅ Yes (local) |
+| Remove `.env` from git + rotate keys | ✅ Yes (should do immediately) |
+| Add Dockerfile + nginx.conf | ✅ Yes (inert files) |
+| Test schema dump from Lovable Cloud | ✅ Yes (read-only) |
+| Add Google OAuth redirect URI | ✅ Yes (additive) |
+| Verify Brevo SMTP domain auth | ✅ Yes |
+| Provision VPS + Coolify | ❌ Needs server |
+| Deploy self-hosted Supabase | ❌ Needs server |
+| Migrate storage files | ❌ Needs server running |
+| DNS cutover | ❌ Needs server running |
 
 ---
 
@@ -189,6 +327,13 @@ You need **two hostnames** pointing at your VPS:
 
 **Why API must be DNS-only:** Cloudflare's free tier limits uploads to 100 MB and breaks Supabase Realtime websockets unreliably. We bypass it for the API and use Coolify's built-in Let's Encrypt instead.
 
+**Cloudflare proxy + Let's Encrypt chicken-and-egg for the frontend hostname:** When the orange cloud is on, Cloudflare terminates TLS before requests reach your VPS — so Coolify's built-in Let's Encrypt HTTP-01 challenge never reaches the origin. You have two options; pick one before deploying the frontend in §12.3:
+
+- **Option A (simpler):** Temporarily turn off the Cloudflare proxy for `app.compshop.example.com`, let Coolify issue the Let's Encrypt cert (takes ~60s), then turn the proxy back on and set SSL/TLS mode to **Full (strict)** in Cloudflare.
+- **Option B (preferred long-term):** Skip Coolify's cert issuance for this hostname. In Cloudflare → SSL/TLS → Origin Server, issue a **Cloudflare Origin Certificate** (free, 15-year). Download the cert + key, paste them into Coolify → `compshop-web` → **Custom SSL**. Leave the orange cloud on permanently.
+
+Either way, `api.compshop.example.com` stays DNS-only (grey cloud) and Coolify issues its Let's Encrypt cert normally.
+
 ### 5.1 Create A records
 
 In Cloudflare (or your DNS provider):
@@ -236,26 +381,43 @@ You'll also need to derive an **anon key** and a **service role key** from the J
 1. **Projects → New Project → name it `compshop`.**
 2. Inside the project: **New Resource → Docker Compose Empty.**
 3. Name it `compshop-supabase`.
-4. In the "Docker Compose" editor, paste the official Supabase compose file from <https://github.com/supabase/supabase/blob/master/docker/docker-compose.yml>.
+4. In the "Docker Compose" editor, paste the official Supabase compose file. **Pin to a specific release tag** — pulling `master` gives you whatever is current that day and breaking changes are real.
 
-   The fastest way: clone it locally, copy the contents:
    ```bash
-   git clone --depth 1 https://github.com/supabase/supabase.git /tmp/sb
+   # Check https://github.com/supabase/supabase/releases for the latest stable tag, e.g. v1.24.05
+   SUPABASE_TAG=v1.24.05
+   git clone --depth 1 --branch "$SUPABASE_TAG" https://github.com/supabase/supabase.git /tmp/sb
    cat /tmp/sb/docker/docker-compose.yml
    ```
-   Paste the entire file into Coolify's compose editor.
+   Paste the entire file into Coolify's compose editor. Record the tag you used somewhere visible (e.g. a comment at the top of the compose file) so future updates are deliberate.
 
-5. Also copy `/tmp/sb/docker/volumes/` to the VPS so the init scripts and Kong config are available. The simplest method:
+5. Copy `/tmp/sb/docker/volumes/` to the VPS so init scripts and the Kong config are present:
 
    ```bash
    # On the VPS
    mkdir -p /data/coolify/supabase
    cd /data/coolify/supabase
-   git clone --depth 1 https://github.com/supabase/supabase.git
+   git clone --depth 1 --branch "$SUPABASE_TAG" https://github.com/supabase/supabase.git
    cp -r supabase/docker/volumes ./volumes
    ```
 
    Then in the Coolify compose file, change every `./volumes/...` path to `/data/coolify/supabase/volumes/...` (find-and-replace).
+
+6. **Update `kong.yml` with your own anon/service-role JWTs.** This is the most commonly missed step — Kong validates incoming request keys against its own consumer list, which is hardcoded in `volumes/api/kong.yml`. The file you cloned contains Supabase's example placeholder JWTs; Kong will reject every request until you replace them with yours.
+
+   Open `/data/coolify/supabase/volumes/api/kong.yml` on the VPS and find the two consumer blocks (they look like `keyauth_credentials` entries). Replace the `key:` values:
+
+   ```yaml
+   # In kong.yml — find both of these blocks and update their key values:
+   keyauth_credentials:
+     - consumer: anon
+       key: <paste your ANON_KEY from step 6.1>
+   keyauth_credentials:
+     - consumer: service_role
+       key: <paste your SERVICE_ROLE_KEY from step 6.1>
+   ```
+
+   Do this **after** generating your JWT secret in 6.1 and **before** clicking Deploy.
 
 ### 6.3 Configure environment variables in Coolify
 
@@ -330,7 +492,10 @@ STUDIO_PORT=3000
 ############
 # Functions (we'll deploy our 5 functions here)
 ############
-FUNCTIONS_VERIFY_JWT=false           # we verify JWT manually inside each function
+# Do NOT set FUNCTIONS_VERIFY_JWT=false globally — only 3 of 5 functions have
+# verify_jwt = false in supabase/config.toml. The other two (send-invite-email,
+# nearby-stores) rely on gateway-level JWT enforcement. Per-function overrides
+# are applied at deploy time via supabase/config.toml, not via a global env var.
 
 ############
 # Edge function secrets (custom — used by our code)
@@ -385,6 +550,67 @@ Studio → Authentication → Email Templates. Adjust the "Invite user", "Confir
 
 The `public.is_email_invited(_email text)` SQL function (already in your codebase) gates new signups. After Phase 4, this comes over for free. No GoTrue change needed.
 
+### 7.4 Replace the Lovable OAuth wrapper in the frontend
+
+> **This is a required code change.** The app currently calls `lovable.auth.signInWithOAuth("google", ...)` in `src/pages/Auth.tsx:32`, which routes through `@lovable.dev/cloud-auth-js` and Lovable's OAuth gateway. On self-hosted Supabase, Lovable's gateway has no knowledge of your GoTrue instance and the token exchange will fail silently. Replace it before cutover.
+
+**Step 1 — Update `src/pages/Auth.tsx`**
+
+Find the Google sign-in call (around line 32) and replace:
+
+```ts
+// Old — goes through Lovable's gateway
+const { error } = await lovable.auth.signInWithOAuth("google", {
+  redirect_uri: `${window.location.origin}/auth/callback`,
+});
+```
+
+With direct Supabase OAuth:
+
+```ts
+// New — goes directly to your GoTrue instance
+const { error } = await supabase.auth.signInWithOAuth({
+  provider: "google",
+  options: {
+    redirectTo: `${window.location.origin}/auth/callback`,
+  },
+});
+```
+
+Import `supabase` from `@/integrations/supabase/client` if it isn't already imported.
+
+**Step 2 — Remove the Lovable wrapper files**
+
+```bash
+# Remove the integration file (it called createLovableAuth)
+rm src/integrations/lovable/index.ts
+
+# Remove the npm package
+npm uninstall @lovable.dev/cloud-auth-js
+```
+
+**Step 3 — Remove the `lovable-tagger` dev dependency**
+
+This Vite plugin is harmless but is only useful when working inside the Lovable IDE:
+
+```bash
+npm uninstall --save-dev lovable-tagger
+```
+
+In `vite.config.ts`, remove the `componentTagger()` plugin import and call.
+
+**Step 4 — Verify locally**
+
+With `supabase start` running and `.env.local` pointing at `http://127.0.0.1:54321`:
+
+```bash
+npm run dev
+```
+
+Google sign-in will redirect through `http://127.0.0.1:54321/auth/v1/authorize?provider=google`. Confirm the redirect happens and the callback URL lands back in the app.
+
+> You can do all of this on a feature branch (`git checkout -b replace-lovable-auth`) before the server exists. Merge into `main` at the same time as the DNS cutover.
+
 ---
 
 ## 8. Phase 4 — Migrate the database schema
@@ -409,6 +635,16 @@ pg_dump "$OLD_DB_URL" \
 ```
 
 > ⚠️ **Do not** dump the `auth`, `realtime`, `supabase_functions`, `vault`, or `extensions` schemas. They are managed by Supabase itself and dumping them will break the new instance.
+
+**Before applying the schema, ensure required extensions exist on the new DB.** The `public` schema references extensions like `uuid-ossp`, `pgcrypto`, `pg_graphql`, `pgjwt`, and `pg_net`. Self-hosted Supabase pre-installs most of these, but verify:
+
+```bash
+psql "$NEW_DB_URL" -c "\dx"
+# Confirm uuid-ossp, pgcrypto, pg_graphql, pgjwt, pg_net are listed
+# If any are missing:
+psql "$NEW_DB_URL" -c "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";"
+psql "$NEW_DB_URL" -c "CREATE EXTENSION IF NOT EXISTS pgcrypto;"
+```
 
 ### 8.2 Apply schema to the new self-hosted DB
 
@@ -449,6 +685,8 @@ psql "$NEW_DB_URL" -c "SELECT enumlabel FROM pg_enum e JOIN pg_type t ON e.enumt
 
 ## 9. Phase 5 — Migrate the data
 
+> **Maintenance window required.** Between the schema dump (Phase 4) and this data dump, users can still write to the old Lovable Cloud DB. Any rows written in that window will be missing from the new instance. Either: (a) schedule this phase immediately after Phase 4 during a low-traffic window (e.g. 02:00 HKT on a weekday), or (b) temporarily put the old app in maintenance mode by setting `DISABLE_SIGNUP=true` and removing the app URL from your DNS (or pointing it at a static "maintenance" page) for the duration of the dump + restore. A few minutes of planned downtime is far better than silent data loss.
+
 ### 9.1 Dump data from old DB
 
 ```bash
@@ -463,13 +701,14 @@ pg_dump "$OLD_DB_URL" \
 
 ### 9.2 Dump auth users
 
-Auth users live in the `auth` schema and need special handling because GoTrue manages this schema. Use Supabase's documented approach:
+Auth users live in the `auth` schema and need special handling because GoTrue manages this schema. **Include `--disable-triggers`** — without it, the `handle_new_user` trigger fires on each imported user row and tries to insert into `public.profiles`, causing primary-key conflicts when the profiles data is loaded in 9.3.
 
 ```bash
 pg_dump "$OLD_DB_URL" \
   --table=auth.users \
   --table=auth.identities \
   --data-only \
+  --disable-triggers \
   --no-owner \
   --no-privileges \
   --column-inserts \
@@ -478,12 +717,20 @@ pg_dump "$OLD_DB_URL" \
 
 ### 9.3 Restore
 
+Load in the correct order with trigger suppression:
+
 ```bash
-# Auth first
+# Disable triggers session-wide to prevent FK and trigger conflicts during load
+psql "$NEW_DB_URL" -c "SET session_replication_role = replica;"
+
+# Auth first (users must exist before profiles FK is satisfied)
 psql "$NEW_DB_URL" < /tmp/compshop-auth.sql
 
 # Then app data
 psql "$NEW_DB_URL" < /tmp/compshop-data.sql
+
+# Re-enable triggers
+psql "$NEW_DB_URL" -c "SET session_replication_role = DEFAULT;"
 ```
 
 ### 9.4 Verify counts match
@@ -504,6 +751,53 @@ UNION ALL SELECT 'auth.users', count(*) FROM auth.users;
 
 Numbers must match exactly. If they don't — stop, investigate, do not proceed.
 
+### 9.5 Reset sequences
+
+`pg_dump --data-only` with `--disable-triggers` can leave sequences out of sync, causing `nextval` to return IDs that already exist. Run this on the new DB after the load:
+
+```bash
+psql "$NEW_DB_URL" << 'SQL'
+SELECT setval(
+  pg_get_serial_sequence(quote_ident(table_name), column_name),
+  COALESCE((SELECT MAX(id) FROM photos), 1)  -- repeat for each table
+) FROM information_schema.columns
+WHERE table_schema = 'public'
+  AND column_default LIKE 'nextval%';
+SQL
+```
+
+Or more precisely, run the following for each table that has an `id` serial/bigserial column:
+
+```sql
+SELECT setval(pg_get_serial_sequence('public.photos', 'id'),          COALESCE(MAX(id), 1)) FROM public.photos;
+SELECT setval(pg_get_serial_sequence('public.comments', 'id'),        COALESCE(MAX(id), 1)) FROM public.comments;
+SELECT setval(pg_get_serial_sequence('public.shopping_trips', 'id'),  COALESCE(MAX(id), 1)) FROM public.shopping_trips;
+SELECT setval(pg_get_serial_sequence('public.china_trips', 'id'),     COALESCE(MAX(id), 1)) FROM public.china_trips;
+-- add any other tables with integer primary keys
+```
+
+### 9.6 Restore the Realtime publication
+
+Self-hosted Supabase creates an empty `supabase_realtime` publication at init. The schema dump does not include publication membership. Without this step, realtime channels will subscribe successfully but receive no events.
+
+```sql
+-- Run on new DB
+ALTER PUBLICATION supabase_realtime ADD TABLE
+  public.photos,
+  public.comments,
+  public.shopping_trips,
+  public.china_trips,
+  public.china_trip_members,
+  public.trip_members,
+  public.photo_comments;
+```
+
+Verify:
+
+```bash
+psql "$NEW_DB_URL" -c "SELECT tablename FROM pg_publication_tables WHERE pubname = 'supabase_realtime';"
+```
+
 ---
 
 ## 10. Phase 6 — Migrate Storage buckets & files
@@ -521,28 +815,40 @@ Using Studio (Storage → New bucket), create both with **identical names and pu
 
 ### 10.2 Copy files
 
-The cleanest approach is the **Supabase CLI's storage commands** (added in CLI v1.150+):
+Use **rclone** against the S3-compatible endpoint that both Supabase Cloud and self-hosted Supabase expose. The Supabase CLI's `storage download/upload` subcommands are not available in stable CLI releases — rclone is the reliable path.
+
+**Install rclone:**
 
 ```bash
-# Auth against OLD project
-supabase login
-supabase link --project-ref <OLD_PROJECT_REF>
-
-# Pull all files locally
-supabase storage download "ss:///photos/" --recursive ./photos-backup
-supabase storage download "ss:///retailer-logos/" --recursive ./logos-backup
+brew install rclone    # macOS
+# or: curl https://rclone.org/install.sh | sudo bash
 ```
 
-Then point the CLI at your new instance and upload:
+**Configure two rclone remotes** (run `rclone config` and follow the prompts for each, using the S3 provider):
+
+| Remote name | Endpoint | Access key | Secret key |
+|---|---|---|---|
+| `sb-old` | `https://aqbyrzknbhyshjzlfsyv.supabase.co/storage/v1/s3` | `<project anon key>` | `<service role key>` (from Lovable Cloud dashboard) |
+| `sb-new` | `https://api.compshop.example.com/storage/v1/s3` | `<new anon key>` | `<new service role key>` |
+
+Or configure via flags directly (no interactive prompt):
 
 ```bash
-# Use the new instance's URL + service role key
-export SUPABASE_URL=https://api.compshop.example.com
-export SUPABASE_SERVICE_ROLE_KEY=<your service role key>
+# Download from old
+rclone copy "sb-old:photos"         ./photos-backup   --progress
+rclone copy "sb-old:retailer-logos" ./logos-backup    --progress
 
-# Upload
-supabase storage upload "ss:///photos/" ./photos-backup --recursive
-supabase storage upload "ss:///retailer-logos/" ./logos-backup --recursive
+# Upload to new
+rclone copy ./photos-backup   "sb-new:photos"         --progress
+rclone copy ./logos-backup    "sb-new:retailer-logos" --progress
+```
+
+**Verify file counts match:**
+
+```bash
+rclone size "sb-old:photos"
+rclone size "sb-new:photos"
+# Object count and total size should match exactly
 ```
 
 ### 10.3 Verify
@@ -594,22 +900,39 @@ Adjust JSON parsing accordingly (`data.candidates[0].content.parts[0].text`).
 
 ### 11.2 Deploy the functions
 
-From your laptop, with the Supabase CLI pointed at the **new** instance:
+`supabase functions deploy --project-ref local` targets Supabase Cloud, not a self-hosted instance. For self-hosted, the `functions` container loads from a mounted volume on the host. Deploy by copying the function files directly into that volume and restarting the container.
 
 ```bash
-# Set CLI to talk to your self-hosted instance
-export SUPABASE_URL=https://api.compshop.example.com
-export SUPABASE_SERVICE_ROLE_KEY=<service role key>
+# On the VPS — copy all five functions into the mounted volume
+FUNCTIONS_DIR=/data/coolify/supabase/volumes/functions
 
-# Deploy each function
-supabase functions deploy analyze-photo --project-ref local
-supabase functions deploy parse-teams-conversation --project-ref local
-supabase functions deploy nearby-stores --project-ref local
-supabase functions deploy reverse-geocode --project-ref local
-supabase functions deploy send-invite-email --project-ref local
+for fn in analyze-photo parse-teams-conversation nearby-stores reverse-geocode send-invite-email; do
+  mkdir -p "$FUNCTIONS_DIR/$fn"
+  # Copy from wherever you've placed the repo on the VPS, or rsync from laptop:
+done
 ```
 
-> Self-hosted Supabase's `functions` service auto-loads functions from `/home/deno/functions/<name>/index.ts` inside the container. The CLI handles the upload over the management API.
+From your **laptop**, rsync the functions directory to the VPS:
+
+```bash
+rsync -avz --delete supabase/functions/ root@YOUR_VPS_IP:/data/coolify/supabase/volumes/functions/
+```
+
+Then restart the `functions` container to pick up the changes:
+
+```bash
+# On the VPS
+cd /data/coolify/supabase
+docker compose restart functions
+```
+
+Verify the container came back up cleanly:
+
+```bash
+docker compose logs functions --tail=20
+```
+
+For subsequent function updates, re-run the `rsync` + `docker compose restart functions`. Consider adding this as a Coolify post-deploy hook so it runs automatically on every `main` push.
 
 ### 11.3 Set per-function secrets
 
@@ -634,7 +957,8 @@ Create `Dockerfile` at repo root:
 # Build stage
 FROM node:20-alpine AS build
 WORKDIR /app
-COPY package.json bun.lockb ./
+# Repo uses bun.lock (new text format), not the legacy binary bun.lockb
+COPY package.json bun.lock ./
 RUN npm install -g bun && bun install --frozen-lockfile
 COPY . .
 ARG VITE_SUPABASE_URL
@@ -684,14 +1008,19 @@ server: {
 },
 ```
 
-(Only matters if you're shipping the iOS/Android app build. The web app ignores this.)
+> **Changing `capacitor.config.ts` alone does nothing for users who already have the app installed.** The URL is baked into the native binary at build time. After this change you must:
+> 1. Bump the version in `package.json` and `capacitor.config.ts` (or iOS `Info.plist` / Android `build.gradle`).
+> 2. Rebuild the iOS and Android binaries (`npx cap build ios`, `npx cap build android`).
+> 3. Submit to App Store Connect and Google Play for review.
+>
+> Plan for **1–3 days** for App Store review. Until users update the app, their installed version will still point at the old Lovable Cloud URL — so keep the Lovable Cloud subscription active until you're confident the user base has updated. The web app (`app.compshop.example.com`) is unaffected by this.
 
 ### 12.3 Create the frontend app in Coolify
 
 1. **Projects → compshop → New Resource → Application → Public Repository** (or **GitHub App** if you connected it in 4.4).
 2. Repo: your CompShop repo. Branch: `main`. Build pack: **Dockerfile**.
-3. **Domains:** `https://app.compshop.example.com`. Coolify issues the cert.
-4. **Build-time environment variables** (these get baked into the static bundle by Vite):
+3. **Domains:** `https://app.compshop.example.com`. Coolify issues the cert. ⚠️ **See §5 for the Cloudflare proxy + Let's Encrypt issue before clicking Deploy** — if the orange cloud is on, cert issuance will fail silently.
+4. **Build-time environment variables** — in Coolify, set these as **Build Variables** (not Runtime Variables). Vite reads them at compile time; they must be baked into the static bundle:
    ```
    VITE_SUPABASE_URL=https://api.compshop.example.com
    VITE_SUPABASE_PUBLISHABLE_KEY=<ANON_KEY from 6.1>
@@ -715,6 +1044,10 @@ You have two options:
 - **Soft cutover:** keep both stacks running for a week. New users hit `app-new.compshop.example.com`. Validate, then swap.
 
 Recommend **soft cutover** for a week.
+
+**Before cutting over, communicate to users:** The app uses IndexedDB for offline sync. Any user with unsynced offline changes at the moment of cutover will have data pointing at the old backend. In the week before cutover, consider showing a short banner: *"We're moving servers soon — please make sure you're online and synced."*
+
+**Stale `localStorage` sessions:** Supabase stores auth tokens in `localStorage` keyed by the old project URL. When users first hit the new app URL, their stored session won't validate against the new JWT secret and they'll be bounced to `/auth`. This is expected and harmless. Add it to your user communication: *"You'll need to sign in once after the move."* Verify this behavior is graceful in the smoke test (§13.2 — the "no cookies" item covers it for fresh browsers; also test with an existing logged-in session).
 
 ### 13.2 Smoke test checklist
 
@@ -782,7 +1115,19 @@ Add a **daily** Postgres backup via Coolify's built-in backup feature:
 - **Coolify:** auto-updates by default; you can disable in settings.
 - **Frontend:** auto-deploys on every push.
 
-### 14.5 Migration workflow going forward
+### 14.5 Service role key scope
+
+`SERVICE_ROLE_KEY` is currently set as a stack-wide env var on `compshop-supabase`, which means every edge function container can read it and bypass RLS entirely. Audit which functions actually need it:
+
+- `send-invite-email` — needs it (inserts into `invitations` table on behalf of admin)
+- `analyze-photo` — only calls Gemini; **does not need it**
+- `parse-teams-conversation` — only calls Gemini; **does not need it**
+- `nearby-stores` — only calls Google Maps; **does not need it**
+- `reverse-geocode` — only calls Google Maps; **does not need it**
+
+For the three that don't need it, refactor them to use the `SUPABASE_ANON_KEY` (or no Supabase calls at all). This limits blast radius if a function is ever exploited. After refactoring, leave `SERVICE_ROLE_KEY` in the env for the `send-invite-email` function only — which still works because it's a container-wide env — but at least document clearly which functions use it.
+
+### 14.6 Migration workflow going forward
 
 To add a new DB migration:
 
@@ -800,7 +1145,9 @@ Lovable can still help you write the SQL — just paste the file into Lovable's 
 ## 15. Troubleshooting
 
 ### "Invalid JWT" on every API call
-Your frontend's `VITE_SUPABASE_PUBLISHABLE_KEY` doesn't match the `ANON_KEY` env var on the Supabase stack. They must be derived from the **same** `JWT_SECRET`. Regenerate both.
+Two possible causes — check both:
+1. Your frontend's `VITE_SUPABASE_PUBLISHABLE_KEY` doesn't match the `ANON_KEY` env var on the Supabase stack. They must be derived from the **same** `JWT_SECRET`. Regenerate both.
+2. You forgot to update `kong.yml` with your new anon/service-role JWTs (§6.2 step 6). Kong is still validating against the Supabase example placeholder keys. Edit the file and `docker compose restart kong`.
 
 ### Email signup works but no email arrives
 Check Brevo → Transactional → Logs. If Brevo never received the request, your SMTP env vars in 6.3 are wrong. If Brevo received it but rejected: check sender domain authentication (SPF/DKIM).
@@ -839,19 +1186,26 @@ Keep the Lovable Cloud subscription active for at least 30 days after cutover as
 
 Files added/modified by this migration:
 
-- `Dockerfile` — new (Phase 8.1)
-- `nginx.conf` — new (Phase 8.1)
+- `Dockerfile` — new (§12.1)
+- `nginx.conf` — new (§12.1)
 - `selfhost.md` — this file
-- `capacitor.config.ts` — modified (Phase 8.2)
-- `supabase/functions/analyze-photo/index.ts` — modified (Phase 7.1)
-- `supabase/functions/parse-teams-conversation/index.ts` — modified (Phase 7.1)
+- `CLAUDE.md` — new (pointer to this runbook for AI sessions)
+- `.env.example` — new (§3.5.5)
+- `.gitignore` — modified (add `.env` entry, §3.5.5)
+- `capacitor.config.ts` — modified (§12.2); requires native rebuild + app store resubmission
+- `vite.config.ts` — modified (remove `componentTagger()` plugin, §7.4)
+- `src/pages/Auth.tsx` — modified (replace Lovable OAuth with direct Supabase OAuth, §7.4)
+- `src/integrations/lovable/index.ts` — **deleted** (§7.4)
+- `package.json` — modified (remove `@lovable.dev/cloud-auth-js` + `lovable-tagger`, §7.4)
+- `supabase/functions/analyze-photo/index.ts` — modified (Gemini direct, §11.1)
+- `supabase/functions/parse-teams-conversation/index.ts` — modified (Gemini direct, §11.1)
 - `README.md` — recommend adding a "Self-hosted deployment" section linking here
 
 Files NOT touched:
 - `src/integrations/supabase/client.ts` — reads from `import.meta.env`, no code change needed
 - `src/integrations/supabase/types.ts` — schema didn't change, types still valid
 - All RLS policies, helper functions, enums — migrated as-is
-- All React components — agnostic to where Supabase lives
+- All other React components — agnostic to where Supabase lives
 
 ---
 
