@@ -64,6 +64,15 @@ Deno.serve(async (req) => {
       if (!aiKey) throw new Error("LOVABLE_API_KEY is not configured");
     }
 
+    // Read model from app_settings (admin-configurable), fall back to env var.
+    let model = DEFAULT_MODEL;
+    const { data: settingRow } = await supabaseClient
+      .from("app_settings")
+      .select("value")
+      .eq("key", "ai_model")
+      .maybeSingle();
+    if (settingRow?.value) model = settingRow.value;
+
     const { imageBase64, mimeType, categories } = await req.json();
     if (!imageBase64) throw new Error("No image provided");
 
@@ -79,7 +88,7 @@ Deno.serve(async (req) => {
         ...extraHeaders,
       },
       body: JSON.stringify({
-        model: DEFAULT_MODEL,
+        model,
         messages: [
           {
             role: "user",

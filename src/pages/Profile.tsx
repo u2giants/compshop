@@ -15,6 +15,7 @@ import CountryManager from "@/components/admin/CountryManager";
 import ImageTypeManager from "@/components/admin/ImageTypeManager";
 import CategoryManager from "@/components/admin/CategoryManager";
 import DefaultModeManager from "@/components/admin/DefaultModeManager";
+import AiModelManager from "@/components/admin/AiModelManager";
 import StorageQuotaManager from "@/components/settings/StorageQuotaManager";
 import BulkCacheManager from "@/components/settings/BulkCacheManager";
 import UserPermissionsManager from "@/components/admin/UserPermissionsManager";
@@ -128,6 +129,7 @@ export default function Profile() {
           <ImageTypeManager />
           <CategoryManager />
           <DefaultModeManager />
+          <AiModelManager />
           <UserPermissionsManager />
         </div>
       )}
