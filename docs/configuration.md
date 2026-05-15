@@ -76,6 +76,24 @@ keys do not match, all authenticated requests will return 401.
 
 The redirect URI must match exactly what is registered in the Google Cloud Console.
 
+### Authentik SSO ("Sign in with Microsoft")
+
+The "Sign in with Microsoft" button on the login page routes through Authentik (self-hosted identity provider at `auth.designflow.app`), not directly to Azure AD. Authentik acts as an OIDC broker — it handles Microsoft 365 SSO, Google OAuth, Active Directory LDAP, and local accounts, then presents a single OIDC endpoint to Supabase.
+
+| Variable | Notes |
+|----------|-------|
+| `GOTRUE_EXTERNAL_OPENIDCONNECT_ENABLED` | `true` |
+| `GOTRUE_EXTERNAL_OPENIDCONNECT_CLIENT_ID` | OAuth2 client ID from Authentik → CompShop provider |
+| `GOTRUE_EXTERNAL_OPENIDCONNECT_SECRET` | Client secret from same provider |
+| `GOTRUE_EXTERNAL_OPENIDCONNECT_REDIRECT_URI` | `https://api.comp.designflow.app/auth/v1/callback` |
+| `GOTRUE_EXTERNAL_OPENIDCONNECT_URL` | `https://auth.designflow.app/application/o/compshop/` |
+
+**Critical Authentik-side requirements** (must be set on every OAuth2 provider in Authentik, or SSO returns `insufficient_scope`):
+- Property mappings: `openid`, `email`, `profile` scope mappings must all be attached
+- Signing key: must be set (use "authentik Internal JWT Certificate")
+
+See `docs/authentik.md` for full Authentik configuration details.
+
 ### SMTP (Brevo)
 
 | Variable | Notes |

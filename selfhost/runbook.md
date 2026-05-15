@@ -167,7 +167,49 @@ Numbers should match the source counts that script `02-export-data.sh` printed.
 
 ---
 
-## Phase 5 — Configure Google OAuth (10 min)
+## Phase 5 — Configure Authentik SSO (15 min)
+
+Authentik is the identity provider that sits in front of all apps. The "Sign in with Microsoft" button on the CompShop login page routes through Authentik, not directly to Azure AD.
+
+### 5a. Create the CompShop OAuth2 provider in Authentik
+
+1. Log in to Authentik admin at `https://auth.designflow.app/if/admin/`
+2. **Applications → Providers → Create → OAuth2/OpenID Provider**
+3. Fill in:
+   - Name: `CompShop`
+   - Authorization flow: `default-provider-authorization-implicit-consent`
+   - Redirect URI: `https://api.comp.designflow.app/auth/v1/callback`
+4. **Critical — before saving**, set:
+   - **Signing Key**: `authentik Internal JWT Certificate`
+   - **Property Mappings**: select `openid`, `email`, and `profile` (all three required — missing any causes `insufficient_scope` error)
+5. Save. Copy the **Client ID** and **Client Secret** — you'll need them for Coolify env vars.
+
+### 5b. Create the Application
+
+1. **Applications → Applications → Create**
+2. Name: `CompShop`, Slug: `compshop`
+3. Provider: select the provider you just created
+4. Save
+
+### 5c. Add env vars to Coolify
+
+In Coolify → compshop resource → Environment Variables, add:
+
+```
+GOTRUE_EXTERNAL_OPENIDCONNECT_ENABLED=true
+GOTRUE_EXTERNAL_OPENIDCONNECT_CLIENT_ID=<client id from 5a>
+GOTRUE_EXTERNAL_OPENIDCONNECT_SECRET=<client secret from 5a>
+GOTRUE_EXTERNAL_OPENIDCONNECT_REDIRECT_URI=https://api.comp.designflow.app/auth/v1/callback
+GOTRUE_EXTERNAL_OPENIDCONNECT_URL=https://auth.designflow.app/application/o/compshop/
+```
+
+Redeploy the Supabase stack after saving.
+
+> **Every app** that uses Authentik SSO needs its own OAuth2 provider + application pair in Authentik, each with the same signing key and scope mappings. See `docs/authentik.md` for LDAP and other Authentik configuration.
+
+---
+
+## Phase 6 — Configure Google OAuth (10 min)
 
 1. https://console.cloud.google.com/apis/credentials → click your OAuth 2.0 Client ID
 2. **Authorized JavaScript origins** — ADD (don't remove existing ones):
