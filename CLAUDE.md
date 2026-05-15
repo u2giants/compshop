@@ -12,8 +12,8 @@ CompShop is a React + TypeScript PWA for managing wholesale shopping trips in Ch
 | `src/integrations/supabase/types.ts` | Auto-generated DB types from schema |
 | `src/contexts/AuthContext.tsx` | Auth state management |
 | `src/pages/Auth.tsx` | Sign-in page — three login paths: (1) "Sign in with Microsoft" → Authentik OIDC (`openidconnect` provider) → brokers M365/AD/local; (2) "Sign in with Google" → Google OAuth direct; (3) email/password |
-| `supabase/migrations/` | 29 SQL migrations defining the full schema |
-| `supabase/functions/` | 5 Deno edge functions |
+| `supabase/migrations/` | 30 SQL migrations defining the full schema |
+| `supabase/functions/` | 7 Deno edge functions |
 | `selfhost.md` | **Complete runbook for migrating off Lovable Cloud → self-hosted Coolify VPS** |
 
 ## Current deployment status

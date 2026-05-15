@@ -128,7 +128,7 @@ Seven Deno functions in `supabase/functions/`:
 
 ## Database
 
-Postgres 15 with 35 migrations (2026-02-12 to 2026-04-23). Key tables: `shopping_trips`,
+Postgres 15 with 30 migrations (2026-02-12 to 2026-05-13). Key tables: `shopping_trips`,
 `photos`, `china_trips`, `china_photos`, `factories`, `comments`, `profiles`, `user_roles`,
 `invitations`.
 

@@ -37,7 +37,7 @@ explanations is in `selfhost/.env.example`. Key groups:
 | `API_EXTERNAL_URL` | `https://api.comp.designflow.app` |
 | `SUPABASE_PUBLIC_URL` | `https://api.comp.designflow.app` |
 | `SITE_URL` | `https://comp.designflow.app` |
-| `ADDITIONAL_REDIRECT_URLS` | `https://comp-staging.designflow.app,http://localhost:5173` |
+| `ADDITIONAL_REDIRECT_URLS` | `https://comp-staging.designflow.app,http://localhost:8080` |
 
 `SITE_URL` is GoTRUE's primary allowed redirect after auth. `ADDITIONAL_REDIRECT_URLS` is
 a comma-separated list of additional allowed origins — **must include** localhost for local

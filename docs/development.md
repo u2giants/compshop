@@ -9,7 +9,7 @@
 
 ```bash
 npm install
-npm run dev        # Vite dev server at http://localhost:5173
+npm run dev        # Vite dev server at http://localhost:8080
 ```
 
 The root `.env` points to the Lovable Cloud Supabase project and works out of the box for
@@ -70,9 +70,11 @@ database enforces actual access control.
 
 ## Offline / IndexedDB
 
-`src/lib/offline-db.ts` manages a versioned IndexedDB schema (v2). Stores:
+`src/lib/offline-db.ts` manages a versioned IndexedDB schema (v3). Stores:
 `trips`, `photos`, `china_trips`, `china_photos`, `signed_urls`, `sync_meta`,
-`image_blobs`, `pending_uploads`.
+`image_blobs`, `pending_uploads`, `pending_trips`, `pending_china_trips`.
+
+`startSyncService()` from `src/lib/sync-service.ts` is called unconditionally at app startup (`src/main.tsx`) — it sets up background Supabase → IndexedDB sync before the React tree mounts.
 
 The stale-while-revalidate pattern: pages read from IndexedDB first (zero latency), then
 fetch from Supabase and update the store. A `sync_meta` entry per resource prevents
@@ -98,8 +100,9 @@ This requires the Supabase CLI and uses the Lovable Cloud project for auth conte
 ## Mobile (Capacitor)
 
 `capacitor.config.ts` wraps the Vite app for iOS/Android. Run `npm run build` first, then
-use the Capacitor CLI to sync and run on a device. The server URL in the Capacitor config
-should point to the production frontend for release builds.
+use the Capacitor CLI to sync and run on a device.
+
+**Known state:** `capacitor.config.ts` currently points `server.url` to the Lovable Cloud project URL (`6054c773-88f0-46d6-aed8-439b0531b157.lovableproject.com`). This was left from the Lovable Cloud era and has not been updated to `https://comp.designflow.app`. Mobile builds using the current config will connect to Lovable Cloud, not the self-hosted backend.
 
 ## Debugging
 
@@ -109,7 +112,7 @@ are set and correct. The app fails silently if the Supabase client cannot initia
 **OAuth redirect errors** — the redirect URI must exactly match one of:
 - `https://comp.designflow.app` (production)
 - `https://comp-staging.designflow.app` (staging)
-- `http://localhost:5173` (local dev)
+- `http://localhost:8080` (local dev)
 
 All three are listed in `ADDITIONAL_REDIRECT_URLS` in Coolify.
 
