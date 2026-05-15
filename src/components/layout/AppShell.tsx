@@ -89,6 +89,9 @@ export default function AppShell() {
             <button onClick={() => { setSearchOpen(false); navigate(isChina ? "/china" : "/"); }} className="font-sans text-2xl font-semibold text-primary">
               CompShop
             </button>
+            <span className="ml-1 font-mono text-[10px] text-muted-foreground/60 select-all" title={`${__COMMIT_HASH__} · ${__COMMIT_DATE__}`}>
+              {__COMMIT_HASH__} · {__COMMIT_DATE__}
+            </span>
             <DropdownMenu>
               <DropdownMenuTrigger className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
                 {modeLabel}
