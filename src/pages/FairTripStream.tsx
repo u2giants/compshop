@@ -105,9 +105,6 @@ export default function FairTripStream() {
 
   const totalPhotos = Array.from(photosByTrip.values()).reduce((sum, p) => sum + p.length, 0);
   const tripsWithPhotos = childTrips.filter((t) => (photosByTrip.get(t.id) ?? []).length > 0);
-  const priorityPhotoIds = new Set(
-    childTrips.flatMap((trip) => photosByTrip.get(trip.id) ?? []).slice(0, 36).map((photo) => photo.id)
-  );
 
   return (
     <div className="container py-6">
@@ -183,7 +180,6 @@ export default function FairTripStream() {
                   {photos.map((photo) => {
                     const isVideo = photo.media_type === "video";
                     const thumb = photo.display_url;
-                    const loadingMode = priorityPhotoIds.has(photo.id) ? "eager" : "lazy";
                     return (
                       <div
                         key={photo.id}
@@ -197,8 +193,8 @@ export default function FairTripStream() {
                                 src={thumb}
                                 alt={photo.product_name ?? "Video"}
                                 className="h-full w-full object-cover"
-                                loading={loadingMode}
-                                decoding="async"
+                                loading="eager"
+                                decoding="auto"
                                 draggable={false}
                               />
                             ) : (
@@ -218,8 +214,8 @@ export default function FairTripStream() {
                               src={thumb}
                               alt={photo.product_name ?? "Photo"}
                               className="h-full w-full object-cover"
-                              loading={loadingMode}
-                              decoding="async"
+                              loading="eager"
+                              decoding="auto"
                               draggable={false}
                             />
                           ) : (
