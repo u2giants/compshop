@@ -89,7 +89,10 @@ export default function AppShell() {
             <button onClick={() => { setSearchOpen(false); navigate(isChina ? "/china" : "/"); }} className="font-sans text-2xl font-semibold text-primary">
               CompShop
             </button>
-            <span className="ml-1 font-mono text-[10px] text-muted-foreground/60 select-all" title={`${__COMMIT_HASH__} · ${__COMMIT_DATE__}`}>
+            <span
+              className="ml-1 rounded border border-border/60 bg-muted/40 px-1.5 py-0.5 font-mono text-[10px] leading-none text-muted-foreground select-all"
+              title={`Commit ${__COMMIT_HASH__} · ${__COMMIT_DATE__}`}
+            >
               {__COMMIT_HASH__} · {__COMMIT_DATE__}
             </span>
             <DropdownMenu>

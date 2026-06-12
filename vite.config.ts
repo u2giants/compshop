@@ -7,7 +7,9 @@ import { execSync } from "child_process";
 function gitInfo() {
   try {
     const hash = execSync("git rev-parse --short HEAD").toString().trim();
-    const date = execSync("git log -1 --format=%cd --date=short").toString().trim();
+    const date = execSync("git show -s --format=%cd --date=format-local:'%Y-%m-%d %I:%M %p %Z' HEAD", {
+      env: { ...process.env, TZ: "America/New_York" },
+    }).toString().trim();
     return { hash, date };
   } catch {
     return { hash: "unknown", date: "unknown" };
