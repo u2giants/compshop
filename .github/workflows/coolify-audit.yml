@@ -2,6 +2,15 @@ name: Coolify audit
 
 on:
   workflow_dispatch:
+    inputs:
+      delete_stale_compshop_app:
+        description: "Delete stale localhost compshop application h8nwhgk682eedokx8nh2eg1q"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
 
 jobs:
   audit:
@@ -11,6 +20,7 @@ jobs:
         env:
           TOKEN: ${{ secrets.COOLIFY_TOKEN }}
           BASE: ${{ secrets.COOLIFY_BASE_URL }}
+          DELETE_STALE_COMPSHOP_APP: ${{ inputs.delete_stale_compshop_app }}
         run: |
           python3 << 'PYEOF'
           import json, os, subprocess, sys
@@ -43,6 +53,42 @@ jobs:
 
           applications = rows(get("/api/v1/applications"))
           resources = rows(get("/api/v1/resources"))
+
+          if os.environ.get("DELETE_STALE_COMPSHOP_APP") == "true":
+              stale_uuid = "h8nwhgk682eedokx8nh2eg1q"
+              stale_app = next((app for app in applications if app.get("uuid") == stale_uuid), None)
+              if not stale_app:
+                  print(f"Stale app {stale_uuid} is already absent")
+              else:
+                  name = str(stale_app.get("name") or "")
+                  fqdn = stale_app.get("fqdn")
+                  build_pack = stale_app.get("build_pack")
+                  if name != "compshop:main-n88osfd1s8q8sga6iaucz62c" or fqdn is not None or build_pack != "dockercompose":
+                      print(f"Refusing to delete unexpected app shape: {pick(stale_app, ['name', 'uuid', 'fqdn', 'build_pack', 'status'])}")
+                      sys.exit(1)
+                  print(f"Deleting stale localhost app {stale_uuid}")
+                  r = subprocess.run(
+                      [
+                          "curl",
+                          "-sf",
+                          "--max-time",
+                          "30",
+                          "-X",
+                          "DELETE",
+                          f"{base}/api/v1/applications/{stale_uuid}?delete_configurations=true&delete_volumes=false&docker_cleanup=true&delete_connected_networks=false",
+                          "-H",
+                          auth,
+                      ],
+                      capture_output=True,
+                      text=True,
+                  )
+                  if r.returncode != 0:
+                      print(f"Delete failed: {r.stderr[:300] or '(no stderr)'}")
+                      sys.exit(1)
+                  print(f"Delete response: {r.stdout[:300]}")
+                  applications = rows(get("/api/v1/applications"))
+                  resources = rows(get("/api/v1/resources"))
+
           print("=== APPLICATIONS ===")
           for app in applications:
               print(json.dumps(pick(app, [
