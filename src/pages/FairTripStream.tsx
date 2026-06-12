@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -31,6 +31,68 @@ interface FairTrip {
   date: string;
   end_date: string | null;
   location: string | null;
+}
+
+function FairStreamImage({
+  filePath,
+  signedUrl,
+  alt,
+  fallback,
+  priority,
+}: {
+  filePath: string;
+  signedUrl?: string;
+  alt: string;
+  fallback: ReactNode;
+  priority: boolean;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [shouldLoad, setShouldLoad] = useState(priority);
+
+  useEffect(() => {
+    if (priority) setShouldLoad(true);
+  }, [priority]);
+
+  useEffect(() => {
+    if (shouldLoad) return;
+    const node = ref.current;
+    if (!node || !("IntersectionObserver" in window)) {
+      setShouldLoad(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setShouldLoad(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "2400px 0px" }
+    );
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [shouldLoad]);
+
+  return (
+    <div ref={ref} className="h-full w-full">
+      {shouldLoad ? (
+        <CachedImage
+          filePath={filePath}
+          signedUrl={signedUrl}
+          alt={alt}
+          className="h-full w-full object-cover"
+          loading="eager"
+          decoding="async"
+          draggable={false}
+          fallback={fallback}
+        />
+      ) : (
+        fallback
+      )}
+    </div>
+  );
 }
 
 export default function FairTripStream() {
@@ -103,6 +165,14 @@ export default function FairTripStream() {
 
   const totalPhotos = Array.from(photosByTrip.values()).reduce((sum, p) => sum + p.length, 0);
   const tripsWithPhotos = childTrips.filter((t) => (photosByTrip.get(t.id) ?? []).length > 0);
+  const priorityPhotoIds = new Set<string>();
+  for (const trip of childTrips) {
+    for (const photo of photosByTrip.get(trip.id) ?? []) {
+      if (priorityPhotoIds.size >= 48) break;
+      priorityPhotoIds.add(photo.id);
+    }
+    if (priorityPhotoIds.size >= 48) break;
+  }
 
   return (
     <div className="container py-6">
@@ -188,14 +258,11 @@ export default function FairTripStream() {
                         {isVideo ? (
                           <>
                             {thumb ? (
-                              <CachedImage
+                              <FairStreamImage
                                 filePath={thumbPath}
                                 signedUrl={thumb}
                                 alt={photo.product_name ?? "Video"}
-                                className="h-full w-full object-cover"
-                                loading="eager"
-                                decoding="async"
-                                draggable={false}
+                                priority={priorityPhotoIds.has(photo.id)}
                                 fallback={
                                   <div className="flex h-full w-full items-center justify-center bg-black/80">
                                     <Video className="h-6 w-6 text-white/70" />
@@ -214,14 +281,11 @@ export default function FairTripStream() {
                             </div>
                           </>
                         ) : (
-                          <CachedImage
+                          <FairStreamImage
                             filePath={photo.thumbnail_path || photo.file_path}
                             signedUrl={(photo.thumbnail_path ? photo.signed_thumbnail_url : undefined) || photo.signed_url}
                             alt={photo.product_name ?? "Photo"}
-                            className="h-full w-full object-cover"
-                            loading="eager"
-                            decoding="async"
-                            draggable={false}
+                            priority={priorityPhotoIds.has(photo.id)}
                             fallback={
                               <div className="flex h-full w-full items-center justify-center">
                                 <Factory className="h-6 w-6 text-muted-foreground/30" />
