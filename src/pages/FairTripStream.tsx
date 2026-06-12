@@ -161,7 +161,7 @@ export default function FairTripStream() {
             const photos = photosByTrip.get(trip.id) ?? [];
             if (photos.length === 0) return null;
             return (
-              <div key={trip.id} className="[content-visibility:auto] [contain-intrinsic-size:900px]">
+              <div key={trip.id}>
                 {idx > 0 && tripsWithPhotos.indexOf(trip) > 0 && <div className="border-t mb-6" />}
                 <button
                   onClick={() => navigate(`/china/${trip.id}`)}
@@ -193,7 +193,7 @@ export default function FairTripStream() {
                                 signedUrl={thumb}
                                 alt={photo.product_name ?? "Video"}
                                 className="h-full w-full object-cover"
-                                loading="lazy"
+                                loading="eager"
                                 decoding="async"
                                 draggable={false}
                                 fallback={
@@ -219,7 +219,7 @@ export default function FairTripStream() {
                             signedUrl={(photo.thumbnail_path ? photo.signed_thumbnail_url : undefined) || photo.signed_url}
                             alt={photo.product_name ?? "Photo"}
                             className="h-full w-full object-cover"
-                            loading="lazy"
+                            loading="eager"
                             decoding="async"
                             draggable={false}
                             fallback={
