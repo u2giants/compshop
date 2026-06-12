@@ -7,27 +7,100 @@ jobs:
   audit:
     runs-on: ubuntu-latest
     steps:
-      - name: Dump all Coolify resources, servers, and applications
+      - name: Inspect Coolify production resources
         env:
           TOKEN: ${{ secrets.COOLIFY_TOKEN }}
           BASE: ${{ secrets.COOLIFY_BASE_URL }}
         run: |
-          echo "=== SERVERS ==="
-          curl -sf --max-time 15 "$BASE/api/v1/servers" \
-            -H "Authorization: Bearer $TOKEN" | python3 -m json.tool || echo "failed"
+          python3 << 'PYEOF'
+          import json, os, subprocess, sys
 
-          echo "=== RESOURCES ==="
-          curl -sf --max-time 15 "$BASE/api/v1/resources" \
-            -H "Authorization: Bearer $TOKEN" | python3 -m json.tool || echo "failed"
+          base = os.environ["BASE"].rstrip("/")
+          auth = f"Authorization: Bearer {os.environ['TOKEN']}"
 
-          echo "=== APPLICATIONS ==="
-          curl -sf --max-time 15 "$BASE/api/v1/applications" \
-            -H "Authorization: Bearer $TOKEN" | python3 -m json.tool || echo "failed"
+          def get(path):
+              r = subprocess.run(
+                  ["curl", "-sf", "--max-time", "20", f"{base}{path}", "-H", auth],
+                  capture_output=True,
+                  text=True,
+              )
+              if r.returncode != 0:
+                  print(f"{path}: failed: {r.stderr[:200] or '(no stderr)'}")
+                  return None
+              try:
+                  return json.loads(r.stdout)
+              except json.JSONDecodeError:
+                  print(f"{path}: non-json response: {r.stdout[:200]}")
+                  return None
 
-          echo "=== COMPOSE STACKS ==="
-          curl -sf --max-time 15 "$BASE/api/v1/compose" \
-            -H "Authorization: Bearer $TOKEN" | python3 -m json.tool || echo "failed"
+          def rows(payload):
+              if payload is None:
+                  return []
+              return payload if isinstance(payload, list) else [payload]
 
-          echo "=== PROJECTS ==="
-          curl -sf --max-time 15 "$BASE/api/v1/projects" \
-            -H "Authorization: Bearer $TOKEN" | python3 -m json.tool || echo "failed"
+          def pick(item, keys):
+              return {key: item.get(key) for key in keys if key in item}
+
+          applications = rows(get("/api/v1/applications"))
+          resources = rows(get("/api/v1/resources"))
+          print("=== APPLICATIONS ===")
+          for app in applications:
+              print(json.dumps(pick(app, [
+                  "name",
+                  "uuid",
+                  "fqdn",
+                  "status",
+                  "git_repository",
+                  "git_branch",
+                  "git_commit_sha",
+                  "build_pack",
+                  "dockerfile_location",
+                  "base_directory",
+                  "ports_exposes",
+                  "updated_at",
+              ]), sort_keys=True))
+
+          print("=== RESOURCES ===")
+          for resource in resources:
+              print(json.dumps(pick(resource, [
+                  "name",
+                  "uuid",
+                  "fqdn",
+                  "status",
+                  "type",
+                  "created_at",
+                  "updated_at",
+              ]), sort_keys=True))
+
+          frontend = next(
+              (
+                  app for app in applications
+                  if "comp.designflow.app" in str(app.get("fqdn") or "")
+                  or "frontend" in str(app.get("name") or "").lower()
+              ),
+              None,
+          )
+          if not frontend:
+              print("No frontend app found")
+              sys.exit(0)
+
+          frontend_uuid = frontend.get("uuid")
+          print(f"=== FRONTEND LOGS {frontend_uuid} ===")
+          logs = get(f"/api/v1/applications/{frontend_uuid}/logs")
+          if logs is not None:
+              text = json.dumps(logs)
+              print(text[-4000:])
+
+          print(f"=== FRONTEND DEPLOYMENTS {frontend_uuid} ===")
+          deployments = get(f"/api/v1/deployments/applications/{frontend_uuid}")
+          for deployment in rows(deployments)[:10]:
+              print(json.dumps(pick(deployment, [
+                  "deployment_uuid",
+                  "status",
+                  "commit",
+                  "commit_sha",
+                  "created_at",
+                  "updated_at",
+                  "finished_at",
+              ]), sort_keys=True))
+          PYEOF

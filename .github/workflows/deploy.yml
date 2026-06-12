@@ -44,7 +44,8 @@ jobs:
                   sys.exit(1)
               return r.stdout
 
-          expected_sha = os.environ.get("GITHUB_SHA", "")[:7]
+          github_sha = os.environ.get("GITHUB_SHA", "")
+          expected_sha = github_sha[:7]
           changed = subprocess.run(
               ["git", "diff", "--name-only", "HEAD^", "HEAD"],
               capture_output=True,
@@ -127,6 +128,23 @@ jobs:
               print("Skipping frontend deploy; no frontend changes detected")
               print("Done.")
               sys.exit(0)
+
+          if github_sha:
+              print(f"Pinning frontend app to Git commit: {github_sha}")
+              pin_result = curl(
+                  "-X", "PATCH",
+                  f"{base}/api/v1/applications/{frontend_uuid}",
+                  "-H", auth,
+                  "-H", ct,
+                  "--data", json.dumps({"git_commit_sha": github_sha}),
+              )
+              print("Frontend pin response:", pin_result[:300])
+
+              pinned_app = json.loads(curl(f"{base}/api/v1/applications/{frontend_uuid}", "-H", auth))
+              pinned_sha = str(pinned_app.get("git_commit_sha") or "")
+              if pinned_sha != github_sha:
+                  print(f"ERROR: Coolify frontend app is pinned to {pinned_sha!r}, expected {github_sha!r}")
+                  sys.exit(1)
 
           print(f"Deploying frontend UUID: {frontend_uuid}")
           result = curl(f"{base}/api/v1/deploy?uuid={frontend_uuid}&force=true", "-H", auth)
