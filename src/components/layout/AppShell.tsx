@@ -77,11 +77,18 @@ export default function AppShell() {
   }
 
   const modeLabel = isChina ? "Asia Trip" : "Store Shopping";
+  const buildStamp = `${__COMMIT_HASH__} · ${__COMMIT_DATE__}`;
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
       {/* iPhone PWA safe-area spacer */}
       <div className="w-full bg-card md:bg-transparent" style={{ height: 'env(safe-area-inset-top, 0px)' }} />
+      <div
+        className="border-b bg-muted/40 px-3 py-1 text-center font-mono text-[10px] leading-tight text-muted-foreground select-all"
+        title={`Commit ${buildStamp}`}
+      >
+        Commit {buildStamp}
+      </div>
       {/* Top bar - desktop */}
       <header className="hidden border-b bg-card md:block relative">
         <div className="container flex h-14 items-center justify-between">
@@ -89,12 +96,6 @@ export default function AppShell() {
             <button onClick={() => { setSearchOpen(false); navigate(isChina ? "/china" : "/"); }} className="font-sans text-2xl font-semibold text-primary">
               CompShop
             </button>
-            <span
-              className="ml-1 rounded border border-border/60 bg-muted/40 px-1.5 py-0.5 font-mono text-[10px] leading-none text-muted-foreground select-all"
-              title={`Commit ${__COMMIT_HASH__} · ${__COMMIT_DATE__}`}
-            >
-              {__COMMIT_HASH__} · {__COMMIT_DATE__}
-            </span>
             <DropdownMenu>
               <DropdownMenuTrigger className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
                 {modeLabel}
