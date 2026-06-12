@@ -101,19 +101,39 @@ export default function FairTripStream() {
     setPhotosByTrip(byTrip);
     setLoading(false);
 
-    // Pre-cache thumbnails in background so scrolling is instant with no re-downloads.
-    for (const photo of allPhotos) {
-      const fp = photo.thumbnail_path || photo.file_path;
-      const url = (photo.thumbnail_path ? photo.signed_thumbnail_url : undefined) || photo.signed_url;
-      if (fp && url) preCacheImage(fp, url);
-    }
+    preCacheThumbnails(allPhotos);
   }
 
-  function preCacheImage(filePath: string, url: string) {
-    getCachedImageBlob(filePath).then((existing) => {
-      if (existing) return;
-      fetch(url).then(r => r.blob()).then(b => cacheImageBlob(filePath, b)).catch(() => {});
+  async function preCacheThumbnails(photos: PhotoItem[]) {
+    const queue = photos
+      .map((photo) => ({
+        filePath: photo.thumbnail_path || photo.file_path,
+        url: (photo.thumbnail_path ? photo.signed_thumbnail_url : undefined) || photo.signed_url,
+      }))
+      .filter((item): item is { filePath: string; url: string } => Boolean(item.filePath && item.url));
+
+    let nextIndex = 0;
+    const workers = Array.from({ length: Math.min(4, queue.length) }, async () => {
+      while (nextIndex < queue.length) {
+        const item = queue[nextIndex++];
+        await preCacheImage(item.filePath, item.url);
+      }
     });
+    await Promise.all(workers);
+  }
+
+  async function preCacheImage(filePath: string, url: string) {
+    try {
+      const existing = await getCachedImageBlob(filePath);
+      if (existing && (existing.type.startsWith("image/") || existing.type.startsWith("video/"))) return;
+      const response = await fetch(url);
+      if (!response.ok) return;
+      const blob = await response.blob();
+      if (!blob.type.startsWith("image/") && !blob.type.startsWith("video/")) return;
+      await cacheImageBlob(filePath, blob);
+    } catch {
+      // Background cache warmup should never affect scrolling.
+    }
   }
 
   const totalPhotos = Array.from(photosByTrip.values()).reduce((sum, p) => sum + p.length, 0);
@@ -192,7 +212,8 @@ export default function FairTripStream() {
                 <div className="grid gap-1.5 grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8">
                   {photos.map((photo) => {
                     const isVideo = photo.media_type === "video";
-                    const thumb = photo.signed_thumbnail_url || photo.signed_url;
+                    const thumbPath = photo.thumbnail_path || photo.file_path;
+                    const thumb = (photo.thumbnail_path ? photo.signed_thumbnail_url : undefined) || photo.signed_url;
                     return (
                       <div
                         key={photo.id}
@@ -202,11 +223,17 @@ export default function FairTripStream() {
                         {isVideo ? (
                           <>
                             {thumb ? (
-                              <img
-                                src={thumb}
+                              <CachedImage
+                                filePath={thumbPath}
+                                signedUrl={thumb}
                                 alt={photo.product_name ?? "Video"}
                                 className="h-full w-full object-cover transition-transform group-hover:scale-105"
                                 loading="lazy"
+                                fallback={
+                                  <div className="flex h-full w-full items-center justify-center bg-black/80">
+                                    <Video className="h-6 w-6 text-white/70" />
+                                  </div>
+                                }
                               />
                             ) : (
                               <div className="flex h-full w-full items-center justify-center bg-black/80">

@@ -13,8 +13,35 @@ interface CachedImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
 // Keeps the URL alive across component unmounts so remounting the same image
 // is instant (no IndexedDB round-trip, no fallback flash).
 const memBlobUrlCache = new Map<string, string>();
+const blobCacheWrites = new Map<string, Promise<void>>();
 const SIGNED_URL_TTL = 86400;
 const SIGNED_URL_TTL_MS = SIGNED_URL_TTL * 1000;
+
+function cacheImageFromUrl(filePath: string, url: string) {
+  if (blobCacheWrites.has(filePath)) return blobCacheWrites.get(filePath)!;
+
+  const write = (async () => {
+    try {
+      const existing = await getCachedImageBlob(filePath);
+      if (existing && (existing.type.startsWith("image/") || existing.type.startsWith("video/"))) return;
+      const res = await fetch(url);
+      if (!res.ok) return;
+      const blob = await res.blob();
+      if (!blob.type.startsWith("image/") && !blob.type.startsWith("video/")) return;
+      await cacheImageBlob(filePath, blob);
+      if (!memBlobUrlCache.has(filePath)) {
+        memBlobUrlCache.set(filePath, URL.createObjectURL(blob));
+      }
+    } catch {
+      // Background cache writes must never disrupt the visible image.
+    } finally {
+      blobCacheWrites.delete(filePath);
+    }
+  })();
+
+  blobCacheWrites.set(filePath, write);
+  return write;
+}
 
 /**
  * An <img> that checks IndexedDB blob cache first, then falls back to the
@@ -38,8 +65,11 @@ export default function CachedImage({ filePath, signedUrl, fallback, ...imgProps
       return;
     }
 
+    setBlobUrl(undefined);
     if (signedUrl) {
       setSrc(signedUrl);
+    } else {
+      setSrc(undefined);
     }
 
     let cancelled = false;
@@ -52,7 +82,7 @@ export default function CachedImage({ filePath, signedUrl, fallback, ...imgProps
         const url = URL.createObjectURL(blob);
         memBlobUrlCache.set(filePath, url);
         setBlobUrl(url);
-        setSrc(url);
+        if (!signedUrl) setSrc(url);
         return;
       }
 
@@ -104,16 +134,10 @@ export default function CachedImage({ filePath, signedUrl, fallback, ...imgProps
       // Cache blob in background — fire and forget
       (async () => {
         try {
-          const existing = await getCachedImageBlob(filePath);
-          if (existing && (existing.type.startsWith("image/") || existing.type.startsWith("video/"))) return;
-          const res = await fetch(imgSrc);
-          if (!res.ok) return;
-          const b = await res.blob();
-          await cacheImageBlob(filePath, b);
-          if (b.type.startsWith("image/") || b.type.startsWith("video/")) {
-            memBlobUrlCache.set(filePath, URL.createObjectURL(b));
-          }
-        } catch {}
+          await cacheImageFromUrl(filePath, imgSrc);
+        } catch {
+          // Background cache writes must never disrupt the visible image.
+        }
       })();
 
       if (imgProps.onLoad) imgProps.onLoad(e);
