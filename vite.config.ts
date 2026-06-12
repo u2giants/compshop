@@ -5,6 +5,13 @@ import { VitePWA } from "vite-plugin-pwa";
 import { execSync } from "child_process";
 
 function gitInfo() {
+  if (process.env.VITE_COMMIT_HASH && process.env.VITE_COMMIT_DATE) {
+    return {
+      hash: process.env.VITE_COMMIT_HASH,
+      date: process.env.VITE_COMMIT_DATE,
+    };
+  }
+
   try {
     const hash = execSync("git rev-parse --short HEAD").toString().trim();
     const date = execSync("git show -s --format=%cd --date=format-local:'%Y-%m-%d %I:%M %p %Z' HEAD", {

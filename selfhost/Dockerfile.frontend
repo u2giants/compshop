@@ -15,6 +15,7 @@ RUN apk add --no-cache git
 ARG VITE_SUPABASE_URL
 ARG VITE_SUPABASE_PUBLISHABLE_KEY
 ARG VITE_SUPABASE_PROJECT_ID
+ARG SOURCE_COMMIT
 
 ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
 ENV VITE_SUPABASE_PUBLISHABLE_KEY=$VITE_SUPABASE_PUBLISHABLE_KEY
@@ -28,7 +29,16 @@ RUN if [ -f bun.lockb ]; then \
     fi
 
 COPY . .
-RUN npm run build
+RUN set -eu; \
+    if [ -n "${SOURCE_COMMIT:-}" ]; then \
+      git init >/dev/null; \
+      git remote remove origin 2>/dev/null || true; \
+      git remote add origin https://github.com/u2giants/compshop.git; \
+      git fetch --depth=1 origin "$SOURCE_COMMIT"; \
+      export VITE_COMMIT_HASH="$(printf '%s' "$SOURCE_COMMIT" | cut -c1-7)"; \
+      export VITE_COMMIT_DATE="$(TZ=America/New_York git show -s --format=%cd --date=format-local:'%Y-%m-%d %I:%M %p %Z' FETCH_HEAD)"; \
+    fi; \
+    npm run build
 
 # ---- Stage 2: serve ----
 FROM nginx:1.27-alpine
