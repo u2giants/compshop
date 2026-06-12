@@ -80,9 +80,10 @@ jobs:
           if expected_sha:
               import re, time, urllib.request
 
-              print(f"Waiting for live frontend to contain commit {expected_sha}")
+              print(f"Waiting for live frontend to consistently contain commit {expected_sha}")
               deadline = time.time() + 900
               last_seen = ""
+              consecutive_verified = 0
               while time.time() < deadline:
                   try:
                       html = urllib.request.urlopen(
@@ -95,12 +96,19 @@ jobs:
                           js = urllib.request.urlopen(js_url, timeout=20).read().decode("utf-8", "replace")
                           last_seen = match.group(1)
                           if expected_sha in js:
-                              print(f"Verified live frontend bundle {last_seen} contains {expected_sha}")
-                              break
+                              consecutive_verified += 1
+                              print(f"Verified live frontend bundle {last_seen} contains {expected_sha} ({consecutive_verified}/6)")
+                              if consecutive_verified >= 6:
+                                  break
+                              time.sleep(5)
+                              continue
+                          consecutive_verified = 0
                           print(f"Live bundle {last_seen} does not contain {expected_sha} yet")
                       else:
+                          consecutive_verified = 0
                           print("Could not find live frontend bundle in index.html")
                   except Exception as exc:
+                      consecutive_verified = 0
                       print(f"Live verification attempt failed: {exc}")
                   time.sleep(15)
               else:
