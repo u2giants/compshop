@@ -50,6 +50,24 @@ jobs:
           if not isinstance(resources, list):
               resources = [resources]
 
+          try:
+              apps = json.loads(curl(f"{base}/api/v1/applications", "-H", auth))
+              if not isinstance(apps, list):
+                  apps = [apps]
+              print("Applications:")
+              for app in apps:
+                  print(
+                      "  app:",
+                      repr(str(app.get("name", "")).lower()),
+                      "uuid=" + repr(app.get("uuid", "")),
+                      "fqdn=" + repr(app.get("fqdn", "")),
+                      "status=" + repr(app.get("status", "")),
+                      "dockerfile=" + repr(app.get("dockerfile_location", "")),
+                      "port=" + repr(app.get("ports_exposes", "")),
+                  )
+          except Exception as exc:
+              print(f"WARNING: could not list applications: {exc}")
+
           supabase_uuid = None
           frontend_uuid = None
           for item in resources:
@@ -73,6 +91,10 @@ jobs:
           result = curl(f"{base}/api/v1/deploy?uuid={supabase_uuid}", "-H", auth)
           print("Supabase deploy response:", result[:300])
 
+          print(f"Stopping frontend UUID before rebuild: {frontend_uuid}")
+          result = curl(f"{base}/api/v1/applications/{frontend_uuid}/stop", "-H", auth)
+          print("Frontend stop response:", result[:300])
+
           print(f"Deploying frontend UUID: {frontend_uuid}")
           result = curl(f"{base}/api/v1/deploy?uuid={frontend_uuid}&force=true", "-H", auth)
           print("Frontend deploy response:", result[:300])
@@ -86,14 +108,19 @@ jobs:
               consecutive_verified = 0
               while time.time() < deadline:
                   try:
-                      html = urllib.request.urlopen(
+                      request = urllib.request.Request(
                           f"https://comp.designflow.app/?deploy_check={expected_sha}-{int(time.time())}",
-                          timeout=20,
-                      ).read().decode("utf-8", "replace")
+                          headers={"Cache-Control": "no-cache", "Pragma": "no-cache"},
+                      )
+                      html = urllib.request.urlopen(request, timeout=20).read().decode("utf-8", "replace")
                       match = re.search(r'src="([^"]*assets/index-[^"]+\.js)"', html)
                       if match:
                           js_url = "https://comp.designflow.app" + match.group(1)
-                          js = urllib.request.urlopen(js_url, timeout=20).read().decode("utf-8", "replace")
+                          js_request = urllib.request.Request(
+                              js_url,
+                              headers={"Cache-Control": "no-cache", "Pragma": "no-cache"},
+                          )
+                          js = urllib.request.urlopen(js_request, timeout=20).read().decode("utf-8", "replace")
                           last_seen = match.group(1)
                           if expected_sha in js:
                               consecutive_verified += 1
