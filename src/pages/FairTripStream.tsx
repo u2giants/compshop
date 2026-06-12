@@ -4,7 +4,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { batchSignedUrls } from "@/lib/photo-utils";
 import CachedImage from "@/components/CachedImage";
-import { getCachedImageBlob, cacheImageBlob } from "@/lib/offline-db";
 import { ArrowLeft, Calendar, MapPin, Factory, Play, Video } from "lucide-react";
 import { format } from "date-fns";
 
@@ -100,40 +99,6 @@ export default function FairTripStream() {
     }
     setPhotosByTrip(byTrip);
     setLoading(false);
-
-    preCacheThumbnails(allPhotos);
-  }
-
-  async function preCacheThumbnails(photos: PhotoItem[]) {
-    const queue = photos
-      .map((photo) => ({
-        filePath: photo.thumbnail_path || photo.file_path,
-        url: (photo.thumbnail_path ? photo.signed_thumbnail_url : undefined) || photo.signed_url,
-      }))
-      .filter((item): item is { filePath: string; url: string } => Boolean(item.filePath && item.url));
-
-    let nextIndex = 0;
-    const workers = Array.from({ length: Math.min(4, queue.length) }, async () => {
-      while (nextIndex < queue.length) {
-        const item = queue[nextIndex++];
-        await preCacheImage(item.filePath, item.url);
-      }
-    });
-    await Promise.all(workers);
-  }
-
-  async function preCacheImage(filePath: string, url: string) {
-    try {
-      const existing = await getCachedImageBlob(filePath);
-      if (existing && (existing.type.startsWith("image/") || existing.type.startsWith("video/"))) return;
-      const response = await fetch(url);
-      if (!response.ok) return;
-      const blob = await response.blob();
-      if (!blob.type.startsWith("image/") && !blob.type.startsWith("video/")) return;
-      await cacheImageBlob(filePath, blob);
-    } catch {
-      // Background cache warmup should never affect scrolling.
-    }
   }
 
   const totalPhotos = Array.from(photosByTrip.values()).reduce((sum, p) => sum + p.length, 0);
@@ -196,7 +161,7 @@ export default function FairTripStream() {
             const photos = photosByTrip.get(trip.id) ?? [];
             if (photos.length === 0) return null;
             return (
-              <div key={trip.id}>
+              <div key={trip.id} className="[content-visibility:auto] [contain-intrinsic-size:900px]">
                 {idx > 0 && tripsWithPhotos.indexOf(trip) > 0 && <div className="border-t mb-6" />}
                 <button
                   onClick={() => navigate(`/china/${trip.id}`)}
@@ -227,8 +192,10 @@ export default function FairTripStream() {
                                 filePath={thumbPath}
                                 signedUrl={thumb}
                                 alt={photo.product_name ?? "Video"}
-                                className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                                className="h-full w-full object-cover"
                                 loading="lazy"
+                                decoding="async"
+                                draggable={false}
                                 fallback={
                                   <div className="flex h-full w-full items-center justify-center bg-black/80">
                                     <Video className="h-6 w-6 text-white/70" />
@@ -251,8 +218,10 @@ export default function FairTripStream() {
                             filePath={photo.thumbnail_path || photo.file_path}
                             signedUrl={(photo.thumbnail_path ? photo.signed_thumbnail_url : undefined) || photo.signed_url}
                             alt={photo.product_name ?? "Photo"}
-                            className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                            className="h-full w-full object-cover"
                             loading="lazy"
+                            decoding="async"
+                            draggable={false}
                             fallback={
                               <div className="flex h-full w-full items-center justify-center">
                                 <Factory className="h-6 w-6 text-muted-foreground/30" />
