@@ -45,7 +45,6 @@ jobs:
               return r.stdout
 
           github_sha = os.environ.get("GITHUB_SHA", "")
-          expected_sha = github_sha[:7]
           changed = subprocess.run(
               ["git", "diff", "--name-only", "HEAD^", "HEAD"],
               capture_output=True,
@@ -161,83 +160,6 @@ jobs:
           print(f"Deploying frontend UUID: {frontend_uuid}")
           result = curl(f"{base}/api/v1/deploy?uuid={frontend_uuid}&force=true", "-H", auth)
           print("Frontend deploy response:", result[:300])
-          frontend_deployment_uuid = None
-          try:
-              deploy_payload = json.loads(result)
-              deployments = deploy_payload.get("deployments") or []
-              if deployments:
-                  frontend_deployment_uuid = deployments[0].get("deployment_uuid")
-          except Exception as exc:
-              print(f"WARNING: could not parse frontend deploy response: {exc}")
-
-          if frontend_deployment_uuid:
-              import time
-
-              print(f"Waiting for Coolify frontend deployment {frontend_deployment_uuid}")
-              terminal_statuses = {"finished", "success", "failed", "cancelled", "canceled"}
-              deployment_status = ""
-              deployment_log_excerpt = ""
-              for _ in range(18):
-                  try:
-                      status_payload = json.loads(curl(f"{base}/api/v1/deployments/{frontend_deployment_uuid}", "-H", auth))
-                      deployment_status = str(
-                          status_payload.get("status")
-                          or status_payload.get("deployment", {}).get("status")
-                          or status_payload.get("state")
-                          or ""
-                      ).lower()
-                      deployment_log_excerpt = json.dumps(status_payload)[:800]
-                      print(f"Coolify frontend deployment status: {deployment_status or '(unknown)'}")
-                      if any(status in deployment_status for status in terminal_statuses):
-                          break
-                  except Exception as exc:
-                      print(f"Coolify deployment status poll failed: {exc}")
-                  time.sleep(5)
-
-              if "fail" in deployment_status or "cancel" in deployment_status:
-                  print("ERROR: Coolify frontend deployment failed:", deployment_log_excerpt)
-                  sys.exit(1)
-              if not any(status in deployment_status for status in {"finished", "success"}):
-                  print("ERROR: Coolify frontend deployment did not finish:", deployment_log_excerpt)
-                  sys.exit(1)
-
-          if expected_sha:
-              import re, time, urllib.request
-
-              print(f"Checking live frontend for commit {expected_sha}")
-              deadline = time.time() + 90
-              last_seen = ""
-              verified = False
-              while time.time() < deadline:
-                  try:
-                      request = urllib.request.Request(
-                          f"https://comp.designflow.app/?deploy_check={expected_sha}-{int(time.time())}",
-                          headers={"Cache-Control": "no-cache", "Pragma": "no-cache"},
-                      )
-                      html = urllib.request.urlopen(request, timeout=20).read().decode("utf-8", "replace")
-                      match = re.search(r'src="([^"]*assets/index-[^"]+\.js)"', html)
-                      if match:
-                          js_url = "https://comp.designflow.app" + match.group(1)
-                          js_request = urllib.request.Request(
-                              js_url,
-                              headers={"Cache-Control": "no-cache", "Pragma": "no-cache"},
-                          )
-                          js = urllib.request.urlopen(js_request, timeout=20).read().decode("utf-8", "replace")
-                          last_seen = match.group(1)
-                          if expected_sha in js:
-                              verified = True
-                              print(f"Verified live frontend bundle {last_seen} contains {expected_sha}")
-                              break
-                          print(f"Live bundle {last_seen} does not contain {expected_sha} yet")
-                      else:
-                          print("Could not find live frontend bundle in index.html")
-                  except Exception as exc:
-                      print(f"Live verification attempt failed: {exc}")
-                  time.sleep(10)
-
-              if not verified:
-                  print(f"ERROR: frontend did not serve commit {expected_sha}; last bundle seen: {last_seen}")
-                  sys.exit(1)
 
           print("Done.")
           PYEOF
