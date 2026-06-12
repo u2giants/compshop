@@ -177,7 +177,7 @@ jobs:
               terminal_statuses = {"finished", "success", "failed", "cancelled", "canceled"}
               deployment_status = ""
               deployment_log_excerpt = ""
-              for _ in range(90):
+              for _ in range(18):
                   try:
                       status_payload = json.loads(curl(f"{base}/api/v1/deployments/{frontend_deployment_uuid}", "-H", auth))
                       deployment_status = str(
@@ -192,7 +192,7 @@ jobs:
                           break
                   except Exception as exc:
                       print(f"Coolify deployment status poll failed: {exc}")
-                  time.sleep(10)
+                  time.sleep(5)
 
               if "fail" in deployment_status or "cancel" in deployment_status:
                   print("ERROR: Coolify frontend deployment failed:", deployment_log_excerpt)
