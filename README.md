@@ -58,9 +58,12 @@ Critical for use in China where latency is 200–500ms per round-trip. The app:
 
 | Doc | Contents |
 |-----|---------|
+| [AGENTS.md](AGENTS.md) | Canonical AI/developer operating guide and documentation router |
 | [docs/architecture.md](docs/architecture.md) | System design, components, data flow |
 | [docs/development.md](docs/development.md) | Local setup, build, test, debug |
 | [docs/configuration.md](docs/configuration.md) | Environment variables, config reference |
 | [docs/deployment.md](docs/deployment.md) | Deploy workflow, Coolify, releases |
-| [docs/ai-operating-rules.md](docs/ai-operating-rules.md) | AI tool rules, branch policy |
 | [selfhost/](selfhost/) | Docker Compose stack, Dockerfiles, migration scripts |
+
+Start with `AGENTS.md` for task-based guidance on which docs to load. Most tasks do not
+require reading every Markdown file in the repository.

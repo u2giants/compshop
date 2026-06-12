@@ -78,9 +78,11 @@ database enforces actual access control.
 
 The stale-while-revalidate pattern: pages read from IndexedDB first (zero latency), then
 fetch from Supabase and update the store. A `sync_meta` entry per resource prevents
-redundant refreshes within 5 minutes.
+redundant refreshes. The current trip-list pages use a short refresh window for near
+real-time collaboration; verify the exact interval in the affected page before changing
+cache behavior.
 
-Signed URLs are cached per photo ID with a 24-hour TTL. The `CachedImage` component reads
+Signed URLs are cached per file path with a 24-hour TTL. The `CachedImage` component reads
 from this cache before calling the Storage API.
 
 ## Edge functions

@@ -82,11 +82,13 @@ The "Sign in with Microsoft" button on the login page routes through Authentik (
 
 | Variable | Notes |
 |----------|-------|
-| `GOTRUE_EXTERNAL_OPENIDCONNECT_ENABLED` | `true` |
-| `GOTRUE_EXTERNAL_OPENIDCONNECT_CLIENT_ID` | OAuth2 client ID from Authentik → CompShop provider |
-| `GOTRUE_EXTERNAL_OPENIDCONNECT_SECRET` | Client secret from same provider |
-| `GOTRUE_EXTERNAL_OPENIDCONNECT_REDIRECT_URI` | `https://api.comp.designflow.app/auth/v1/callback` |
-| `GOTRUE_EXTERNAL_OPENIDCONNECT_URL` | `https://auth.designflow.app/application/o/compshop/` |
+| `GOTRUE_EXTERNAL_KEYCLOAK_ENABLED` | `true` |
+| `GOTRUE_EXTERNAL_KEYCLOAK_CLIENT_ID` | OAuth2 client ID from Authentik → CompShop provider |
+| `GOTRUE_EXTERNAL_KEYCLOAK_SECRET` | Client secret from same provider |
+| `GOTRUE_EXTERNAL_KEYCLOAK_REDIRECT_URI` | `https://api.comp.designflow.app/auth/v1/callback` |
+| `GOTRUE_EXTERNAL_KEYCLOAK_URL` | `https://api.comp.designflow.app/oidc-compat` |
+
+GoTrue v2.x uses the `keycloak` provider for this integration. The `oidc-compat` nginx service in `selfhost/compose.supabase.yml` translates Keycloak-style paths to Authentik's OIDC endpoints.
 
 **Critical Authentik-side requirements** (must be set on every OAuth2 provider in Authentik, or SSO returns `insufficient_scope`):
 - Property mappings: `openid`, `email`, `profile` scope mappings must all be attached
@@ -113,6 +115,8 @@ Used for password reset, magic link, and invite emails.
 |----------|---------|-------|
 | `STORAGE_BACKEND` | `file` | Stores files on the Docker volume `storage-data` |
 | `FILE_SIZE_LIMIT` | `52428800` | 50 MB per upload |
+| `S3_PROTOCOL_ACCESS_KEY_ID` | placeholder | Required by the pinned Storage API config if S3 protocol support is enabled |
+| `S3_PROTOCOL_ACCESS_KEY_SECRET` | placeholder | Required by the pinned Storage API config if S3 protocol support is enabled |
 
 ### AI / edge functions
 

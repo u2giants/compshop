@@ -2,13 +2,16 @@
 
 ## Normal deploy flow
 
-Every push to `main` triggers an automatic Coolify deployment via webhook.
+Deployment is triggered by GitHub Actions, which calls the Coolify API.
 
 ```
 git push origin main
         │
         ▼
-  Coolify detects push (GitHub webhook)
+  GitHub Actions: "Deploy to Coolify"
+        │
+        ▼
+  Workflow queries Coolify resources and calls /api/v1/deploy
         │
         ├── Supabase stack (compshop:main)
         │     Coolify clones the repo → runs docker compose up -d
@@ -19,7 +22,11 @@ git push origin main
               Replaces the running container
 ```
 
-There are no GitHub Actions involved in deployment. Coolify connects directly to GitHub.
+The workflow is `.github/workflows/deploy.yml`. It runs on `workflow_dispatch` and on
+pushes to `main` that touch deployment-relevant paths (`src/**`, `supabase/functions/**`,
+`selfhost/compose.supabase.yml`, `selfhost/Dockerfile.frontend`, `selfhost/nginx.conf`,
+package files, or the workflow itself). It uses GitHub Secrets `COOLIFY_BASE_URL` and
+`COOLIFY_TOKEN`.
 
 ## What each deploy updates
 
@@ -36,6 +43,8 @@ redeploy from the Coolify UI or via:
 curl -X GET "https://coolify.comp.designflow.app/api/v1/deploy?uuid=h8nwhgk682eedokx8nh2eg1q" \
   -H "Authorization: Bearer $COOLIFY_TOKEN"
 ```
+
+You can also run the `Deploy to Coolify` workflow manually from GitHub Actions.
 
 **Frontend** (`selfhost/Dockerfile.frontend`)
 
@@ -113,7 +122,25 @@ not a real failure.
 2. `npx cap sync` to copy dist/ into the iOS/Android projects
 3. Build and submit via Xcode / Android Studio
 
-The Capacitor build points to the production `https://api.comp.designflow.app` backend.
+Known current state: `capacitor.config.ts` still sets `server.url` to a Lovable
+`lovableproject.com` URL. Update that deliberately as part of a mobile release plan before
+building/submitting mobile apps, and verify whether the app should load the production
+frontend or a bundled `dist/`.
+
+## Rollback
+
+Rollback is primarily a code revert/fix-forward:
+
+1. Revert or fix the bad commit on `main`.
+2. Push to `origin/main`.
+3. Let `.github/workflows/deploy.yml` trigger Coolify, or run it manually.
+
+Database migrations are not applied automatically and do not have automatic rollbacks.
+For schema changes, write explicit repair/down SQL or a forward migration.
+
+Frontend image rollback depends on Coolify image-retention settings. This repo documents
+`docker_images_to_keep=1`, so do not promise previous-image rollback without verifying
+the current Coolify app settings first.
 
 ## Coolify API token
 
