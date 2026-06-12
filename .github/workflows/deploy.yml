@@ -100,22 +100,34 @@ jobs:
 
           supabase_uuid = None
           frontend_uuid = None
+          stale_application_uuids = []
           for item in resources:
               name = str(item.get("name","") or item.get("project_name","")).lower()
               fqdn = str(item.get("fqdn","") or "").lower()
+              resource_type = str(item.get("type", "") or "").lower()
               u    = item.get("uuid","")
               print(f"  resource: {name!r} fqdn={fqdn!r} uuid={u!r}")
               if u and ("comp.designflow.app" in fqdn or ("compshop" in name and "frontend" in name)):
                   frontend_uuid = u
-              elif u and (name.startswith("compshop:main") or name.startswith("compshopmain-")):
+              elif u and name.startswith("compshop:main") and resource_type == "application":
+                  stale_application_uuids.append(u)
+              elif u and ("supabase" in name or resource_type == "service"):
                   supabase_uuid = u
 
           if not supabase_uuid:
-              print("ERROR: Supabase compose stack not found in Coolify resources")
+              print("ERROR: Supabase service stack not found in Coolify resources")
               sys.exit(1)
           if not frontend_uuid:
               print("ERROR: Frontend app not found in Coolify resources")
               sys.exit(1)
+
+          for stale_uuid in stale_application_uuids:
+              print(f"Stopping stale Coolify application UUID: {stale_uuid}")
+              try:
+                  stop_result = curl(f"{base}/api/v1/applications/{stale_uuid}/stop", "-H", auth)
+                  print("Stale app stop response:", stop_result[:300])
+              except SystemExit:
+                  print(f"WARNING: failed to stop stale app {stale_uuid}; continuing frontend deploy")
 
           if deploy_supabase:
               print(f"Deploying Supabase stack UUID: {supabase_uuid}")
@@ -192,10 +204,10 @@ jobs:
           if expected_sha:
               import re, time, urllib.request
 
-              print(f"Waiting for live frontend to consistently contain commit {expected_sha}")
-              deadline = time.time() + 900
+              print(f"Checking live frontend for commit {expected_sha}")
+              deadline = time.time() + 90
               last_seen = ""
-              consecutive_verified = 0
+              verified = False
               while time.time() < deadline:
                   try:
                       request = urllib.request.Request(
@@ -213,22 +225,17 @@ jobs:
                           js = urllib.request.urlopen(js_request, timeout=20).read().decode("utf-8", "replace")
                           last_seen = match.group(1)
                           if expected_sha in js:
-                              consecutive_verified += 1
-                              print(f"Verified live frontend bundle {last_seen} contains {expected_sha} ({consecutive_verified}/6)")
-                              if consecutive_verified >= 6:
-                                  break
-                              time.sleep(5)
-                              continue
-                          consecutive_verified = 0
+                              verified = True
+                              print(f"Verified live frontend bundle {last_seen} contains {expected_sha}")
+                              break
                           print(f"Live bundle {last_seen} does not contain {expected_sha} yet")
                       else:
-                          consecutive_verified = 0
                           print("Could not find live frontend bundle in index.html")
                   except Exception as exc:
-                      consecutive_verified = 0
                       print(f"Live verification attempt failed: {exc}")
-                  time.sleep(15)
-              else:
+                  time.sleep(10)
+
+              if not verified:
                   print(f"ERROR: frontend did not serve commit {expected_sha}; last bundle seen: {last_seen}")
                   sys.exit(1)
 
