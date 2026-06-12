@@ -99,12 +99,20 @@ export default function CantonFairGroupCard({
                     <span>{totalPhotos} photos</span>
                     <span>{children.length} sub-trip{children.length !== 1 ? "s" : ""}</span>
                     {totalPhotos > 0 && !selectMode && (
-                      <button
-                        className="flex items-center gap-1 text-amber-700 dark:text-amber-400 hover:underline font-medium"
-                        onClick={(e) => { e.stopPropagation(); navigate(`/china/${group.id}/stream`); }}
-                      >
-                        <Images className="h-3 w-3" /> View all photos
-                      </button>
+                      <>
+                        <button
+                          className="flex items-center gap-1 text-amber-700 dark:text-amber-400 hover:underline font-medium"
+                          onClick={(e) => { e.stopPropagation(); navigate(`/china/${group.id}/stream`); }}
+                        >
+                          <Images className="h-3 w-3" /> View all photos
+                        </button>
+                        <button
+                          className="flex items-center gap-1 text-primary hover:underline font-medium"
+                          onClick={(e) => { e.stopPropagation(); navigate(`/china/${group.id}/stream-v2`); }}
+                        >
+                          Faster view
+                        </button>
+                      </>
                     )}
                     {group.location && (
                       <span className="flex items-center gap-1">
