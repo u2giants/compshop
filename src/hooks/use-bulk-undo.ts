@@ -50,22 +50,25 @@ export function useBulkUndo() {
 
   const performUndo = useCallback(
     async (onDone: () => void) => {
-      if (!undoAction) return;
+      if (!undoAction) return false;
       setUndoing(true);
       try {
         for (const snap of undoAction.snapshots) {
           const id = String(snap.id);
           const updates = { ...snap };
           delete updates.id;
-          await supabase.from(undoAction.table).update(updates).eq("id", id);
+          const { error } = await supabase.from(undoAction.table).update(updates).eq("id", id);
+          if (error) throw error;
         }
         onDone();
-      } catch (err) {
-        console.error("Undo failed:", err);
-      } finally {
-        setUndoing(false);
         setUndoAction(null);
         if (timerRef.current) clearTimeout(timerRef.current);
+        return true;
+      } catch (err) {
+        console.error("Undo failed:", err);
+        return false;
+      } finally {
+        setUndoing(false);
       }
     },
     [undoAction]

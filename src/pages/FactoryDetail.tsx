@@ -4,7 +4,9 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { batchSignedUrls } from "@/lib/photo-utils";
-import { uploadPhoto, uploadVideo, hashFile, checkDuplicatePhoto, MAX_VIDEO_BYTES } from "@/lib/supabase-helpers";
+import { hashFile, checkDuplicatePhoto, MAX_VIDEO_BYTES } from "@/lib/supabase-helpers";
+import { queuePendingUpload } from "@/lib/pending-upload-utils";
+import { runSync } from "@/lib/sync-service";
 import { extractExif } from "@/lib/exif-utils";
 import { friendlyErrorMessage } from "@/lib/error-messages";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -156,7 +158,7 @@ export default function FactoryDetail() {
     if (files.length === 0 || !user || !targetTrip) return;
 
     setUploading(true);
-    let uploaded = 0;
+    let queued = 0;
     let skipped = 0;
 
     try {
@@ -166,30 +168,30 @@ export default function FactoryDetail() {
           const isDup = await checkDuplicatePhoto(fileHash);
           if (isDup) { skipped++; continue; }
 
-          const { filePath, thumbnailPath } = await uploadPhoto(file, user.id, targetTrip.id);
           const exif = await extractExif(file).catch(() => null);
-
-          const { error } = await supabase.from("china_photos").insert({
-            trip_id: targetTrip.id,
-            user_id: user.id,
-            file_path: filePath,
-            thumbnail_path: thumbnailPath,
-            file_hash: fileHash,
-            latitude: exif?.latitude ?? null,
-            longitude: exif?.longitude ?? null,
+          await queuePendingUpload({
+            file,
+            userId: user.id,
+            tripId: targetTrip.id,
+            table: "china_photos",
+            fileHash,
+            extra: {
+              latitude: exif?.latitude ?? null,
+              longitude: exif?.longitude ?? null,
+            },
           });
-          if (error) throw error;
-          uploaded++;
+          queued++;
         } catch (err) {
           console.error("Upload failed for file", file.name, err);
         }
       }
 
-      if (uploaded > 0) {
+      if (queued > 0) {
         toast({
-          title: `Uploaded ${uploaded} photo${uploaded !== 1 ? "s" : ""}`,
+          title: `Queued ${queued} photo${queued !== 1 ? "s" : ""}`,
           description: `Added to ${targetTrip.supplier} · ${format(new Date(targetTrip.date), "MMM d, yyyy")}${skipped > 0 ? ` · ${skipped} duplicate${skipped !== 1 ? "s" : ""} skipped` : ""}`,
         });
+        runSync();
         await loadData();
       } else if (skipped > 0) {
         toast({ title: "All photos were duplicates", description: `${skipped} skipped` });
@@ -206,31 +208,30 @@ export default function FactoryDetail() {
     e.target.value = "";
     if (files.length === 0 || !user || !targetTrip) return;
     setUploading(true);
-    let uploaded = 0;
+    let queued = 0;
     let tooLarge = 0;
     for (const file of files) {
       if (!file.type.startsWith("video/")) continue;
       if (file.size > MAX_VIDEO_BYTES) { tooLarge++; continue; }
       try {
-        const { filePath, thumbnailPath } = await uploadVideo(file, user.id, targetTrip.id);
-        const { error } = await supabase.from("china_photos").insert({
-          trip_id: targetTrip.id,
-          user_id: user.id,
-          file_path: filePath,
-          thumbnail_path: thumbnailPath,
-          media_type: "video",
-        } as any);
-        if (error) throw error;
-        uploaded++;
+        await queuePendingUpload({
+          file,
+          userId: user.id,
+          tripId: targetTrip.id,
+          table: "china_photos",
+          mediaType: "video",
+        });
+        queued++;
       } catch (err: any) {
         toast({ title: "Video upload failed", description: friendlyErrorMessage(err), variant: "destructive" });
       }
     }
     setUploading(false);
     const parts: string[] = [];
-    if (uploaded > 0) parts.push(`${uploaded} video${uploaded > 1 ? "s" : ""} uploaded`);
+    if (queued > 0) parts.push(`${queued} video${queued > 1 ? "s" : ""} queued`);
     if (tooLarge > 0) parts.push(`${tooLarge} skipped (over 30MB)`);
     if (parts.length > 0) toast({ title: parts.join(", ") });
+    if (queued > 0) runSync();
     await loadData();
   }
 

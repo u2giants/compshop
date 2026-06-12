@@ -59,9 +59,10 @@ interface Props {
   selectionMode?: boolean;
   chinaMode?: boolean;
   userName?: string;
+  readOnly?: boolean;
 }
 
-export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, onGroupPhoto, onFileDrop, onMobileLinkRequest, onUnlinkPhoto, selected, onSelect, selectionMode, chinaMode, userName }: Props) {
+export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, onGroupPhoto, onFileDrop, onMobileLinkRequest, onUnlinkPhoto, selected, onSelect, selectionMode, chinaMode, userName, readOnly = false }: Props) {
   const { user, isAdmin } = useAuth();
   const { toast } = useToast();
   const countries = useCountries();
@@ -186,11 +187,12 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
     });
   }
 
-  const canEdit = isAdmin || photo.user_id === user?.id;
+  const canEdit = !readOnly && (isAdmin || photo.user_id === user?.id);
   const canDelete = canEdit;
 
   // Multi-image AI detect: analyzes all images in the group and merges results
   async function handleAnalyze() {
+    if (!canEdit) return;
     const imagesToAnalyze = allImages.filter(img => img.signed_url);
     if (imagesToAnalyze.length === 0) return;
     setAnalyzing(true);
@@ -269,7 +271,7 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
   // Handle adding more photos to this card
   async function handleAddPhotoToCard(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files;
-    if (!files || files.length === 0 || !onFileDrop) return;
+    if (!files || files.length === 0 || !onFileDrop || !canEdit) return;
     const imageFiles = Array.from(files).filter(f => f.type.startsWith("image/"));
     if (imageFiles.length > 0) {
       onFileDrop(imageFiles, photo.id);
@@ -279,6 +281,7 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
   }
 
   async function handleSave() {
+    if (!canEdit) return;
     setSaving(true);
     const table = chinaMode ? "china_photos" : "photos";
     try {
@@ -308,12 +311,17 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
   }
 
   async function handleDelete() {
+    if (!canDelete) return;
     if (!confirm("Delete this photo?")) return;
     const table = chinaMode ? "china_photos" : "photos";
     try {
-      await supabase.storage.from("photos").remove([photo.file_path]);
       const { error } = await supabase.from(table).delete().eq("id", photo.id);
       if (error) throw error;
+      const paths = [photo.file_path, photo.thumbnail_path].filter(Boolean) as string[];
+      if (paths.length > 0) {
+        const { error: storageError } = await supabase.storage.from("photos").remove(paths);
+        if (storageError) console.warn("Photo storage cleanup failed:", storageError);
+      }
       toast({ title: "Photo deleted" });
       onUpdated();
     } catch (err: any) {
@@ -348,12 +356,17 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
         onClick={() => {
           if (window.innerWidth < 768) setShowDetail(true);
         }}
-        draggable
+        draggable={canEdit}
         onDragStart={(e) => {
+          if (!canEdit) {
+            e.preventDefault();
+            return;
+          }
           e.dataTransfer.setData("text/plain", photo.id);
           e.dataTransfer.effectAllowed = "move";
         }}
         onDragOver={(e) => {
+          if (!canEdit) return;
           e.preventDefault();
           e.dataTransfer.dropEffect = e.dataTransfer.types.includes("Files") ? "copy" : "move";
           setDragOver(true);
@@ -362,6 +375,7 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
         onDrop={(e) => {
           e.preventDefault();
           setDragOver(false);
+          if (!canEdit) return;
           if (e.dataTransfer.files && e.dataTransfer.files.length > 0 && onFileDrop) {
             const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith("image/"));
             if (files.length > 0) {
@@ -481,7 +495,7 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
                 <Trash2 className="h-3 w-3" />
               </Button>
             )}
-            {isMobile && onMobileLinkRequest && (
+            {isMobile && onMobileLinkRequest && canEdit && (
               <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={(e) => { e.stopPropagation(); onMobileLinkRequest(photo.id); }}>
                 <Link2 className="h-3 w-3" /> Link
               </Button>
@@ -509,8 +523,8 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
       </Card>
 
       {/* Hidden inputs for adding photos to this card */}
-      <input ref={addPhotoInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleAddPhotoToCard} />
-      {isMobile && (
+      {canEdit && <input ref={addPhotoInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleAddPhotoToCard} />}
+      {isMobile && canEdit && (
         <input ref={addPhotoCameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleAddPhotoToCard} />
       )}
 
@@ -771,7 +785,7 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
             )}
           </div>
 
-          <PhotoComments photoId={photo.id} />
+          <PhotoComments photoId={photo.id} readOnly={readOnly} />
         </DialogContent>
       </Dialog>
 
@@ -781,11 +795,11 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
           <DialogHeader>
             <DialogTitle className="font-sans">Comments</DialogTitle>
           </DialogHeader>
-          <PhotoComments photoId={photo.id} />
+          <PhotoComments photoId={photo.id} readOnly={readOnly} />
         </DialogContent>
       </Dialog>
 
-      {tripId && !chinaMode && (
+      {tripId && !chinaMode && canEdit && (
         <MoveToTripDialog
           open={showMoveDialog}
           onOpenChange={setShowMoveDialog}
@@ -794,7 +808,7 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
           onMoved={onUpdated}
         />
       )}
-      {tripId && chinaMode && (
+      {tripId && chinaMode && canEdit && (
         <ChinaMoveToTripDialog
           open={showMoveDialog}
           onOpenChange={setShowMoveDialog}
@@ -803,7 +817,7 @@ export default function PhotoCard({ photo, extraPhotos = [], tripId, onUpdated, 
           onMoved={onUpdated}
         />
       )}
-      {photo.signed_url && (
+      {photo.signed_url && canEdit && (
         <PhotoCropDialog
           open={showCropDialog}
           onOpenChange={setShowCropDialog}

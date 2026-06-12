@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Node.js 20+ (the Docker build uses `node:20-alpine`)
+- Node.js 20+ (the Docker build uses `node:20-alpine`; `npm ci` on Node 18 currently emits engine warnings for Supabase/Capacitor-related packages)
 - npm (or bun — the Dockerfile uses bun if `bun.lockb` is present)
 
 ## Local setup
@@ -12,8 +12,8 @@ npm install
 npm run dev        # Vite dev server at http://localhost:8080
 ```
 
-The root `.env` points to the Lovable Cloud Supabase project and works out of the box for
-local development. Auth, database, storage, and edge functions are all live on that project.
+Copy `.env.example` to `.env.local` and fill in browser-safe Supabase values. The repo
+does not commit a root `.env`.
 
 To develop against the self-hosted backend instead:
 
@@ -74,7 +74,13 @@ database enforces actual access control.
 `trips`, `photos`, `china_trips`, `china_photos`, `signed_urls`, `sync_meta`,
 `image_blobs`, `pending_uploads`, `pending_trips`, `pending_china_trips`.
 
-`startSyncService()` from `src/lib/sync-service.ts` is called unconditionally at app startup (`src/main.tsx`) — it sets up background Supabase → IndexedDB sync before the React tree mounts.
+`startSyncService()` from `src/lib/sync-service.ts` is called unconditionally at app startup (`src/main.tsx`) — it sets up queued upload retries before the React tree mounts.
+
+Photo/video capture paths should enqueue files with `src/lib/pending-upload-utils.ts`
+instead of uploading directly from page components. Pending upload records store the
+original Blob, stable Storage path, file hash, upload stage, retry count, last error, and
+`next_retry_at`. `failed_needs_attention` means the local file is preserved and needs user
+or operator action; do not auto-delete it as retry cleanup.
 
 The stale-while-revalidate pattern: pages read from IndexedDB first (zero latency), then
 fetch from Supabase and update the store. A `sync_meta` entry per resource prevents
@@ -83,7 +89,8 @@ real-time collaboration; verify the exact interval in the affected page before c
 cache behavior.
 
 Signed URLs are cached per file path with a 24-hour TTL. The `CachedImage` component reads
-from this cache before calling the Storage API.
+from this cache before calling the Storage API. `StorageQuotaManager` clears only cached
+image blobs and can request persistent browser storage; it must not clear pending uploads.
 
 ## Edge functions
 

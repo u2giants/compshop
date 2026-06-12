@@ -32,10 +32,10 @@ npm install
 npm run dev
 ```
 
-The root `.env` points to the Lovable Cloud Supabase project — usable for local
-development. To develop against the self-hosted backend, set `VITE_SUPABASE_URL`,
-`VITE_SUPABASE_PUBLISHABLE_KEY`, and `VITE_SUPABASE_PROJECT_ID` to the self-hosted
-values (see `selfhost/.env.frontend.example`).
+Copy `.env.example` to `.env.local` and fill in the browser-safe Supabase values. To
+develop against the self-hosted backend, set `VITE_SUPABASE_URL`,
+`VITE_SUPABASE_PUBLISHABLE_KEY`, and `VITE_SUPABASE_PROJECT_ID` from
+`selfhost/.env.frontend.example`.
 
 ## Key features
 
@@ -43,6 +43,7 @@ values (see `selfhost/.env.frontend.example`).
 - **Canton Fair support** — `CantonFairGroupCard` groups products by exhibition booth/group
 - **Bulk edit** — select and edit multiple photo records at once
 - **Offline-first** — IndexedDB caching with stale-while-revalidate; signed URLs cached 24h
+- **Durable upload queue** — photos/videos are saved to IndexedDB first, then synced with retry/backoff
 - **Recycle bin** — soft-delete with recovery
 - **Admin panel** — manage categories, countries, image types, retailers, invites
 

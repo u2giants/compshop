@@ -2,7 +2,9 @@ import { useState, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { uploadPhoto, hashFile, checkDuplicatePhoto } from "@/lib/supabase-helpers";
+import { hashFile, checkDuplicatePhoto } from "@/lib/supabase-helpers";
+import { queuePendingUpload } from "@/lib/pending-upload-utils";
+import { runSync } from "@/lib/sync-service";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -111,14 +113,12 @@ export default function ImportTeams() {
         try {
           const fileHash = await hashFile(img);
           if (await checkDuplicatePhoto(fileHash)) continue;
-          const { filePath, thumbnailPath } = await uploadPhoto(img, user.id, trip.id);
-          await supabase.from("photos").insert({
-            trip_id: trip.id,
-            user_id: user.id,
-            file_path: filePath,
-            thumbnail_path: thumbnailPath,
-            file_hash: fileHash,
-            notes: "Imported from Teams conversation",
+          await queuePendingUpload({
+            file: img,
+            userId: user.id,
+            tripId: trip.id,
+            fileHash,
+            metadata: { notes: "Imported from Teams conversation" },
           });
         } catch (imgErr) {
           console.error("Failed to upload image:", img.name, imgErr);
@@ -126,6 +126,7 @@ export default function ImportTeams() {
       }
 
       setDone(true);
+      runSync();
       toast({ title: "Import complete!", description: `Trip "${store}" created with ${images.length} photos.` });
     } catch (err: any) {
       toast({ title: "Import failed", description: err.message, variant: "destructive" });

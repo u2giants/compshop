@@ -4,7 +4,8 @@ import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { resizeToBase64 } from "@/lib/image-utils";
-import { uploadVideo, hashFile, checkDuplicatePhoto, MAX_VIDEO_BYTES } from "@/lib/supabase-helpers";
+import { hashFile, checkDuplicatePhoto, MAX_VIDEO_BYTES } from "@/lib/supabase-helpers";
+import { queuePendingUpload } from "@/lib/pending-upload-utils";
 import { groupPhotos, groupBySection, batchSignedUrls } from "@/lib/photo-utils";
 import type { Photo, ChinaTrip } from "@/types/models";
 import { extractExif } from "@/lib/exif-utils";
@@ -50,6 +51,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import PhotoCard from "@/components/trip/PhotoCard";
+import PendingUploadCard from "@/components/trip/PendingUploadCard";
 import ChinaMoveToTripDialog from "@/components/trip/ChinaMoveToTripDialog";
 import BulkEditDialog from "@/components/trip/BulkEditDialog";
 import LinkToCardDialog from "@/components/trip/LinkToCardDialog";
@@ -276,6 +278,7 @@ export default function ChinaTripDetail() {
 
   // ── Group selected photos together ──
   async function handleGroupSelected() {
+    if (isChinaReadOnly) return;
     if (selectedPhotos.size < 2) {
       toast({ title: "Select at least 2 photos to group" });
       return;
@@ -301,6 +304,7 @@ export default function ChinaTripDetail() {
 
   // ── Assign selected photos to a section ──
   async function handleAssignSection(sectionName: string) {
+    if (isChinaReadOnly) return;
     if (selectedPhotos.size === 0) return;
     const ids = Array.from(selectedPhotos);
     const snapshots = captureSnapshot(ids, photos as any[], ["section"]);
@@ -316,6 +320,7 @@ export default function ChinaTripDetail() {
   }
 
   async function handleAddSection() {
+    if (isChinaReadOnly) return;
     const name = newSectionName.trim();
     if (!name) return;
     if (selectedPhotos.size > 0) {
@@ -543,30 +548,33 @@ export default function ChinaTripDetail() {
     e.target.value = "";
     if (!files || files.length === 0 || !user || !id) return;
     setUploading(true);
-    let success = 0;
+    let queued = 0;
     let tooLarge = 0;
     for (const file of Array.from(files)) {
       if (!file.type.startsWith("video/")) continue;
       if (file.size > MAX_VIDEO_BYTES) { tooLarge++; continue; }
       try {
-        const { filePath, thumbnailPath } = await uploadVideo(file, user.id, id);
-        await supabase.from("china_photos").insert({
-          trip_id: id,
-          user_id: user.id,
-          file_path: filePath,
-          thumbnail_path: thumbnailPath,
-          media_type: "video",
-        } as any);
-        success++;
+        await queuePendingUpload({
+          file,
+          userId: user.id,
+          tripId: id,
+          table: "china_photos",
+          mediaType: "video",
+        });
+        queued++;
       } catch (err: any) {
         toast({ title: "Video upload failed", description: friendlyErrorMessage(err), variant: "destructive" });
       }
     }
     setUploading(false);
     const parts: string[] = [];
-    if (success > 0) parts.push(`${success} video${success > 1 ? "s" : ""} uploaded`);
+    if (queued > 0) parts.push(`${queued} video${queued > 1 ? "s" : ""} queued`);
     if (tooLarge > 0) parts.push(`${tooLarge} skipped (over 30MB)`);
     if (parts.length > 0) toast({ title: parts.join(", ") });
+    if (queued > 0) {
+      loadPendingPhotos();
+      runSync();
+    }
     loadPhotos();
   }
 
@@ -1000,7 +1008,7 @@ export default function ChinaTripDetail() {
         )}
 
         {/* Desktop-only selection actions */}
-        {!isMobile && selectedPhotos.size > 0 && (
+        {!isChinaReadOnly && !isMobile && selectedPhotos.size > 0 && (
           <>
             <Button variant="outline" onClick={() => setShowBulkEdit(true)} className="gap-2">
               <PenLine className="h-4 w-4" /> Edit {selectedPhotos.size}
@@ -1029,9 +1037,11 @@ export default function ChinaTripDetail() {
           </>
         )}
 
-        <Button variant="outline" size="sm" onClick={() => setShowAddSection(true)} className="gap-1">
-          <Plus className="h-3.5 w-3.5" /> New Section
-        </Button>
+        {!isChinaReadOnly && (
+          <Button variant="outline" size="sm" onClick={() => setShowAddSection(true)} className="gap-1">
+            <Plus className="h-3.5 w-3.5" /> New Section
+          </Button>
+        )}
         {pendingPhotos.length > 0 && (
           <Badge variant="outline" className="gap-1">
             <CloudOff className="h-3 w-3" /> {pendingPhotos.length} pending
@@ -1045,7 +1055,7 @@ export default function ChinaTripDetail() {
       </div>
 
       {/* Mobile sticky bottom action bar when photos selected */}
-      {isMobile && selectedPhotos.size > 0 && (
+      {!isChinaReadOnly && isMobile && selectedPhotos.size > 0 && (
         <div className="fixed bottom-0 inset-x-0 z-50 bg-background border-t border-border p-3 flex items-center gap-2 safe-area-pb shadow-lg">
           <Badge variant="secondary" className="shrink-0">{selectedPhotos.size} selected</Badge>
           <div className="flex-1 flex items-center gap-2 overflow-x-auto">
@@ -1072,18 +1082,7 @@ export default function ChinaTripDetail() {
             <CloudOff className="h-3 w-3" /> {pendingPhotos.length} pending upload{pendingPhotos.length !== 1 ? "s" : ""} — will sync automatically
           </p>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {pendingPhotos.map((p) => {
-              const blobUrl = URL.createObjectURL(p.file_blob);
-              return (
-                <Card key={p.id} className="overflow-hidden border-dashed opacity-75">
-                  <img src={blobUrl} alt="Pending" className="h-40 w-full object-cover" />
-                  <CardContent className="p-3">
-                    <p className="text-sm font-medium">{p.metadata.product_name || "Untitled"}</p>
-                    <Badge variant="outline" className="mt-1 text-xs">{p.status}</Badge>
-                  </CardContent>
-                </Card>
-              );
-            })}
+            {pendingPhotos.map((p) => <PendingUploadCard key={p.id} upload={p} />)}
           </div>
         </div>
       )}
@@ -1176,11 +1175,12 @@ export default function ChinaTripDetail() {
                     onMobileLinkRequest={handleMobileLinkRequest}
                     chinaMode
                     selected={selectedPhotos.has(primary.id)}
-                    onSelect={toggleSelectPhoto}
-                    selectionMode={selectedPhotos.size > 0}
+                    onSelect={isChinaReadOnly ? undefined : toggleSelectPhoto}
+                    selectionMode={!isChinaReadOnly && selectedPhotos.size > 0}
                     userName={primary.user_id ? userProfiles[primary.user_id] : undefined}
+                    readOnly={isChinaReadOnly}
                     onFileDrop={(files, targetId) => {
-                      if (!user || !id) return;
+                      if (!user || !id || isChinaReadOnly) return;
                       Promise.all(files.map(async (file) => {
                         const fileHash = await hashFile(file);
                         if (await checkDuplicatePhoto(fileHash)) return;

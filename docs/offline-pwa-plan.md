@@ -11,13 +11,13 @@ handing work to an AI coding assistant.
 ## TL;DR
 
 1. The local-first capture and sync architecture **already exists** and is more
-   thoughtful than the original plan implies. The biggest single bug is the
-   auto-delete of pending uploads after 5 failed retries — fix that first
-   (`src/lib/sync-service.ts:122–128`).
-2. The genuine gaps are: no `navigator.storage.persist()`, no offline fallback
-   route, no Web Share API ("Save to Photos"), no exponential backoff, no
-   upload-stage tracking, no first-class "downloaded this trip for offline" state,
-   no offline edits to already-synced rows.
+   thoughtful than the original plan implies. The former highest-risk bug
+   (auto-deleting pending uploads after repeated failures) has been fixed:
+   `failed_needs_attention` preserves local blobs for user/operator action.
+2. Remaining genuine gaps include: no offline fallback route, no Web Share API
+   ("Save to Photos"), no first-class "downloaded this trip for offline" state,
+   no offline edits to already-synced rows, no field diagnostics upload, and no
+   global first-launch persistent-storage request outside the settings screen.
 3. The original plan misses: HEIC handling on iPhone, Supabase session expiry on
    multi-day offline trips, service-worker update behavior mid-trip, resumable
    uploads on weak networks, IndexedDB eviction risk on iOS Safari, and the
@@ -39,14 +39,15 @@ handing work to an AI coding assistant.
   `display: "standalone"`).
 
 ### Offline DB
-- `src/lib/offline-db.ts` (420 lines) defines an IndexedDB schema at version 3
+- `src/lib/offline-db.ts` defines an IndexedDB schema at version 3
   with stores: `trips`, `photos`, `image_blobs`, `pending_uploads`, `china_trips`,
   `china_photos`, `signed_urls`, `sync_meta`, `pending_trips`,
   `pending_china_trips`.
 - `pending_uploads` already stores the original `Blob` (`file_blob: Blob`), the
-  full metadata object, retry count, and a `status` field
-  (`pending | uploading | failed`).
-- Quota enforcement (`enforceStorageQuota`, line 344) deletes oldest cached
+  full metadata object, retry count, `status`, stable Storage path, optional
+  thumbnail path, file hash, upload stage, last error, last attempt time, and
+  `next_retry_at`.
+- Quota enforcement deletes oldest cached
   image blobs only — it does **not** touch `pending_uploads`. Pending uploads
   are already protected from auto-eviction.
 
@@ -67,25 +68,32 @@ handing work to an AI coding assistant.
   4. Call `addPendingUpload({...file_blob, status: "pending"})`.
   5. Reload the photo grid and pending grid.
   6. Trigger `runSync()`.
-- Photos appear in the UI from the local Blob via `URL.createObjectURL` at line
-  1047, so they render instantly even with no network.
+- Photos appear in the UI from the local Blob through
+  `src/components/trip/PendingUploadCard.tsx`, which revokes object URLs on
+  unmount.
 
 ### Sync service
-- `src/lib/sync-service.ts` (180 lines) is more sophisticated than the original
+- `src/lib/sync-service.ts` is more sophisticated than the original
   plan implies:
   - `runSync` skips concurrent runs via the `syncing` flag.
-  - File-hash deduplication runs again at upload time (lines 44–48).
+  - File-hash deduplication runs again at upload time.
   - Successful syncs remove the pending row.
+  - Repeated failures now move the upload to `failed_needs_attention` instead
+    of deleting it.
+  - Stable Storage paths and the pending upload id make retries idempotent
+    across Storage upload and database insert boundaries.
+  - `next_retry_at` adds retry backoff instead of retrying every item on every
+    poll.
   - There is iOS-aware re-sync: a `visibilitychange` listener triggers
     `runSync()` when the PWA returns to foreground because
-    `navigator.onLine` is unreliable on iOS (line 168). The `online` event is
-    also wired but treated as best-effort.
+    `navigator.onLine` is unreliable on iOS. The `online` event is also wired
+    but treated as best-effort.
   - A 30-second polling interval runs without consulting `navigator.onLine`,
-    again because that flag lies on iOS (line 175).
-  - `resetStuckUploads` (line 146) repairs uploads stuck in `uploading` after
-    a tab crash or close.
-- Upload timeout: `uploadPhoto` in `src/lib/supabase-helpers.ts:58–60` already
-  races against a **90-second timeout** so a hung upload doesn't block the queue.
+    again because that flag lies on iOS.
+  - `resetStuckUploads` repairs uploads stuck in `uploading` after a tab crash
+    or close.
+- Upload timeout: `uploadPhoto` in `src/lib/supabase-helpers.ts` races against a
+  **90-second timeout** so a hung image upload doesn't block the queue forever.
 
 ### Status UI
 - `src/components/SyncStatusIndicator.tsx` (59 lines) already shows
@@ -114,23 +122,15 @@ handing work to an AI coding assistant.
 
 ## Part 2 — Real gaps (build these)
 
-### G1. Auto-delete of failed uploads after 5 retries
-`src/lib/sync-service.ts:122–128` does:
-```ts
-const abandoned = pending.filter((u) => u.retry_count >= 5);
-for (const u of abandoned) {
-  await removePendingUpload(u.id);
-}
-```
-On a weak network in China, a single photo can plausibly hit 5 transient
-failures and then be silently deleted from the device. **This is the highest-risk
-bug in the codebase for the offline use case.** Replace with a
-`failed_needs_attention` status that requires user action.
+### G1. Auto-delete of failed uploads after 5 retries — done
+`src/lib/sync-service.ts` no longer removes pending uploads because retry count is high.
+Repeated failures set `failed_needs_attention`, keep the Blob in IndexedDB, and surface
+the last error/stage in pending upload cards.
 
-### G2. No `navigator.storage.persist()`
-`StorageQuotaManager.tsx` calls `.estimate()` but never requests persistent
-storage. On iOS Safari this is the single biggest mitigation against eviction.
-Add a "Request persistent storage" button and call it on first launch.
+### G2. Persistent storage request — partially done
+`StorageQuotaManager.tsx` now shows persistent-storage status, requests persistence once
+when the settings panel is first opened, and exposes an Enable button. What is still open:
+a true app-wide first-authenticated-launch request and a stale-origin warning.
 
 ### G3. No offline fallback route
 There is no `Offline.tsx` page wired to Workbox's `navigateFallback`. If the
@@ -143,16 +143,13 @@ in IndexedDB. Add a `Save to Photos` button on the post-capture modal that calls
 `navigator.canShare({ files: [file] })` then `navigator.share({ files: [file] })`.
 This is best-effort — see Part 4 on the Capacitor question.
 
-### G5. No exponential backoff
-The 30s poll re-tries everything every 30s. A photo failing in a captive WiFi
-loop will burn CPU and battery. Add `next_retry_at` per upload with backoff
-30s → 2m → 5m → 15m → 1h.
+### G5. Exponential backoff — done
+`pending_uploads.next_retry_at` is set after failures, and `runSync` skips uploads whose
+retry time is still in the future.
 
-### G6. No upload-stage tracking
-The current `status` field is `pending | uploading | failed`. When debugging a
-failure at a trade show, you want to know: did the storage upload succeed and
-only the DB insert fail? Add `upload_stage: local_saved | hashing |
-uploading_storage | inserting_db_row | done | failed`.
+### G6. Upload-stage tracking — done
+Pending uploads now track `local_saved`, `hashing`, `uploading_storage`,
+`inserting_db_row`, `done`, and `failed`.
 
 ### G7. No first-class "downloaded this trip for offline" state
 `cacheTripPhotos` works but there's no `offline_bundles` table storing
@@ -286,11 +283,11 @@ wasted effort. But name the decision so you're not surprised in 6 months.
 Do not run the original 11 phases in order. Use this sequence:
 
 ### Sprint 1: high-stakes one-liners (half a day)
-1. **Remove auto-delete of failed uploads.** (G1) Replace the `>= 5` cleanup
-   with status `failed_needs_attention` and surface in
-   `SyncStatusIndicator`/`PendingUploadsPanel`.
-2. **Call `navigator.storage.persist()`** on first authenticated launch. (G2)
-3. **Disable AI buttons when `!online`** with tooltip. (G9)
+1. **Done: remove auto-delete of failed uploads.** (G1) Implemented with
+   `failed_needs_attention`, stable paths, upload stages, and visible pending cards.
+2. **Partly done: call `navigator.storage.persist()`.** (G2) Implemented in
+   `StorageQuotaManager`; still open for true first-authenticated-launch behavior.
+3. **Open: disable AI buttons when `!online`** with tooltip. (G9)
 
 ### Sprint 2: PWA shell + capture polish (1–2 days)
 4. **Add `src/pages/Offline.tsx`** and wire it into Workbox `navigateFallback`.
@@ -298,12 +295,12 @@ Do not run the original 11 phases in order. Use this sequence:
    users. (Phase 1 of original plan)
 5. **Verify lazy chunks are precached.** Build, inspect `dist/sw.js` for the
    precache manifest, confirm all `assets/*.js` route chunks are listed.
-6. **Add `local_created_at`, `local_file_size`, `local_mime_type`,
-   `last_attempt_at`, `last_error_message`, `next_retry_at`,
-   `camera_roll_save_status`, `upload_stage` to `PendingUpload`.** Bump DB to
-   version 4. (G5, G6)
-7. **Exponential backoff in `runSync`.** Skip uploads whose `next_retry_at` is
-   in the future. (G5)
+6. **Partly done: extend `PendingUpload`.** `last_attempt_at`,
+   `last_error_message`, `next_retry_at`, and `upload_stage` are implemented
+   without an IndexedDB version bump because they are value fields, not indexes.
+   Still open: `local_file_size`, `local_mime_type`, `camera_roll_save_status`.
+7. **Done: retry backoff in `runSync`.** Uploads whose `next_retry_at` is in the
+   future are skipped. (G5)
 8. **HEIC conversion in `handleBulkUpload`** if the answers to R1 require it.
    Verify first.
 
@@ -312,9 +309,9 @@ Do not run the original 11 phases in order. Use this sequence:
    `shareImageForSaving`, `downloadFile` fallback. (G4)
 10. **Add post-capture "Save to Photos / Skip" modal.** Set
     `camera_roll_save_status` after share-sheet returns.
-11. **Extend `StorageQuotaManager`** to show pending count, failed count,
-    persistent-storage state (granted/denied/unknown), and a "Clear cached
-    images only" button that skips pending_uploads.
+11. **Partly done: extend `StorageQuotaManager`.** Persistent-storage state and
+    cache clearing that skips pending uploads are implemented. Still open:
+    pending count, failed count, and stronger field warning copy.
 
 ### Sprint 4: offline bundles + session handling (2 days)
 12. **`offline_bundles` store** with the schema in G7. Bump DB to 5.

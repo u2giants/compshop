@@ -2,7 +2,9 @@ import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { uploadPhoto, hashFile, checkDuplicatePhoto } from "@/lib/supabase-helpers";
+import { hashFile, checkDuplicatePhoto } from "@/lib/supabase-helpers";
+import { queuePendingUpload } from "@/lib/pending-upload-utils";
+import { runSync } from "@/lib/sync-service";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -140,14 +142,12 @@ export default function ImportKeep() {
             const file = new File([img.blob], img.name, { type: img.blob.type || "image/jpeg" });
             const fileHash = await hashFile(file);
             if (await checkDuplicatePhoto(fileHash)) continue;
-            const { filePath, thumbnailPath } = await uploadPhoto(file, user.id, trip.id);
-            await supabase.from("photos").insert({
-              trip_id: trip.id,
-              user_id: user.id,
-              file_path: filePath,
-              thumbnail_path: thumbnailPath,
-              file_hash: fileHash,
-              notes: `Imported from Google Keep: ${card.title}`,
+            await queuePendingUpload({
+              file,
+              userId: user.id,
+              tripId: trip.id,
+              fileHash,
+              metadata: { notes: `Imported from Google Keep: ${card.title}` },
             });
           } catch (imgErr) {
             console.error("Failed to upload image:", img.name, imgErr);
@@ -164,6 +164,7 @@ export default function ImportKeep() {
     setResults(importResults);
     setPhase("done");
     setImporting(false);
+    runSync();
 
     const successCount = importResults.filter((r) => r.status === "success").length;
     toast({

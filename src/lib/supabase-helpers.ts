@@ -49,23 +49,53 @@ export async function checkDuplicatePhoto(fileHash: string): Promise<boolean> {
   return (d1?.length ?? 0) > 0 || (d2?.length ?? 0) > 0;
 }
 
-export async function uploadPhoto(file: File, userId: string, tripId: string): Promise<{ filePath: string; thumbnailPath: string | null }> {
-  const compressed = await compressForUpload(file);
-  const fileExt = compressed.name.split(".").pop();
-  const filePath = `${userId}/${tripId}/${crypto.randomUUID()}.${fileExt}`;
+function extensionFromName(fileName: string, fallback: string) {
+  return (fileName.split(".").pop() || fallback).toLowerCase().replace(/[^a-z0-9]/g, "") || fallback;
+}
 
-  const uploadPromise = supabase.storage.from("photos").upload(filePath, compressed);
+export function buildStoragePath(userId: string, tripId: string, fileName: string, id = crypto.randomUUID()) {
+  const ext = extensionFromName(fileName, "jpg");
+  return `${userId}/${tripId}/${id}.${ext}`;
+}
+
+export function buildThumbnailPath(userId: string, tripId: string, id = crypto.randomUUID(), ext = "webp") {
+  return `${userId}/${tripId}/thumbs/${id}.${ext}`;
+}
+
+function isAlreadyStored(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const maybe = error as { message?: string; statusCode?: string | number; error?: string };
+  const text = `${maybe.message ?? ""} ${maybe.error ?? ""}`.toLowerCase();
+  return maybe.statusCode === 409 || maybe.statusCode === "409" || text.includes("already exists") || text.includes("duplicate");
+}
+
+async function uploadWithResume(path: string, body: Blob, options?: { contentType?: string }) {
+  const { error } = await supabase.storage.from("photos").upload(path, body, {
+    ...(options?.contentType ? { contentType: options.contentType } : {}),
+    upsert: false,
+  });
+  if (error && !isAlreadyStored(error)) throw error;
+}
+
+export async function uploadPhoto(
+  file: File,
+  userId: string,
+  tripId: string,
+  options: { filePath?: string; thumbnailPath?: string | null } = {}
+): Promise<{ filePath: string; thumbnailPath: string | null }> {
+  const compressed = await compressForUpload(file);
+  const filePath = options.filePath ?? buildStoragePath(userId, tripId, compressed.name);
+
+  const uploadPromise = uploadWithResume(filePath, compressed, { contentType: compressed.type || file.type });
   const timeout = new Promise<never>((_, reject) =>
     setTimeout(() => reject(new Error("Upload timed out after 90s")), 90_000)
   );
-  const { error } = await Promise.race([uploadPromise, timeout]) as Awaited<typeof uploadPromise>;
-
-  if (error) throw error;
+  await Promise.race([uploadPromise, timeout]);
 
   // Generate WebP thumbnail in parallel (non-blocking on failure)
   let thumbnailPath: string | null = null;
   try {
-    thumbnailPath = await createAndUploadThumbnail(file, userId, tripId);
+    thumbnailPath = await createAndUploadThumbnail(file, userId, tripId, options.thumbnailPath ?? undefined);
   } catch (e) {
     console.warn("Thumbnail generation failed, using original:", e);
   }
@@ -116,32 +146,23 @@ async function generateVideoPoster(file: File): Promise<Blob | null> {
 export async function uploadVideo(
   file: File,
   userId: string,
-  tripId: string
+  tripId: string,
+  options: { filePath?: string; thumbnailPath?: string | null } = {}
 ): Promise<{ filePath: string; thumbnailPath: string | null }> {
   if (file.size > MAX_VIDEO_BYTES) {
     throw new Error(`Video is ${(file.size / 1024 / 1024).toFixed(1)}MB. Max allowed is 30MB.`);
   }
-  const fileExt = (file.name.split(".").pop() || "mp4").toLowerCase();
-  const filePath = `${userId}/${tripId}/${crypto.randomUUID()}.${fileExt}`;
+  const filePath = options.filePath ?? buildStoragePath(userId, tripId, file.name);
 
-  const { error } = await supabase.storage.from("photos").upload(filePath, file, {
-    contentType: file.type || "video/mp4",
-  });
-  if (error) throw error;
+  await uploadWithResume(filePath, file, { contentType: file.type || "video/mp4" });
 
   // Generate poster thumbnail (best-effort)
   let thumbnailPath: string | null = null;
   try {
     const poster = await generateVideoPoster(file);
     if (poster) {
-      thumbnailPath = `${userId}/${tripId}/${crypto.randomUUID()}.jpg`;
-      const { error: thumbErr } = await supabase.storage
-        .from("photos")
-        .upload(thumbnailPath, poster, { contentType: "image/jpeg" });
-      if (thumbErr) {
-        console.warn("Video poster upload failed:", thumbErr);
-        thumbnailPath = null;
-      }
+      thumbnailPath = options.thumbnailPath ?? buildThumbnailPath(userId, tripId, crypto.randomUUID(), "jpg");
+      await uploadWithResume(thumbnailPath, poster, { contentType: "image/jpeg" });
     }
   } catch (e) {
     console.warn("Video poster generation failed:", e);

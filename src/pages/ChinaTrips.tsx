@@ -2,7 +2,9 @@ import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { uploadPhoto, hashFile, checkDuplicatePhoto } from "@/lib/supabase-helpers";
+import { hashFile, checkDuplicatePhoto } from "@/lib/supabase-helpers";
+import { queuePendingUpload } from "@/lib/pending-upload-utils";
+import { runSync } from "@/lib/sync-service";
 import { extractExif, distanceKm } from "@/lib/exif-utils";
 import { getCantonFairSession, sessionKey } from "@/lib/canton-fair-utils";
 import { cacheChinaTripPhotos, type BulkCacheProgress } from "@/lib/bulk-cache";
@@ -26,7 +28,12 @@ import ChinaDraftTrips from "@/components/trip/ChinaDraftTrips";
 import CantonFairGroupCard, { type ChinaTripListItem } from "@/components/trip/CantonFairGroupCard";
 import ChinaTripCard from "@/components/trip/ChinaTripCard";
 
-interface ChinaTrip extends ChinaTripListItem {}
+type ChinaTrip = ChinaTripListItem;
+
+type ChinaTripStatsRow = CachedChinaTrip & {
+  cover_user_id?: string | null;
+  photo_count?: number | string | null;
+};
 
 const COVER_SIGNED_URL_TTL = 86400;
 const COVER_SIGNED_URL_TTL_MS = COVER_SIGNED_URL_TTL * 1000;
@@ -133,49 +140,21 @@ export default function ChinaTrips() {
     // 3. Background fetch
     try {
       const { data } = await supabase
-        .from("china_trips")
+        .from("china_trips_with_stats" as never)
         .select("*")
         .is("deleted_at", null)
         .eq("is_draft", false)
         .order("date", { ascending: false });
 
       if (data) {
-        const tripIds = data.map(t => t.id);
-        
-        const photoCountPromises = tripIds.map(tid =>
-          supabase.from("china_photos").select("*", { count: "exact", head: true }).eq("trip_id", tid)
-        );
-        const coverPromises = tripIds.map(tid =>
-          supabase.from("china_photos").select("file_path, user_id").eq("trip_id", tid).order("created_at", { ascending: true }).limit(1)
-        );
-        
-        const [photoCounts, coverResults] = await Promise.all([
-          Promise.all(photoCountPromises),
-          Promise.all(coverPromises),
-        ]);
-
-        const userIds = new Set<string>();
-        data.forEach(t => { if (t.created_by) userIds.add(t.created_by); });
-        coverResults.forEach(r => { if (r.data?.[0]?.user_id) userIds.add(r.data[0].user_id); });
-
-        let profileMap: Record<string, string> = {};
-        if (userIds.size > 0) {
-          const { data: profiles } = await supabase
-            .from("profiles")
-            .select("id, display_name")
-            .in("id", Array.from(userIds));
-          if (profiles) {
-            profiles.forEach(p => { profileMap[p.id] = p.display_name || "Unknown"; });
-          }
-        }
-
-        const coverFilePaths = coverResults.map((r) => r.data?.[0]?.file_path).filter(Boolean) as string[];
+        const rows = data as unknown as ChinaTripStatsRow[];
+        const coverFilePaths = rows.map((trip) => trip.cover_file_path).filter(Boolean) as string[];
         const cachedCoverUrls = await getCachedSignedUrls(coverFilePaths);
         const signedUrlCacheEntries: CachedSignedUrl[] = [];
 
         const coverSignedUrls = await Promise.all(
-          coverResults.map(async (r) => {
-            const fp = r.data?.[0]?.file_path;
+          rows.map(async (trip) => {
+            const fp = trip.cover_file_path;
             if (!fp) return undefined;
             const cachedUrl = cachedCoverUrls.get(fp);
             if (cachedUrl) return cachedUrl;
@@ -197,12 +176,12 @@ export default function ChinaTrips() {
 
         cacheSignedUrls(signedUrlCacheEntries).catch(() => {});
 
-        const tripsWithCounts: CachedChinaTrip[] = data.map((trip, i) => ({
+        const tripsWithCounts: CachedChinaTrip[] = rows.map((trip, i) => ({
           ...trip,
-          photo_count: photoCounts[i].count ?? 0,
-          cover_file_path: coverResults[i].data?.[0]?.file_path || undefined,
+          photo_count: Number(trip.photo_count ?? 0),
+          cover_file_path: trip.cover_file_path || undefined,
           cover_url: coverSignedUrls[i],
-          photographer: trip.created_by ? profileMap[trip.created_by] ?? null : null,
+          photographer: trip.photographer ?? null,
         }));
         setTrips(tripsWithCounts as ChinaTrip[]);
 
@@ -553,14 +532,7 @@ export default function ChinaTrips() {
         try {
           const fileHash = await hashFile(file);
           if (await checkDuplicatePhoto(fileHash)) continue;
-          const { filePath, thumbnailPath } = await uploadPhoto(file, user.id, tripId);
-          await supabase.from("china_photos").insert({
-            trip_id: tripId,
-            user_id: user.id,
-            file_path: filePath,
-            thumbnail_path: thumbnailPath,
-            file_hash: fileHash,
-          });
+          await queuePendingUpload({ file, userId: user.id, tripId, table: "china_photos", fileHash });
 
           const existing = results.get(tripId);
           if (existing) {
@@ -578,6 +550,7 @@ export default function ChinaTrips() {
     setSmartUploading(false);
     setSmartResults(Array.from(results.values()));
     setShowSmartResults(true);
+    runSync();
     loadTrips();
 
     const draftCount = Array.from(results.values()).filter(r => r.isNew).length;

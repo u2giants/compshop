@@ -8,7 +8,9 @@ import { cacheTrips, getCachedTrips, clearCachedTrips, setSyncTimestamp, getSync
 import { useOnlineStatus } from "@/hooks/use-online-status";
 import { useRetailers } from "@/hooks/use-retailers";
 import { useCategories } from "@/hooks/use-categories";
-import { uploadPhoto, hashFile, checkDuplicatePhoto } from "@/lib/supabase-helpers";
+import { hashFile, checkDuplicatePhoto } from "@/lib/supabase-helpers";
+import { queuePendingUpload } from "@/lib/pending-upload-utils";
+import { runSync } from "@/lib/sync-service";
 import { extractExif, distanceKm } from "@/lib/exif-utils";
 import { cacheTripPhotos, type BulkCacheProgress } from "@/lib/bulk-cache";
 import { Card, CardContent } from "@/components/ui/card";
@@ -29,6 +31,14 @@ interface TripWithCover extends CachedTrip {
   cover_url?: string;
   cover_file_path?: string;
 }
+
+type ShoppingTripStatsRow = CachedTrip & {
+  deleted_at?: string | null;
+  is_draft?: boolean | null;
+  cover_file_path?: string | null;
+  photo_count?: number | string | null;
+  member_count?: number | string | null;
+};
 
 export default function Trips() {
   const { user, isStoreReadOnly } = useAuth();
@@ -116,35 +126,19 @@ export default function Trips() {
     // 3. Background fetch
     try {
       const { data } = await supabase
-        .from("shopping_trips")
+        .from("shopping_trips_with_stats" as never)
         .select("*")
         .is("deleted_at", null)
         .eq("is_draft", false)
         .order("date", { ascending: false });
 
       if (data) {
-        const tripIds = data.map(t => t.id);
-        
-        const photoCountPromises = tripIds.map(tid =>
-          supabase.from("photos").select("*", { count: "exact", head: true }).eq("trip_id", tid)
-        );
-        const memberCountPromises = tripIds.map(tid =>
-          supabase.from("trip_members").select("*", { count: "exact", head: true }).eq("trip_id", tid)
-        );
-        const coverPromises = tripIds.map(tid =>
-          supabase.from("photos").select("file_path").eq("trip_id", tid).order("created_at", { ascending: true }).limit(1)
-        );
-        
-        const [photoCounts, memberCounts, coverResults] = await Promise.all([
-          Promise.all(photoCountPromises),
-          Promise.all(memberCountPromises),
-          Promise.all(coverPromises),
-        ]);
+        const rows = data as unknown as ShoppingTripStatsRow[];
 
         // Generate thumbnail-sized signed URLs for covers (400×400 via imgproxy)
         const coverSignedUrls = await Promise.all(
-          coverResults.map(async (r) => {
-            const fp = r.data?.[0]?.file_path;
+          rows.map(async (trip) => {
+            const fp = trip.cover_file_path;
             if (!fp) return undefined;
             const { data } = await supabase.storage
               .from("photos")
@@ -153,11 +147,11 @@ export default function Trips() {
           })
         );
 
-        const tripsWithCounts = data.map((trip, i) => ({
+        const tripsWithCounts = rows.map((trip, i) => ({
           ...trip,
-          photo_count: photoCounts[i].count ?? 0,
-          member_count: memberCounts[i].count ?? 0,
-          cover_file_path: coverResults[i].data?.[0]?.file_path || undefined,
+          photo_count: Number(trip.photo_count ?? 0),
+          member_count: Number(trip.member_count ?? 0),
+          cover_file_path: trip.cover_file_path || undefined,
           cover_url: coverSignedUrls[i],
         }));
         setTrips(tripsWithCounts);
@@ -399,14 +393,7 @@ export default function Trips() {
         try {
           const fileHash = await hashFile(file);
           if (await checkDuplicatePhoto(fileHash)) continue;
-          const { filePath, thumbnailPath } = await uploadPhoto(file, user.id, tripId);
-          await supabase.from("photos").insert({
-            trip_id: tripId,
-            user_id: user.id,
-            file_path: filePath,
-            thumbnail_path: thumbnailPath,
-            file_hash: fileHash,
-          });
+          await queuePendingUpload({ file, userId: user.id, tripId, fileHash });
 
           const existing = results.get(tripId);
           if (existing) {
@@ -424,6 +411,7 @@ export default function Trips() {
     setSmartUploading(false);
     setSmartResults(Array.from(results.values()));
     setShowSmartResults(true);
+    runSync();
     loadTrips();
     const draftCount = Array.from(results.values()).filter(r => r.isNew).length;
     toast({

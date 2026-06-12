@@ -37,7 +37,7 @@ Then load additional docs only when relevant:
 Historical or narrow docs:
 
 - `selfhost.md` and `selfhost/runbook.md` are migration history and operational reference. Do not load them for routine app work.
-- `docs/offline-pwa-plan.md` is a planning/audit document for offline improvements. Load only for offline/PWA roadmap work.
+- `docs/offline-pwa-plan.md` is a planning/audit document for offline improvements. Load only for offline/PWA roadmap work or upload-durability follow-up.
 - `docs/authentik.md` is for Authentik identity-provider administration, not ordinary app auth UI work.
 
 ## Repository structure
@@ -83,7 +83,7 @@ Scripts:
 
 Migrations:
 
-- `supabase/migrations/` has 30 SQL migrations as of this audit.
+- `supabase/migrations/` has 31 SQL migrations as of this audit, through `20260612000000_trip_list_stats_views.sql`.
 
 Deployment files:
 
@@ -132,7 +132,7 @@ Purpose: prevent AI agents from scattering project logic into unrelated framewor
 | Change domestic trip list/detail behavior | `src/pages/Trips.tsx`, `src/pages/TripDetail.tsx`, `src/components/trip/*`, `src/lib/photo-utils.ts` | `selfhost/` unless runtime/deploy changes |
 | Change China/Asia trip behavior | `src/pages/ChinaTrips.tsx`, `src/pages/ChinaTripDetail.tsx`, `src/pages/FairTripStream.tsx`, `src/components/trip/ChinaTripCard.tsx`, `src/components/trip/CantonFairGroupCard.tsx` | Old Lovable migration docs |
 | Change factory views | `src/pages/Factories.tsx`, `src/pages/FactoryDetail.tsx`, `src/pages/FactoryWeekStream.tsx` | `src/pages/Trips.tsx` unless shared behavior changes |
-| Change offline caching/sync | `src/lib/offline-db.ts`, `src/lib/sync-service.ts`, `src/lib/bulk-cache.ts`, `src/components/CachedImage.tsx`, `src/components/SyncStatusIndicator.tsx`, `docs/architecture.md` if behavior changes | Browser/vendor cache folders |
+| Change offline caching/sync | `src/lib/offline-db.ts`, `src/lib/sync-service.ts`, `src/lib/pending-upload-utils.ts`, `src/lib/bulk-cache.ts`, `src/components/CachedImage.tsx`, `src/components/SyncStatusIndicator.tsx`, `src/components/trip/PendingUploadCard.tsx`, `src/components/settings/StorageQuotaManager.tsx`, `docs/architecture.md` if behavior changes | Browser/vendor cache folders |
 | Add database field/table/policy | New file in `supabase/migrations/`, then regenerate/check `src/integrations/supabase/types.ts`, update affected pages/components | Existing applied migration files unless explicitly repairing unreleased local work |
 | Add edge function behavior | Relevant `supabase/functions/<name>/index.ts`, `supabase/config.toml` if JWT setting changes, `docs/configuration.md` if env changes | Frontend pages unless UI calls change |
 | Add or change env var | `.env.example`, `selfhost/.env.example`, `selfhost/.env.frontend.example`, `docs/configuration.md`, `docs/deployment.md` if deploy steps change | Production `.env` values in git |
@@ -158,6 +158,8 @@ Purpose: prevent AI agents from scattering project logic into unrelated framewor
 | Domestic trips | `shopping_trips` | `supabase/migrations/`, `src/integrations/supabase/types.ts` | Main domestic/store shopping trip table. |
 | Asia trips | `china_trips` | `supabase/migrations/`, `src/integrations/supabase/types.ts` | China/Hong Kong trip table; `venue_type` includes `canton_fair`, `factory_visit`, `booth_visit`. |
 | Photos | `photos`, `china_photos` | `supabase/migrations/`, `src/integrations/supabase/types.ts` | Domestic and Asia photo records. |
+| Trip list stats views | `shopping_trips_with_stats`, `china_trips_with_stats` | `supabase/migrations/20260612000000_trip_list_stats_views.sql` | Security-invoker views used by trip list pages to avoid per-trip count/cover queries. |
+| Offline pending upload statuses | `pending`, `uploading`, `failed`, `failed_needs_attention` | `src/lib/offline-db.ts`, `src/lib/sync-service.ts` | `failed_needs_attention` preserves local blobs after repeated failures instead of deleting them. |
 | Authentik OIDC proxy path | `/oidc-compat/` | `selfhost/compose.supabase.yml` | GoTrue `keycloak` provider routes through nginx compatibility proxy. |
 
 ## Container and service inventory
@@ -198,7 +200,7 @@ These paths exist or may be generated, but should not consume AI context unless 
 - `.lovable/`
 - `public/*.png` and `public/*.ico` unless changing app icons/PWA assets
 - `selfhost/runbook.md` and `selfhost.md` unless working on historical migration or recovery procedures
-- `docs/offline-pwa-plan.md` unless working on offline/PWA roadmap
+- `docs/offline-pwa-plan.md` unless working on offline/PWA roadmap or upload-durability follow-up
 - Generated `src/integrations/supabase/types.ts` unless DB types/schema are relevant
 
 These entries must stay aligned with `.claudeignore` and `.cursorignore`.
@@ -298,6 +300,8 @@ Do not commit real secret values. Runtime values live in Coolify. GitHub Actions
 | `VITE_SUPABASE_URL` | Browser Supabase API URL | `.env.local` or Coolify frontend build args | yes | yes |
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | Browser anon/public key | `.env.local` or Coolify frontend build args | yes | yes |
 | `VITE_SUPABASE_PROJECT_ID` | Storage URL helper/project marker | `.env.local` or Coolify frontend build args | yes | yes |
+| `SUPABASE_URL` | Edge-function Supabase API URL | Supabase/functions runtime env | no | yes for edge functions |
+| `SUPABASE_ANON_KEY` | Edge-function anon client key | Supabase/functions runtime env | no | yes for edge functions |
 | `API_EXTERNAL_URL` | Public GoTrue/API external URL | Coolify Supabase stack env | no | yes |
 | `SUPABASE_PUBLIC_URL` | Public Supabase API URL for services/Studio | Coolify Supabase stack env | no | yes |
 | `STUDIO_PUBLIC_URL` | Studio public URL reference | Coolify Supabase stack env | no | yes |
@@ -409,6 +413,23 @@ Commits `86528b6` and `9a32cb9` improved image cache fallbacks, signed URL reuse
 Rule added to prevent recurrence:
 When changing signed URL/blob caching, verify both first-load online behavior and cached-row render behavior. Documentation changes were not required for the code-only cache fix.
 
+### 2026-06-12 Pending upload auto-delete risk
+
+What happened:
+Static review found that `src/lib/sync-service.ts` removed pending uploads after five failed attempts.
+
+Impact:
+On weak trade-show networks, transient failures could delete the only local copy of a photo/video before it reached Supabase.
+
+Root cause:
+The sync loop treated high retry count as abandoned work instead of a user-visible failure state.
+
+Recovery:
+Pending uploads now keep stable storage paths, retry metadata, upload stage, last error, `next_retry_at`, and `failed_needs_attention` status. Sync no longer auto-removes failed local blobs.
+
+Rule added to prevent recurrence:
+Never delete `pending_uploads` as retry cleanup. Only remove a pending upload after successful DB persistence, duplicate confirmation, or explicit user action.
+
 ### 2026-06-12 Diverged local and remote `main`
 
 What happened:
@@ -450,6 +471,6 @@ Do not disable consistent container naming for `compshop-frontend:main` without 
 | open | Confirm frontend Coolify application UUID | Run `.github/workflows/coolify-audit.yml` or query Coolify API and update this file/docs if the UUID should be documented. |
 | open | Decide whether to update `capacitor.config.ts` away from the Lovable URL | Mobile owner should verify current mobile release behavior, change config only as part of an intentional app-store release, and update docs. |
 | open | Verify rollback settings in Coolify after documentation cleanup | Check frontend image retention and Coolify rollback options before documenting a stronger rollback promise. |
-| open | Offline/PWA roadmap items | See `docs/offline-pwa-plan.md`; prioritize only if current product work calls for it. |
+| open | Offline/PWA roadmap items | See `docs/offline-pwa-plan.md`; upload auto-delete, upload-stage tracking, retry backoff, direct-upload routing, object URL cleanup, and Storage persistent-state UI are now partly/completely addressed. Remaining items include offline fallback route, camera-roll save/share flow, offline bundle state, offline edits, and field diagnostics. |
 | done | Self-hosted migration | Completed before this audit; current deploy runs on Coolify/self-hosted Supabase. |
 | done | `/china` image flicker/cache follow-up | Completed in commits `86528b6` and `9a32cb9`. |

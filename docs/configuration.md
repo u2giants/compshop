@@ -122,6 +122,8 @@ Used for password reset, magic link, and invite emails.
 
 | Variable | Notes |
 |----------|-------|
+| `SUPABASE_URL` | Supabase API URL available to edge functions |
+| `SUPABASE_ANON_KEY` | Anon key used by edge functions when they create a Supabase client |
 | `AI_PROVIDER` | `openrouter` |
 | `AI_MODEL` | Default model, e.g. `google/gemini-2.5-flash` |
 | `OPENROUTER_API_KEY` | OpenRouter API key (sk-or-v1-…) |

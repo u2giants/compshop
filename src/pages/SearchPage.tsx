@@ -10,6 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Search, ChevronUp, ChevronDown } from "lucide-react";
 import PhotoCard from "@/components/trip/PhotoCard";
+import { useAuth } from "@/contexts/AuthContext";
+
+type SearchPhoto = Photo & { __source: "photos" | "china_photos" };
 
 function escapeLikePattern(input: string): string {
   return input
@@ -37,6 +40,7 @@ function applyFilters(
 }
 
 export default function SearchPage() {
+  const { isStoreReadOnly, isChinaReadOnly } = useAuth();
   const IMAGE_TYPES = useImageTypes();
   const categories = useCategories();
   const [query, setQuery] = useState("");
@@ -47,7 +51,7 @@ export default function SearchPage() {
   const [brand, setBrand] = useState("");
   const [material, setMaterial] = useState("");
   const [dimensions, setDimensions] = useState("");
-  const [results, setResults] = useState<Photo[]>([]);
+  const [results, setResults] = useState<SearchPhoto[]>([]);
   const [searched, setSearched] = useState(false);
   const [loading, setLoading] = useState(false);
   const [panelOpen, setPanelOpen] = useState(true);
@@ -67,13 +71,16 @@ export default function SearchPage() {
     q2 = applyFilters(q2, filters);
 
     const [{ data: d1 }, { data: d2 }] = await Promise.all([q1, q2]);
-    const combined = [...(d1 || []), ...(d2 || [])]
+    const combined = [
+      ...(d1 || []).map((p) => ({ ...p, __source: "photos" as const })),
+      ...(d2 || []).map((p) => ({ ...p, __source: "china_photos" as const })),
+    ]
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .slice(0, 50);
 
     if (combined.length > 0) {
       const urlMap = await batchSignedUrls(combined);
-      setResults(combined.map(p => ({ ...p, signed_url: urlMap.get(p.file_path), signed_thumbnail_url: p.thumbnail_path ? urlMap.get(p.thumbnail_path) : undefined })) as Photo[]);
+      setResults(combined.map(p => ({ ...p, signed_url: urlMap.get(p.file_path), signed_thumbnail_url: p.thumbnail_path ? urlMap.get(p.thumbnail_path) : undefined })) as SearchPhoto[]);
     } else {
       setResults([]);
     }
@@ -176,7 +183,15 @@ export default function SearchPage() {
         <>
           <p className="mb-4 text-sm text-muted-foreground">{results.length} result{results.length !== 1 ? "s" : ""}</p>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {results.map((photo) => <PhotoCard key={photo.id} photo={photo} onUpdated={handleSearch} />)}
+            {results.map((photo) => (
+              <PhotoCard
+                key={`${photo.__source}-${photo.id}`}
+                photo={photo}
+                onUpdated={handleSearch}
+                chinaMode={photo.__source === "china_photos"}
+                readOnly={photo.__source === "china_photos" ? isChinaReadOnly : isStoreReadOnly}
+              />
+            ))}
           </div>
         </>
       ) : null}

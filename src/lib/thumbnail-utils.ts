@@ -3,6 +3,13 @@ import { supabase } from "@/integrations/supabase/client";
 const THUMB_MAX_WIDTH = 400;
 const THUMB_QUALITY = 0.75;
 
+function isAlreadyStored(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const maybe = error as { message?: string; statusCode?: string | number; error?: string };
+  const text = `${maybe.message ?? ""} ${maybe.error ?? ""}`.toLowerCase();
+  return maybe.statusCode === 409 || maybe.statusCode === "409" || text.includes("already exists") || text.includes("duplicate");
+}
+
 /**
  * Generate a WebP thumbnail blob from a File using canvas.
  * Falls back to JPEG if WebP is unsupported.
@@ -32,10 +39,11 @@ export async function generateThumbnail(file: File): Promise<Blob> {
 export async function uploadThumbnail(
   thumbnailBlob: Blob,
   userId: string,
-  tripId: string
+  tripId: string,
+  requestedPath?: string
 ): Promise<string> {
   const ext = thumbnailBlob.type === "image/webp" ? "webp" : "jpg";
-  const thumbPath = `${userId}/${tripId}/thumbs/${crypto.randomUUID()}.${ext}`;
+  const thumbPath = requestedPath ?? `${userId}/${tripId}/thumbs/${crypto.randomUUID()}.${ext}`;
 
   const { error } = await supabase.storage
     .from("photos")
@@ -43,7 +51,7 @@ export async function uploadThumbnail(
       contentType: thumbnailBlob.type,
     });
 
-  if (error) throw error;
+  if (error && !isAlreadyStored(error)) throw error;
   return thumbPath;
 }
 
@@ -53,8 +61,9 @@ export async function uploadThumbnail(
 export async function createAndUploadThumbnail(
   file: File,
   userId: string,
-  tripId: string
+  tripId: string,
+  requestedPath?: string
 ): Promise<string> {
   const blob = await generateThumbnail(file);
-  return uploadThumbnail(blob, userId, tripId);
+  return uploadThumbnail(blob, userId, tripId, requestedPath);
 }

@@ -15,7 +15,7 @@ interface Comment {
   profile?: { display_name: string | null; email: string | null };
 }
 
-export default function PhotoComments({ photoId }: { photoId: string }) {
+export default function PhotoComments({ photoId, readOnly = false }: { photoId: string; readOnly?: boolean }) {
   const { user, isAdmin } = useAuth();
   const { toast } = useToast();
   const [comments, setComments] = useState<Comment[]>([]);
@@ -95,7 +95,7 @@ export default function PhotoComments({ photoId }: { photoId: string }) {
                 </span>
                 <p className="mt-0.5 text-muted-foreground">{c.content}</p>
               </div>
-              {(c.user_id === user?.id || isAdmin) && (
+              {!readOnly && (c.user_id === user?.id || isAdmin) && (
                 <button
                   onClick={() => handleDelete(c.id)}
                   className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive"
@@ -107,18 +107,20 @@ export default function PhotoComments({ photoId }: { photoId: string }) {
           ))}
         </div>
       )}
-      <form onSubmit={handleSubmit} className="flex gap-2">
-        <Textarea
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          placeholder="Add a comment..."
-          rows={1}
-          className="min-h-[40px] resize-none"
-        />
-        <Button type="submit" size="icon" disabled={!content.trim() || submitting}>
-          <Send className="h-4 w-4" />
-        </Button>
-      </form>
+      {!readOnly && (
+        <form onSubmit={handleSubmit} className="flex gap-2">
+          <Textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder="Add a comment..."
+            rows={1}
+            className="min-h-[40px] resize-none"
+          />
+          <Button type="submit" size="icon" disabled={!content.trim() || submitting}>
+            <Send className="h-4 w-4" />
+          </Button>
+        </form>
+      )}
     </div>
   );
 }

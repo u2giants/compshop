@@ -85,6 +85,15 @@ export interface SyncMeta {
   timestamp: number;
 }
 
+export type PendingUploadStatus = "pending" | "uploading" | "failed" | "failed_needs_attention";
+export type PendingUploadStage =
+  | "local_saved"
+  | "hashing"
+  | "uploading_storage"
+  | "inserting_db_row"
+  | "done"
+  | "failed";
+
 export interface PendingUpload {
   id: string;
   trip_id: string;
@@ -102,10 +111,18 @@ export interface PendingUpload {
   };
   user_id: string;
   created_at: string;
-  status: "pending" | "uploading" | "failed";
+  status: PendingUploadStatus;
   retry_count: number;
   table?: "photos" | "china_photos";
   extra?: Record<string, unknown>;
+  media_type?: "image" | "video";
+  storage_path?: string;
+  thumbnail_path?: string | null;
+  file_hash?: string;
+  upload_stage?: PendingUploadStage;
+  last_error_message?: string | null;
+  last_attempt_at?: string | null;
+  next_retry_at?: string | null;
 }
 
 export interface PendingTrip {
@@ -341,6 +358,13 @@ export async function getCachedImageBlob(filePath: string): Promise<Blob | undef
   return entry?.blob;
 }
 
+export async function clearImageBlobCache() {
+  const db = await getDB();
+  const tx = db.transaction("image_blobs", "readwrite");
+  await tx.store.clear();
+  await tx.done;
+}
+
 async function enforceStorageQuota(db: IDBPDatabase<CompShopDB>, incomingBytes: number) {
   const quotaBytes = getStorageQuotaMB() * 1024 * 1024;
   const allBlobs = await db.getAll("image_blobs");
@@ -372,14 +396,18 @@ export async function getPendingUploadsByTrip(tripId: string): Promise<PendingUp
   return db.getAllFromIndex("pending_uploads", "by-trip", tripId);
 }
 
-export async function updatePendingUploadStatus(id: string, status: PendingUpload["status"], retryCount?: number) {
+export async function updatePendingUpload(id: string, patch: Partial<PendingUpload>) {
   const db = await getDB();
   const upload = await db.get("pending_uploads", id);
   if (upload) {
-    upload.status = status;
-    if (retryCount !== undefined) upload.retry_count = retryCount;
-    await db.put("pending_uploads", upload);
+    await db.put("pending_uploads", { ...upload, ...patch });
   }
+}
+
+export async function updatePendingUploadStatus(id: string, status: PendingUpload["status"], retryCount?: number) {
+  const patch: Partial<PendingUpload> = { status };
+  if (retryCount !== undefined) patch.retry_count = retryCount;
+  await updatePendingUpload(id, patch);
 }
 
 export async function removePendingUpload(id: string) {

@@ -47,6 +47,7 @@ import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Camera, Calendar, MapPin, Store, Users, CloudOff, Sparkles, Loader2, Download, Images, ArrowRightLeft, PenLine, Trash2, Upload, LayoutGrid, Layers, Undo2 } from "lucide-react";
 import { format } from "date-fns";
 import PhotoCard from "@/components/trip/PhotoCard";
+import PendingUploadCard from "@/components/trip/PendingUploadCard";
 import TripMembers from "@/components/trip/TripMembers";
 import MoveToTripDialog from "@/components/trip/MoveToTripDialog";
 import BulkEditDialog from "@/components/trip/BulkEditDialog";
@@ -224,6 +225,7 @@ export default function TripDetail() {
   const [bulkAnalyzeProgress, setBulkAnalyzeProgress] = useState(0);
 
   async function handleBulkAiDetect() {
+    if (isStoreReadOnly) return;
     const photosWithoutMeta = photos.filter(
       (p) => !p.product_name && !p.brand && !p.price && p.signed_url
     );
@@ -276,6 +278,7 @@ export default function TripDetail() {
   }
 
   async function handleBulkDelete() {
+    if (isStoreReadOnly) return;
     if (!confirm(`Delete ${selectedPhotos.size} selected photo(s)? This cannot be undone.`)) return;
     let deleted = 0;
     for (const photoId of selectedPhotos) {
@@ -285,12 +288,18 @@ export default function TripDetail() {
         // Delete grouped children first
         const children = photos.filter(p => p.group_id === photoId);
         for (const child of children) {
-          await supabase.storage.from("photos").remove([child.file_path]);
-          await supabase.from("photos").delete().eq("id", child.id);
+          const { error: childError } = await supabase.from("photos").delete().eq("id", child.id);
+          if (!childError) {
+            const paths = [child.file_path, child.thumbnail_path].filter(Boolean) as string[];
+            if (paths.length > 0) await supabase.storage.from("photos").remove(paths);
+          }
         }
-        await supabase.storage.from("photos").remove([photo.file_path]);
         const { error } = await supabase.from("photos").delete().eq("id", photoId);
-        if (!error) deleted++;
+        if (!error) {
+          deleted++;
+          const paths = [photo.file_path, photo.thumbnail_path].filter(Boolean) as string[];
+          if (paths.length > 0) await supabase.storage.from("photos").remove(paths);
+        }
       } catch (err) {
         console.error("Failed to delete photo:", photoId, err);
       }
@@ -834,7 +843,7 @@ export default function TripDetail() {
         {trip.notes && <p className="mt-2 text-sm text-muted-foreground">{trip.notes}</p>}
       </div>
 
-      <TripMembers tripId={trip.id} createdBy={trip.created_by} />
+      <TripMembers tripId={trip.id} createdBy={trip.created_by} readOnly={isStoreReadOnly} />
 
       <div className="mb-6 flex flex-wrap items-center gap-2">
         <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFileSelect} />
@@ -865,15 +874,17 @@ export default function TripDetail() {
             <Button variant="outline" onClick={handleDownloadAll} disabled={downloading} className="gap-2">
               <Download className="h-4 w-4" /> {downloading ? "Downloading..." : "Download All"}
             </Button>
-            <Button
-              variant="outline"
-              onClick={handleBulkAiDetect}
-              disabled={bulkAnalyzing}
-              className="gap-2"
-            >
-              <Sparkles className="h-4 w-4" />
-              {bulkAnalyzing ? `AI Detecting... ${bulkAnalyzeProgress}%` : "AI Detect All"}
-            </Button>
+            {!isStoreReadOnly && (
+              <Button
+                variant="outline"
+                onClick={handleBulkAiDetect}
+                disabled={bulkAnalyzing}
+                className="gap-2"
+              >
+                <Sparkles className="h-4 w-4" />
+                {bulkAnalyzing ? `AI Detecting... ${bulkAnalyzeProgress}%` : "AI Detect All"}
+              </Button>
+            )}
             <Button
               variant={viewAllMode ? "default" : "outline"}
               size="sm"
@@ -886,7 +897,7 @@ export default function TripDetail() {
             </Button>
           </>
         )}
-        {selectedPhotos.size > 0 && (
+        {!isStoreReadOnly && selectedPhotos.size > 0 && (
           <>
             <Button variant="outline" onClick={() => setShowBulkEdit(true)} className="gap-2">
               <PenLine className="h-4 w-4" /> Edit {selectedPhotos.size} Selected
@@ -1043,18 +1054,7 @@ export default function TripDetail() {
             <CloudOff className="h-3 w-3" /> {pendingPhotos.length} pending upload{pendingPhotos.length !== 1 ? "s" : ""} — will sync automatically
           </p>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {pendingPhotos.map((p) => {
-              const blobUrl = URL.createObjectURL(p.file_blob);
-              return (
-                <Card key={p.id} className="overflow-hidden border-dashed opacity-75">
-                  <img src={blobUrl} alt="Pending" className="h-40 w-full object-cover" />
-                  <CardContent className="p-3">
-                    <p className="text-sm font-medium">{p.metadata.product_name || "Untitled"}</p>
-                    <Badge variant="outline" className="mt-1 text-xs">{p.status}</Badge>
-                  </CardContent>
-                </Card>
-              );
-            })}
+            {pendingPhotos.map((p) => <PendingUploadCard key={p.id} upload={p} />)}
           </div>
         </div>
       )}
@@ -1077,7 +1077,9 @@ export default function TripDetail() {
                 "relative aspect-square overflow-hidden rounded-md group focus:outline-none focus:ring-2 focus:ring-primary",
                 selectedPhotos.has(photo.id) && "ring-2 ring-primary"
               )}
-              onClick={(e) => toggleSelectPhoto(photo.id, e)}
+              onClick={(e) => {
+                if (!isStoreReadOnly) toggleSelectPhoto(photo.id, e);
+              }}
             >
               <CachedImage
                 filePath={photo.thumbnail_path || photo.file_path}
@@ -1113,9 +1115,10 @@ export default function TripDetail() {
               onMobileLinkRequest={handleMobileLinkRequest}
               onUnlinkPhoto={handleUnlinkPhoto}
               selected={selectedPhotos.has(primary.id)}
-              onSelect={toggleSelectPhoto}
-              selectionMode={selectedPhotos.size > 0}
+              onSelect={isStoreReadOnly ? undefined : toggleSelectPhoto}
+              selectionMode={!isStoreReadOnly && selectedPhotos.size > 0}
               userName={primary.user_id ? userProfiles[primary.user_id] : undefined}
+              readOnly={isStoreReadOnly}
             />
           ))}
         </div>

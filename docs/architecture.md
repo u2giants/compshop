@@ -98,8 +98,10 @@ Traefik labels will be absent and `api.comp.designflow.app` will return 503.
 
 ## Frontend
 
-The frontend is deployed as a separate Coolify "dockerfile" application
-(`frontend-uuid-comp-shop-prod-2026`) built from `selfhost/Dockerfile.frontend`.
+The frontend is deployed as a separate Coolify "dockerfile" application built from
+`selfhost/Dockerfile.frontend`. The frontend Coolify UUID is not recorded in this repo;
+verify it with `.github/workflows/coolify-audit.yml`, the Coolify UI, or the Coolify API
+before hardcoding it anywhere.
 
 The build is two-stage:
 1. `node:20-alpine` — installs dependencies and runs `vite build` with build-time VITE_* args
@@ -128,15 +130,34 @@ Seven Deno functions in `supabase/functions/`:
 
 ## Database
 
-Postgres 15 with 30 migrations (2026-02-12 to 2026-05-13, counted from `supabase/migrations/` during the documentation audit). Key tables: `shopping_trips`,
-`photos`, `china_trips`, `china_photos`, `factories`, `comments`, `profiles`, `user_roles`,
-`invitations`.
+Postgres 15 with 31 migrations (2026-02-12 to 2026-06-12, counted from
+`supabase/migrations/` during the documentation audit). Key tables: `shopping_trips`,
+`photos`, `china_trips`, `china_photos`, `factories`, `comments`, `profiles`,
+`user_roles`, `invitations`.
+
+The trip list pages read `shopping_trips_with_stats` and `china_trips_with_stats`
+security-invoker views from `20260612000000_trip_list_stats_views.sql`. These views
+precompute photo counts, member counts, and cover file paths so list pages do not issue
+per-trip count/cover queries.
 
 RLS is enforced on all user-facing tables. The `profiles` table drives user identity;
 `user_roles` gates admin features.
 
 Daily backups are written to the `db-backups` Docker volume by the `backup` service
 (`pg_dump -Fc`). The last 14 dumps are kept.
+
+## Offline upload queue
+
+New photo/video captures are saved into IndexedDB before network upload. The queue lives
+in `pending_uploads` (`src/lib/offline-db.ts`) and is processed sequentially by
+`src/lib/sync-service.ts`. Pending uploads keep the original `Blob`, metadata, stable
+Storage path, optional thumbnail path, file hash, upload stage, retry count, last error,
+and `next_retry_at`.
+
+The sync loop uploads to private Supabase Storage first, then inserts the database row
+with the pending upload id. Repeated transient failures move the item to
+`failed_needs_attention`; the app must not delete pending uploads merely because retry
+count is high.
 
 ## Coolify
 

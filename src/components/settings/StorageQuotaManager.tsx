@@ -7,6 +7,7 @@ import { HardDrive, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const STORAGE_KEY = "compshop-cache-quota-mb";
+const PERSIST_REQUESTED_KEY = "compshop-persistent-storage-requested";
 const DEFAULT_QUOTA_MB = 500;
 const MIN_QUOTA_MB = 50;
 const MAX_QUOTA_MB = 5000;
@@ -28,9 +29,11 @@ export default function StorageQuotaManager() {
   const { toast } = useToast();
   const [quota, setQuota] = useState(getStorageQuotaMB());
   const [usage, setUsage] = useState<{ used: number; total: number } | null>(null);
+  const [persistent, setPersistent] = useState<"unsupported" | "unknown" | "granted" | "denied">("unknown");
 
   useEffect(() => {
     estimateUsage();
+    checkPersistentStorage();
   }, []);
 
   async function estimateUsage() {
@@ -51,17 +54,45 @@ export default function StorageQuotaManager() {
 
   async function clearCache() {
     try {
-      const { openDB } = await import("idb");
-      const db = await openDB("compshop-offline", 1);
-      const tx = db.transaction("image_blobs", "readwrite");
-      await tx.store.clear();
-      await tx.done;
-      db.close();
+      const { clearImageBlobCache } = await import("@/lib/offline-db");
+      await clearImageBlobCache();
       await estimateUsage();
       toast({ title: "Cache cleared", description: "All cached images have been removed." });
     } catch (err) {
       toast({ title: "Error clearing cache", variant: "destructive" });
     }
+  }
+
+  async function checkPersistentStorage() {
+    if (!("storage" in navigator) || !("persisted" in navigator.storage)) {
+      setPersistent("unsupported");
+      return;
+    }
+    const granted = await navigator.storage.persisted();
+    if (granted) {
+      setPersistent("granted");
+      return;
+    }
+    if (!localStorage.getItem(PERSIST_REQUESTED_KEY) && "persist" in navigator.storage) {
+      localStorage.setItem(PERSIST_REQUESTED_KEY, "true");
+      const requested = await navigator.storage.persist();
+      setPersistent(requested ? "granted" : "denied");
+      return;
+    }
+    setPersistent("denied");
+  }
+
+  async function requestPersistentStorage() {
+    if (!("storage" in navigator) || !("persist" in navigator.storage)) {
+      setPersistent("unsupported");
+      return;
+    }
+    const granted = await navigator.storage.persist();
+    setPersistent(granted ? "granted" : "denied");
+    toast({
+      title: granted ? "Persistent storage enabled" : "Persistent storage not granted",
+      description: granted ? "The browser is less likely to evict cached photos." : "The app will keep using normal browser storage.",
+    });
   }
 
   const usedMB = usage ? (usage.used / 1024 / 1024).toFixed(1) : "?";
@@ -98,6 +129,18 @@ export default function StorageQuotaManager() {
             Currently using <span className="font-medium text-foreground">{usedMB} MB</span> of device storage
           </div>
         )}
+
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-muted-foreground">Eviction protection</span>
+          <Badge variant={persistent === "granted" ? "secondary" : "outline"}>
+            {persistent === "unsupported" ? "unsupported" : persistent === "granted" ? "enabled" : "not enabled"}
+          </Badge>
+          {persistent === "denied" && (
+            <Button variant="outline" size="sm" onClick={requestPersistentStorage}>
+              Enable
+            </Button>
+          )}
+        </div>
 
         <Button variant="outline" size="sm" className="gap-1" onClick={clearCache}>
           <Trash2 className="h-3.5 w-3.5" /> Clear Cached Images

@@ -16,9 +16,10 @@ interface Member {
 interface Props {
   tripId: string;
   createdBy: string | null;
+  readOnly?: boolean;
 }
 
-export default function TripMembers({ tripId, createdBy }: Props) {
+export default function TripMembers({ tripId, createdBy, readOnly = false }: Props) {
   const { user, isAdmin } = useAuth();
   const { toast } = useToast();
   const [members, setMembers] = useState<Member[]>([]);
@@ -26,7 +27,7 @@ export default function TripMembers({ tripId, createdBy }: Props) {
   const [adding, setAdding] = useState(false);
   const [showDialog, setShowDialog] = useState(false);
 
-  const canManage = isAdmin || user?.id === createdBy;
+  const canManage = !readOnly && (isAdmin || user?.id === createdBy);
 
   useEffect(() => {
     loadMembers();
