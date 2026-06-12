@@ -20,6 +20,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
 
       - name: Deploy to Coolify
         env:
@@ -43,6 +45,33 @@ jobs:
               return r.stdout
 
           expected_sha = os.environ.get("GITHUB_SHA", "")[:7]
+          changed = subprocess.run(
+              ["git", "diff", "--name-only", "HEAD^", "HEAD"],
+              capture_output=True,
+              text=True,
+              check=False,
+          ).stdout.splitlines()
+          if not changed:
+              changed = ["manual-dispatch"]
+          print("Changed paths:", ", ".join(changed))
+          deploy_supabase = any(
+              path == "selfhost/compose.supabase.yml"
+              or path.startswith("supabase/functions/")
+              for path in changed
+          )
+          deploy_frontend = any(
+              path.startswith("src/")
+              or path in {
+                  "selfhost/Dockerfile.frontend",
+                  "selfhost/nginx.conf",
+                  "package.json",
+                  "bun.lockb",
+                  "package-lock.json",
+                  ".github/workflows/deploy.yml",
+                  "manual-dispatch",
+              }
+              for path in changed
+          )
 
           # Find the production resources. Be deliberately specific here:
           # there may be historical/template Supabase resources in Coolify too.
@@ -87,13 +116,17 @@ jobs:
               print("ERROR: Frontend app not found in Coolify resources")
               sys.exit(1)
 
-          print(f"Deploying Supabase stack UUID: {supabase_uuid}")
-          result = curl(f"{base}/api/v1/deploy?uuid={supabase_uuid}", "-H", auth)
-          print("Supabase deploy response:", result[:300])
+          if deploy_supabase:
+              print(f"Deploying Supabase stack UUID: {supabase_uuid}")
+              result = curl(f"{base}/api/v1/deploy?uuid={supabase_uuid}", "-H", auth)
+              print("Supabase deploy response:", result[:300])
+          else:
+              print("Skipping Supabase deploy; no Supabase/compose changes detected")
 
-          print(f"Stopping frontend UUID before rebuild: {frontend_uuid}")
-          result = curl(f"{base}/api/v1/applications/{frontend_uuid}/stop", "-H", auth)
-          print("Frontend stop response:", result[:300])
+          if not deploy_frontend:
+              print("Skipping frontend deploy; no frontend changes detected")
+              print("Done.")
+              sys.exit(0)
 
           print(f"Deploying frontend UUID: {frontend_uuid}")
           result = curl(f"{base}/api/v1/deploy?uuid={frontend_uuid}&force=true", "-H", auth)
