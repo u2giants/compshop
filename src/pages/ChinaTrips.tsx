@@ -28,6 +28,14 @@ import ChinaTripCard from "@/components/trip/ChinaTripCard";
 
 interface ChinaTrip extends ChinaTripListItem {}
 
+function stripCoverUrls(trips: CachedChinaTrip[]): CachedChinaTrip[] {
+  return trips.map((trip) => {
+    const cachedTrip = { ...trip };
+    delete cachedTrip.cover_url;
+    return cachedTrip;
+  });
+}
+
 export default function ChinaTrips() {
   const { user, isChinaReadOnly } = useAuth();
   const navigate = useNavigate();
@@ -90,7 +98,7 @@ export default function ChinaTrips() {
     // 1. Show cached data instantly
     const cached = await getCachedChinaTrips();
     if (cached.length > 0) {
-      setTrips(cached as ChinaTrip[]);
+      setTrips(stripCoverUrls(cached) as ChinaTrip[]);
       setLoading(false);
     }
 
@@ -173,7 +181,7 @@ export default function ChinaTrips() {
         }
 
         await clearCachedChinaTrips();
-        await cacheChinaTrips(tripsWithCounts);
+        await cacheChinaTrips(stripCoverUrls(tripsWithCounts));
         await setSyncTimestamp("china_trips");
       }
     } catch (err) {
@@ -184,8 +192,8 @@ export default function ChinaTrips() {
 
   function preCacheCoverImage(filePath: string, url: string) {
     getCachedImageBlob(filePath).then((existing) => {
-      if (existing) return;
-      fetch(url).then(r => r.blob()).then(b => cacheImageBlob(filePath, b)).catch(() => {});
+      if (existing && (existing.type.startsWith("image/") || existing.type.startsWith("video/"))) return;
+      fetch(url).then(r => { if (!r.ok) throw new Error(); return r.blob(); }).then(b => cacheImageBlob(filePath, b)).catch(() => {});
     });
   }
 

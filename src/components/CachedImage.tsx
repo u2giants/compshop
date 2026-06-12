@@ -20,11 +20,13 @@ const memBlobUrlCache = new Map<string, string>();
  * offline use — no eager fetch on mount to avoid thundering-herd blinking.
  */
 export default function CachedImage({ filePath, signedUrl, fallback, ...imgProps }: CachedImageProps) {
-  const [src, setSrc] = useState<string | undefined>(() => memBlobUrlCache.get(filePath));
+  const [src, setSrc] = useState<string | undefined>(() => memBlobUrlCache.get(filePath) ?? signedUrl);
   const [blobUrl, setBlobUrl] = useState<string | undefined>(() => memBlobUrlCache.get(filePath));
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
+    setFailed(false);
+
     // Already have a blob URL in memory for this path — nothing to do.
     if (memBlobUrlCache.has(filePath)) {
       const cached = memBlobUrlCache.get(filePath)!;
@@ -60,6 +62,8 @@ export default function CachedImage({ filePath, signedUrl, fallback, ...imgProps
       //    Blob caching happens lazily in onLoad to avoid thundering-herd fetches.
       if (resolvedUrl && !cancelled) {
         setSrc(resolvedUrl);
+      } else if (!cancelled) {
+        setSrc(undefined);
       }
     })();
 
@@ -71,6 +75,8 @@ export default function CachedImage({ filePath, signedUrl, fallback, ...imgProps
 
   const handleLoad = useCallback(
     (e: React.SyntheticEvent<HTMLImageElement>) => {
+      setFailed(false);
+
       // Only cache if we're not already showing a blob URL (blob already cached)
       if (blobUrl) return;
       const imgSrc = (e.currentTarget as HTMLImageElement).src;
@@ -97,12 +103,19 @@ export default function CachedImage({ filePath, signedUrl, fallback, ...imgProps
     return <>{fallback ?? <div className={imgProps.className + " bg-muted animate-pulse"} />}</>;
   }
 
+  if (!src) {
+    return <>{fallback ?? <div className={imgProps.className + " bg-muted"} />}</>;
+  }
+
   return (
     <img
       {...imgProps}
       src={src}
       onLoad={handleLoad}
-      onError={() => setFailed(true)}
+      onError={() => {
+        setFailed(true);
+        setSrc(undefined);
+      }}
     />
   );
 }
