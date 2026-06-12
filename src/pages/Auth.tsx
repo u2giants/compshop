@@ -39,7 +39,7 @@ export default function Auth() {
 
   const handleAuthentikSignIn = async () => {
     const { error } = await supabase.auth.signInWithOAuth({
-      provider: "openidconnect",
+      provider: "keycloak",
       options: { redirectTo: window.location.origin },
     });
     if (error) {
