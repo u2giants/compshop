@@ -42,7 +42,10 @@ jobs:
                   sys.exit(1)
               return r.stdout
 
-          # Find the Supabase compose stack UUID (skip frontend/service resources)
+          expected_sha = os.environ.get("GITHUB_SHA", "")[:7]
+
+          # Find the production resources. Be deliberately specific here:
+          # there may be historical/template Supabase resources in Coolify too.
           resources = json.loads(curl(f"{base}/api/v1/resources", "-H", auth))
           if not isinstance(resources, list):
               resources = [resources]
@@ -51,27 +54,58 @@ jobs:
           frontend_uuid = None
           for item in resources:
               name = str(item.get("name","") or item.get("project_name","")).lower()
+              fqdn = str(item.get("fqdn","") or "").lower()
               u    = item.get("uuid","")
-              print(f"  resource: {name!r} uuid={u!r}")
-              if u and "compshop" in name and "frontend" in name:
+              print(f"  resource: {name!r} fqdn={fqdn!r} uuid={u!r}")
+              if u and ("comp.designflow.app" in fqdn or ("compshop" in name and "frontend" in name)):
                   frontend_uuid = u
-              elif u and "compshop" in name and "frontend" not in name and "supabase" in name:
+              elif u and (name.startswith("compshop:main") or name.startswith("compshopmain-")):
                   supabase_uuid = u
 
           if not supabase_uuid:
               print("ERROR: Supabase compose stack not found in Coolify resources")
+              sys.exit(1)
+          if not frontend_uuid:
+              print("ERROR: Frontend app not found in Coolify resources")
               sys.exit(1)
 
           print(f"Deploying Supabase stack UUID: {supabase_uuid}")
           result = curl(f"{base}/api/v1/deploy?uuid={supabase_uuid}", "-H", auth)
           print("Supabase deploy response:", result[:300])
 
-          if frontend_uuid:
-              print(f"Deploying frontend UUID: {frontend_uuid}")
-              result = curl(f"{base}/api/v1/deploy?uuid={frontend_uuid}", "-H", auth)
-              print("Frontend deploy response:", result[:300])
-          else:
-              print("WARNING: Frontend app not found in resources, skipping")
+          print(f"Deploying frontend UUID: {frontend_uuid}")
+          result = curl(f"{base}/api/v1/deploy?uuid={frontend_uuid}&force=true", "-H", auth)
+          print("Frontend deploy response:", result[:300])
+
+          if expected_sha:
+              import re, time, urllib.request
+
+              print(f"Waiting for live frontend to contain commit {expected_sha}")
+              deadline = time.time() + 900
+              last_seen = ""
+              while time.time() < deadline:
+                  try:
+                      html = urllib.request.urlopen(
+                          f"https://comp.designflow.app/?deploy_check={expected_sha}-{int(time.time())}",
+                          timeout=20,
+                      ).read().decode("utf-8", "replace")
+                      match = re.search(r'src="([^"]*assets/index-[^"]+\.js)"', html)
+                      if match:
+                          js_url = "https://comp.designflow.app" + match.group(1)
+                          js = urllib.request.urlopen(js_url, timeout=20).read().decode("utf-8", "replace")
+                          last_seen = match.group(1)
+                          if expected_sha in js:
+                              print(f"Verified live frontend bundle {last_seen} contains {expected_sha}")
+                              break
+                          print(f"Live bundle {last_seen} does not contain {expected_sha} yet")
+                      else:
+                          print("Could not find live frontend bundle in index.html")
+                  except Exception as exc:
+                      print(f"Live verification attempt failed: {exc}")
+                  time.sleep(15)
+              else:
+                  print(f"ERROR: frontend did not serve commit {expected_sha}; last bundle seen: {last_seen}")
+                  sys.exit(1)
 
           print("Done.")
           PYEOF
