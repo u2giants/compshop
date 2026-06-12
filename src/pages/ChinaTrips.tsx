@@ -6,7 +6,7 @@ import { uploadPhoto, hashFile, checkDuplicatePhoto } from "@/lib/supabase-helpe
 import { extractExif, distanceKm } from "@/lib/exif-utils";
 import { getCantonFairSession, sessionKey } from "@/lib/canton-fair-utils";
 import { cacheChinaTripPhotos, type BulkCacheProgress } from "@/lib/bulk-cache";
-import { cacheChinaTrips, getCachedChinaTrips, clearCachedChinaTrips, setSyncTimestamp, getSyncTimestamp, cacheImageBlob, getCachedImageBlob, type CachedChinaTrip } from "@/lib/offline-db";
+import { cacheChinaTrips, getCachedChinaTrips, clearCachedChinaTrips, setSyncTimestamp, getSyncTimestamp, cacheImageBlob, getCachedImageBlob, getCachedSignedUrls, cacheSignedUrls, type CachedChinaTrip, type CachedSignedUrl } from "@/lib/offline-db";
 import { useOnlineStatus } from "@/hooks/use-online-status";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -28,12 +28,28 @@ import ChinaTripCard from "@/components/trip/ChinaTripCard";
 
 interface ChinaTrip extends ChinaTripListItem {}
 
+const COVER_SIGNED_URL_TTL = 86400;
+const COVER_SIGNED_URL_TTL_MS = COVER_SIGNED_URL_TTL * 1000;
+
 function stripCoverUrls(trips: CachedChinaTrip[]): CachedChinaTrip[] {
   return trips.map((trip) => {
     const cachedTrip = { ...trip };
     delete cachedTrip.cover_url;
     return cachedTrip;
   });
+}
+
+async function attachCachedCoverUrls(trips: CachedChinaTrip[]): Promise<CachedChinaTrip[]> {
+  const coverFilePaths = trips.map((trip) => trip.cover_file_path).filter(Boolean) as string[];
+  if (coverFilePaths.length === 0) return trips;
+
+  const cachedCoverUrls = await getCachedSignedUrls(coverFilePaths);
+  if (cachedCoverUrls.size === 0) return trips;
+
+  return trips.map((trip) => ({
+    ...trip,
+    cover_url: trip.cover_file_path ? cachedCoverUrls.get(trip.cover_file_path) : undefined,
+  }));
 }
 
 export default function ChinaTrips() {
@@ -98,7 +114,7 @@ export default function ChinaTrips() {
     // 1. Show cached data instantly
     const cached = await getCachedChinaTrips();
     if (cached.length > 0) {
-      setTrips(stripCoverUrls(cached) as ChinaTrip[]);
+      setTrips(await attachCachedCoverUrls(stripCoverUrls(cached)) as ChinaTrip[]);
       setLoading(false);
     }
 
@@ -153,16 +169,33 @@ export default function ChinaTrips() {
           }
         }
 
+        const coverFilePaths = coverResults.map((r) => r.data?.[0]?.file_path).filter(Boolean) as string[];
+        const cachedCoverUrls = await getCachedSignedUrls(coverFilePaths);
+        const signedUrlCacheEntries: CachedSignedUrl[] = [];
+
         const coverSignedUrls = await Promise.all(
           coverResults.map(async (r) => {
             const fp = r.data?.[0]?.file_path;
             if (!fp) return undefined;
+            const cachedUrl = cachedCoverUrls.get(fp);
+            if (cachedUrl) return cachedUrl;
+
             const { data } = await supabase.storage
               .from("photos")
-              .createSignedUrl(fp, 86400, { transform: { width: 400, height: 400, resize: "cover" } });
+              .createSignedUrl(fp, COVER_SIGNED_URL_TTL, { transform: { width: 400, height: 400, resize: "cover" } });
+
+            if (data?.signedUrl) {
+              signedUrlCacheEntries.push({
+                file_path: fp,
+                url: data.signedUrl,
+                expires_at: Date.now() + COVER_SIGNED_URL_TTL_MS,
+              });
+            }
             return data?.signedUrl ?? undefined;
           })
         );
+
+        cacheSignedUrls(signedUrlCacheEntries).catch(() => {});
 
         const tripsWithCounts: CachedChinaTrip[] = data.map((trip, i) => ({
           ...trip,

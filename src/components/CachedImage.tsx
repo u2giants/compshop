@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { getCachedImageBlob, cacheImageBlob, getCachedSignedUrl } from "@/lib/offline-db";
+import { supabase } from "@/integrations/supabase/client";
+import { getCachedImageBlob, cacheImageBlob, getCachedSignedUrl, cacheSignedUrls } from "@/lib/offline-db";
 
 interface CachedImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
   filePath: string;
@@ -12,6 +13,8 @@ interface CachedImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
 // Keeps the URL alive across component unmounts so remounting the same image
 // is instant (no IndexedDB round-trip, no fallback flash).
 const memBlobUrlCache = new Map<string, string>();
+const SIGNED_URL_TTL = 86400;
+const SIGNED_URL_TTL_MS = SIGNED_URL_TTL * 1000;
 
 /**
  * An <img> that checks IndexedDB blob cache first, then falls back to the
@@ -35,6 +38,10 @@ export default function CachedImage({ filePath, signedUrl, fallback, ...imgProps
       return;
     }
 
+    if (signedUrl) {
+      setSrc(signedUrl);
+    }
+
     let cancelled = false;
 
     (async () => {
@@ -55,6 +62,18 @@ export default function CachedImage({ filePath, signedUrl, fallback, ...imgProps
         const cached = await getCachedSignedUrl(filePath);
         if (cached && cached.expires_at > Date.now()) {
           resolvedUrl = cached.url;
+        }
+      }
+
+      if (!resolvedUrl) {
+        const { data } = await supabase.storage.from("photos").createSignedUrl(filePath, SIGNED_URL_TTL);
+        if (data?.signedUrl) {
+          resolvedUrl = data.signedUrl;
+          cacheSignedUrls([{
+            file_path: filePath,
+            url: data.signedUrl,
+            expires_at: Date.now() + SIGNED_URL_TTL_MS,
+          }]).catch(() => {});
         }
       }
 
@@ -91,6 +110,9 @@ export default function CachedImage({ filePath, signedUrl, fallback, ...imgProps
           if (!res.ok) return;
           const b = await res.blob();
           await cacheImageBlob(filePath, b);
+          if (b.type.startsWith("image/") || b.type.startsWith("video/")) {
+            memBlobUrlCache.set(filePath, URL.createObjectURL(b));
+          }
         } catch {}
       })();
 
