@@ -1,5 +1,10 @@
 # CompShop — Self-Hosting Runbook (Lovable Cloud → Coolify VPS)
 
+> **The migration described here is complete.** CompShop is live at `https://comp.designflow.app`
+> on the self-hosted Coolify VPS. This document is preserved as a historical reference and
+> for the operational procedures in Phase 10 (backups, monitoring, updates). For the current
+> deploy workflow see [docs/deployment.md](docs/deployment.md).
+
 **Audience:** A developer (or AI agent) executing the migration end-to-end.
 **Goal:** Move CompShop off Lovable Cloud and onto a self-hosted stack on a single Hong Kong VPS running [Coolify](https://coolify.io), so users in mainland China get a CN2 GIA route to both the frontend and the backend.
 **Outcome:** Two Coolify "applications" running on one server:

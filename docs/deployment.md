@@ -72,6 +72,34 @@ are injected by Coolify at deploy time. They are derived from the
 the resulting container will not have the Traefik labels and `api.comp.designflow.app`
 will return 503. Fix by triggering a full Coolify redeploy.
 
+## Frontend Coolify deployment settings
+
+Two settings in the Coolify database control how frontend container replacements work.
+Both are already set correctly for this app — this section documents them so the
+behaviour is not mistaken for a bug.
+
+| Setting | Value | Effect |
+|---------|-------|--------|
+| `is_consistent_container_name_enabled` | `true` | Every deploy uses the same container name. Docker stops the old container before starting the new one. |
+| `docker_images_to_keep` | `1` | Coolify removes prior build images after a successful deploy. |
+
+**Why this matters.** When consistent naming is disabled (the Coolify default), each
+deploy gets a unique container name. If two containers from different builds end up
+running simultaneously, Traefik rejects both because they register the same router name
+with different configs — producing a "no available server" error for all requests.
+Enabling consistent naming eliminates that failure mode entirely.
+
+These settings are in the Coolify UI under the `compshop-frontend:main` application →
+General → "Consistent Container Name" and "Number of Docker images to keep". They can
+also be read/written directly:
+
+```bash
+# Verify
+docker exec coolify-db psql -U coolify -d coolify \
+  -c "SELECT is_consistent_container_name_enabled, docker_images_to_keep \
+      FROM application_settings WHERE application_id = 2;"
+```
+
 ## Supabase Studio "unhealthy" status
 
 Studio (db.comp.designflow.app) consistently shows `unhealthy` in `docker ps` due to

@@ -24,7 +24,7 @@ VITE_SUPABASE_PUBLISHABLE_KEY=<anon key from Coolify>
 VITE_SUPABASE_PROJECT_ID=selfhosted
 ```
 
-`ADDITIONAL_REDIRECT_URLS` in the Supabase auth settings includes `http://localhost:5173`
+`ADDITIONAL_REDIRECT_URLS` in the Supabase auth settings includes `http://localhost:8080`
 so OAuth callbacks work locally against both backends.
 
 ## Scripts

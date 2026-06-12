@@ -11,14 +11,21 @@ CompShop is a React + TypeScript PWA for managing wholesale shopping trips in Ch
 | `src/integrations/supabase/client.ts` | Supabase client init — reads `VITE_SUPABASE_URL` + `VITE_SUPABASE_PUBLISHABLE_KEY` from env |
 | `src/integrations/supabase/types.ts` | Auto-generated DB types from schema |
 | `src/contexts/AuthContext.tsx` | Auth state management |
-| `src/pages/Auth.tsx` | Sign-in page — three login paths: (1) "Sign in with Microsoft" → Authentik OIDC (`openidconnect` provider) → brokers M365/AD/local; (2) "Sign in with Google" → Google OAuth direct; (3) email/password |
-| `supabase/migrations/` | 30 SQL migrations defining the full schema |
+| `src/pages/Auth.tsx` | Sign-in page — three login paths: Microsoft/Authentik via Supabase `keycloak` provider, Google OAuth direct, and email/password |
+| `supabase/migrations/` | 35 SQL migrations defining the full schema |
 | `supabase/functions/` | 7 Deno edge functions |
-| `selfhost.md` | **Complete runbook for migrating off Lovable Cloud → self-hosted Coolify VPS** |
+| `selfhost/` | Docker Compose stack, Dockerfile, nginx config, env examples — see `selfhost/README.md` |
 
 ## Current deployment status
 
-The app currently runs on **Lovable Cloud** (frontend + Supabase backend at `aqbyrzknbhyshjzlfsyv.supabase.co`). A migration to a self-hosted Coolify VPS in Hong Kong is planned — see `selfhost.md` for the full runbook.
+The app runs on a **self-hosted Coolify VPS** in Hong Kong (CN2 GIA, 185.194.148.230). The migration from Lovable Cloud is complete. Production URLs:
+
+| URL | Purpose |
+|---|---|
+| `https://comp.designflow.app` | Frontend |
+| `https://api.comp.designflow.app` | Kong API gateway |
+| `https://db.comp.designflow.app` | Supabase Studio |
+| `https://coolify.comp.designflow.app` | Coolify dashboard |
 
 ## Development setup
 
@@ -26,18 +33,13 @@ The app currently runs on **Lovable Cloud** (frontend + Supabase backend at `aqb
 # Install dependencies
 npm install
 
-# Start local Supabase stack (Postgres, GoTrue, Storage, Edge Functions, Studio)
-supabase start
-
-# Create .env.local pointing at local Supabase (don't edit .env — that's Lovable Cloud)
-# VITE_SUPABASE_URL=http://127.0.0.1:54321
-# VITE_SUPABASE_PUBLISHABLE_KEY=<local anon key from supabase start output>
-
-# Start dev server
+# Start dev server (root .env points to Lovable Cloud — usable for local dev)
 npm run dev
 
-# Apply all migrations to local DB
-supabase db reset
+# To develop against the self-hosted backend instead, create .env.local:
+# VITE_SUPABASE_URL=https://api.comp.designflow.app
+# VITE_SUPABASE_PUBLISHABLE_KEY=<anon key from Coolify>
+# VITE_SUPABASE_PROJECT_ID=selfhosted
 
 # Run tests
 npm test
@@ -56,13 +58,20 @@ npm test
 
 | Variable | Used by | Notes |
 |---|---|---|
-| `VITE_SUPABASE_URL` | Frontend | Set in `.env` (Lovable Cloud) or `.env.local` (local dev) |
-| `VITE_SUPABASE_PUBLISHABLE_KEY` | Frontend | Anon key |
-| `VITE_SUPABASE_PROJECT_ID` | Frontend | Used for config.toml linking |
-| `GEMINI_API_KEY` | Edge functions | Google AI Studio key |
-| `GOOGLE_MAPS_API_KEY` | Edge functions | For reverse-geocode + nearby-stores |
-| `BREVO_API_KEY` | Edge functions | For send-invite-email |
+| `VITE_SUPABASE_URL` | Frontend (build-time) | Kong gateway URL, e.g. `https://api.comp.designflow.app` |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Frontend (build-time) | Anon key — safe to expose in bundle |
+| `VITE_SUPABASE_PROJECT_ID` | Frontend (build-time) | Set to `selfhosted`; used only for storage URL construction |
+| `OPENROUTER_API_KEY` | Edge functions | Used by `analyze-photo` and `parse-teams-conversation` |
+| `GOOGLE_MAPS_API_KEY` | Edge functions | Used by `reverse-geocode` and `nearby-stores` |
+| `BREVO_API_KEY` | Edge functions | Used by `send-invite-email` |
+
+Full env var reference: `selfhost/.env.example` (Supabase stack) and `selfhost/.env.frontend.example` (frontend build args).
 
 ## Ops reference
 
-For server provisioning, deployment, database migration, storage migration, and ongoing ops — see **`selfhost.md`**. It is the authoritative runbook for this application's infrastructure.
+| Doc | Contents |
+|---|---|
+| [docs/architecture.md](docs/architecture.md) | System design, Kong quirks, data flow |
+| [docs/deployment.md](docs/deployment.md) | Deploy workflow, migrations, Coolify settings |
+| [docs/configuration.md](docs/configuration.md) | All env vars with explanations |
+| [selfhost/README.md](selfhost/README.md) | Self-hosting kit files and ops notes |
