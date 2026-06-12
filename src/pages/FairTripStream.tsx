@@ -119,9 +119,17 @@ export default function FairTripStream() {
       </button>
 
       <div className="mb-6">
-        <h1 className="font-sans text-2xl md:text-3xl font-semibold">
-          {fairTrip?.name ?? "Fair Trip"}
-        </h1>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <h1 className="font-sans text-2xl md:text-3xl font-semibold">
+            {fairTrip?.name ?? "Fair Trip"}
+          </h1>
+          <button
+            onClick={() => navigate(`/china/${id}/stream-v2`)}
+            className="text-sm font-medium text-primary hover:underline"
+          >
+            Try faster view
+          </button>
+        </div>
         {fairTrip && (
           <p className="mt-1 text-sm text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1">
             <span className="flex items-center gap-1">

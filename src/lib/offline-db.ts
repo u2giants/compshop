@@ -59,6 +59,7 @@ export interface CachedChinaPhoto {
   trip_id: string;
   file_path: string;
   thumbnail_path: string | null;
+  media_type?: string | null;
   product_name: string | null;
   category: string | null;
   price: number | null;

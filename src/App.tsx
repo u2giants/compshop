@@ -19,6 +19,7 @@ const ChinaTripDetail = lazy(() => import("@/pages/ChinaTripDetail"));
 const Factories = lazy(() => import("@/pages/Factories"));
 const FactoryDetail = lazy(() => import("@/pages/FactoryDetail"));
 const FairTripStream = lazy(() => import("@/pages/FairTripStream"));
+const FairTripStreamV2 = lazy(() => import("@/pages/FairTripStreamV2"));
 const FactoryWeekStream = lazy(() => import("@/pages/FactoryWeekStream"));
 const Profile = lazy(() => import("@/pages/Profile"));
 const ImportKeep = lazy(() => import("@/pages/ImportKeep"));
@@ -75,6 +76,7 @@ const App = () => (
                   <Route path="/china/new" element={<NewChinaTrip />} />
                   <Route path="/china/:id" element={<ChinaTripDetail />} />
                   <Route path="/china/:id/stream" element={<FairTripStream />} />
+                  <Route path="/china/:id/stream-v2" element={<FairTripStreamV2 />} />
                   <Route path="/china/factories" element={<Factories />} />
                   <Route path="/china/factories/week" element={<FactoryWeekStream />} />
                   <Route path="/china/factories/:name" element={<FactoryDetail />} />
