@@ -130,10 +130,10 @@ Seven Deno functions in `supabase/functions/`:
 
 ## Database
 
-Postgres 15 with 31 migrations (2026-02-12 to 2026-06-12, counted from
+Postgres 15 with 32 migrations (2026-02-12 to 2026-06-13, counted from
 `supabase/migrations/` during the documentation audit). Key tables: `shopping_trips`,
 `photos`, `china_trips`, `china_photos`, `factories`, `comments`, `profiles`,
-`user_roles`, `invitations`.
+`user_roles`, `invitations`, `auth_access_rules`.
 
 The trip list pages read `shopping_trips_with_stats` and `china_trips_with_stats`
 security-invoker views from `20260612000000_trip_list_stats_views.sql`. These views

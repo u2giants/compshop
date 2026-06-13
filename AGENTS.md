@@ -83,7 +83,7 @@ Scripts:
 
 Migrations:
 
-- `supabase/migrations/` has 31 SQL migrations as of this audit, through `20260612000000_trip_list_stats_views.sql`.
+- `supabase/migrations/` has 32 SQL migrations as of this audit, through `20260613000000_auth_access_approval.sql`.
 
 Deployment files:
 
