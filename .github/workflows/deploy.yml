@@ -80,6 +80,8 @@ jobs:
               }
               for path in changed
           )
+          if os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch":
+              deploy_frontend = True
 
           # Find the production resources. Be deliberately specific here:
           # there may be historical/template Supabase resources in Coolify too.
