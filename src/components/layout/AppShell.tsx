@@ -77,18 +77,10 @@ export default function AppShell() {
   }
 
   const modeLabel = isChina ? "Asia Trip" : "Store Shopping";
-  const buildStamp = `${__COMMIT_HASH__} · ${__COMMIT_DATE__}`;
-
   return (
     <div className="flex min-h-screen flex-col bg-background">
       {/* iPhone PWA safe-area spacer */}
       <div className="w-full bg-card md:bg-transparent" style={{ height: 'env(safe-area-inset-top, 0px)' }} />
-      <div
-        className="border-b bg-muted/40 px-3 py-1 text-center font-mono text-[10px] leading-tight text-muted-foreground select-all"
-        title={`Commit ${buildStamp}`}
-      >
-        Commit {buildStamp}
-      </div>
       {/* Top bar - desktop */}
       <header className="hidden border-b bg-card md:block relative">
         <div className="container flex h-14 items-center justify-between">
