@@ -8,6 +8,7 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { AppModeProvider } from "@/contexts/AppModeContext";
 import ModeRedirect from "@/components/ModeRedirect";
 import AppShell from "@/components/layout/AppShell";
+import PendingApproval from "@/components/auth/PendingApproval";
 
 const Auth = lazy(() => import("@/pages/Auth"));
 const Trips = lazy(() => import("@/pages/Trips"));
@@ -30,7 +31,7 @@ const NotFound = lazy(() => import("@/pages/NotFound"));
 const queryClient = new QueryClient();
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, loading, isApproved } = useAuth();
   if (loading) return (
     <div className="flex min-h-screen items-center justify-center bg-background">
       <div className="text-center">
@@ -40,6 +41,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     </div>
   );
   if (!user) return <Navigate to="/auth" replace />;
+  if (!isApproved) return <PendingApproval />;
   return <>{children}</>;
 }
 

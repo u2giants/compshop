@@ -19,6 +19,7 @@ import AiModelManager from "@/components/admin/AiModelManager";
 import StorageQuotaManager from "@/components/settings/StorageQuotaManager";
 import BulkCacheManager from "@/components/settings/BulkCacheManager";
 import UserPermissionsManager from "@/components/admin/UserPermissionsManager";
+import AuthAccessManager from "@/components/admin/AuthAccessManager";
 
 export default function Profile() {
   const { user, isAdmin, signOut } = useAuth();
@@ -130,6 +131,7 @@ export default function Profile() {
           <CategoryManager />
           <DefaultModeManager />
           <AiModelManager />
+          <AuthAccessManager />
           <UserPermissionsManager />
         </div>
       )}

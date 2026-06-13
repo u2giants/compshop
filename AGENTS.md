@@ -160,7 +160,7 @@ Purpose: prevent AI agents from scattering project logic into unrelated framewor
 | Photos | `photos`, `china_photos` | `supabase/migrations/`, `src/integrations/supabase/types.ts` | Domestic and Asia photo records. |
 | Trip list stats views | `shopping_trips_with_stats`, `china_trips_with_stats` | `supabase/migrations/20260612000000_trip_list_stats_views.sql` | Security-invoker views used by trip list pages to avoid per-trip count/cover queries. |
 | Offline pending upload statuses | `pending`, `uploading`, `failed`, `failed_needs_attention` | `src/lib/offline-db.ts`, `src/lib/sync-service.ts` | `failed_needs_attention` preserves local blobs after repeated failures instead of deleting them. |
-| Authentik OIDC proxy path | `/oidc-compat/` | `selfhost/compose.supabase.yml` | GoTrue `keycloak` provider routes through nginx compatibility proxy. |
+| Direct Microsoft OAuth | GoTrue `azure` provider | `src/pages/Auth.tsx`, `selfhost/compose.supabase.yml` | Microsoft sign-in no longer routes through Authentik. CompShop approval rules decide app access after authentication. |
 
 ## Container and service inventory
 
@@ -178,7 +178,7 @@ Purpose: prevent AI agents from scattering project logic into unrelated framewor
 | `studio` | Supabase Studio | Coolify Docker Compose | `h8nwhgk682eedokx8nh2eg1q` | `supabase/studio:2026.04.08-sha-205cbe7` |
 | `meta` | Postgres metadata API | Coolify Docker Compose | `h8nwhgk682eedokx8nh2eg1q` | `supabase/postgres-meta:v0.96.3` |
 | `backup` | Daily Postgres dump retention | Coolify Docker Compose | `h8nwhgk682eedokx8nh2eg1q` | `postgres:15-alpine` |
-| `oidc-compat` | Nginx proxy translating GoTrue keycloak paths to Authentik OIDC endpoints | Coolify Docker Compose | `h8nwhgk682eedokx8nh2eg1q` | `nginx:alpine` |
+| `oidc-compat` | Legacy nginx proxy translating GoTrue keycloak paths to Authentik OIDC endpoints | Coolify Docker Compose | `h8nwhgk682eedokx8nh2eg1q` | `nginx:alpine` |
 | `coolify-proxy` | Traefik reverse proxy | Coolify platform | Outside this repo | Coolify-managed Traefik |
 | Coolify core services | Deployment platform, DB, Redis, realtime/sentinel | Coolify platform | Outside this repo | Managed by Coolify install |
 
@@ -207,19 +207,19 @@ These entries must stay aligned with `.claudeignore` and `.cursorignore`.
 
 ## Intentional quirks and non-obvious decisions
 
-### GoTrue uses `keycloak` for Authentik
+### CompShop uses direct Microsoft OAuth
 
 Looks like:
-The Microsoft/Company login should use GoTrue's old `openidconnect` provider directly.
+The Microsoft login should route through the Authentik `keycloak` compatibility bridge.
 
 Actually:
-`src/pages/Auth.tsx` calls `supabase.auth.signInWithOAuth({ provider: "keycloak" })`. `selfhost/compose.supabase.yml` enables `GOTRUE_EXTERNAL_KEYCLOAK_*` and routes `GOTRUE_EXTERNAL_KEYCLOAK_URL` to `https://api.comp.designflow.app/oidc-compat`.
+`src/pages/Auth.tsx` calls `supabase.auth.signInWithOAuth({ provider: "azure" })`. `selfhost/compose.supabase.yml` enables `GOTRUE_EXTERNAL_AZURE_*`. The app does not restrict Microsoft authentication to one Azure tenant; it restricts automatic app provisioning through `auth_access_rules`.
 
 Why:
-GoTrue v2.x no longer supports the old `openidconnect` provider name the way the previous docs expected. The `oidc-compat` nginx service translates Keycloak-style `/protocol/openid-connect/*` paths to Authentik's actual OIDC endpoints.
+POP Creations tenant users should be auto-approved, but invited or manually approved external Microsoft accounts can also use CompShop. Google and email/password users use the same approval gate.
 
 Do not change because:
-Switching back to `openidconnect` or pointing Keycloak directly at Authentik breaks Company/Microsoft sign-in.
+Routing CompShop SSO back through Authentik reintroduces the broker dependency and bypasses the intended direct-provider approval model. The legacy `oidc-compat` service can remain disabled for rollback/reference.
 
 ### Kong declarative config is written by entrypoint
 
@@ -323,11 +323,15 @@ Do not commit real secret values. Runtime values live in Coolify. GitHub Actions
 | `GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID` | Google OAuth client ID | Coolify Supabase stack env | optional | yes if Google login needed |
 | `GOTRUE_EXTERNAL_GOOGLE_SECRET` | Google OAuth client secret | Coolify Supabase stack env | no | yes if Google login needed |
 | `GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI` | Google OAuth callback | Coolify Supabase stack env | optional | yes if Google login needed |
-| `GOTRUE_EXTERNAL_KEYCLOAK_ENABLED` | Enables Authentik via GoTrue keycloak provider | Coolify Supabase stack env | optional | yes for Company login |
-| `GOTRUE_EXTERNAL_KEYCLOAK_CLIENT_ID` | Authentik OAuth client ID | Coolify Supabase stack env | optional | yes for Company login |
-| `GOTRUE_EXTERNAL_KEYCLOAK_SECRET` | Authentik OAuth client secret | Coolify Supabase stack env | no | yes for Company login |
-| `GOTRUE_EXTERNAL_KEYCLOAK_URL` | OIDC compatibility proxy URL | Coolify Supabase stack env | optional | yes for Company login |
-| `GOTRUE_EXTERNAL_KEYCLOAK_REDIRECT_URI` | Authentik callback | Coolify Supabase stack env | optional | yes for Company login |
+| `GOTRUE_EXTERNAL_AZURE_ENABLED` | Enables direct Microsoft OAuth | Coolify Supabase stack env | optional | yes if Microsoft login needed |
+| `GOTRUE_EXTERNAL_AZURE_CLIENT_ID` | Azure app registration client ID | Coolify Supabase stack env | optional | yes if Microsoft login needed |
+| `GOTRUE_EXTERNAL_AZURE_SECRET` | Azure app registration client secret | Coolify Supabase stack env | no | yes if Microsoft login needed |
+| `GOTRUE_EXTERNAL_AZURE_REDIRECT_URI` | Azure OAuth callback | Coolify Supabase stack env | optional | yes if Microsoft login needed |
+| `GOTRUE_EXTERNAL_KEYCLOAK_ENABLED` | Legacy Authentik bridge switch; keep `false` for CompShop direct SSO | Coolify Supabase stack env | optional | no |
+| `GOTRUE_EXTERNAL_KEYCLOAK_CLIENT_ID` | Legacy Authentik OAuth client ID | Coolify Supabase stack env | optional | no |
+| `GOTRUE_EXTERNAL_KEYCLOAK_SECRET` | Legacy Authentik OAuth client secret | Coolify Supabase stack env | no | no |
+| `GOTRUE_EXTERNAL_KEYCLOAK_URL` | Legacy OIDC compatibility proxy URL | Coolify Supabase stack env | optional | no |
+| `GOTRUE_EXTERNAL_KEYCLOAK_REDIRECT_URI` | Legacy Authentik callback | Coolify Supabase stack env | optional | no |
 | `SMTP_HOST` | GoTrue SMTP host | Coolify Supabase stack env | optional | yes for email auth/reset |
 | `SMTP_PORT` | GoTrue SMTP port | Coolify Supabase stack env | optional | yes for email auth/reset |
 | `SMTP_USER` | SMTP username | Coolify Supabase stack env | no | yes for email auth/reset |

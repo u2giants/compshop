@@ -9,6 +9,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useToast } from "@/hooks/use-toast";
 import { Eye, EyeOff, ShoppingBag } from "lucide-react";
 
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export default function Auth() {
   const { user, loading } = useAuth();
   const { toast } = useToast();
@@ -37,13 +41,13 @@ export default function Auth() {
     }
   };
 
-  const handleAuthentikSignIn = async () => {
+  const handleMicrosoftSignIn = async () => {
     const { error } = await supabase.auth.signInWithOAuth({
-      provider: "keycloak",
+      provider: "azure",
       options: { redirectTo: window.location.origin },
     });
     if (error) {
-      toast({ title: "Sign-in failed", description: String(error), variant: "destructive" });
+      toast({ title: "Microsoft sign-in failed", description: String(error), variant: "destructive" });
     }
   };
 
@@ -58,8 +62,8 @@ export default function Auth() {
       if (error) throw error;
       toast({ title: "Check your email", description: "We sent you a password reset link." });
       setIsForgot(false);
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } catch (err: unknown) {
+      toast({ title: "Error", description: errorMessage(err), variant: "destructive" });
     } finally {
       setSubmitting(false);
     }
@@ -101,8 +105,8 @@ export default function Auth() {
           description: "We sent you a confirmation link to verify your account.",
         });
       }
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } catch (err: unknown) {
+      toast({ title: "Error", description: errorMessage(err), variant: "destructive" });
     } finally {
       setSubmitting(false);
     }
@@ -153,7 +157,7 @@ export default function Auth() {
               {/* Microsoft SSO */}
               <button
                 type="button"
-                onClick={handleAuthentikSignIn}
+                onClick={handleMicrosoftSignIn}
                 className="mb-2 flex w-full items-center gap-0 overflow-hidden rounded border border-[#8c8c8c] bg-[#2F2F2F] text-white transition-colors hover:bg-[#1a1a1a] focus:outline-none focus:ring-2 focus:ring-[#2F2F2F] focus:ring-offset-2"
               >
                 <span className="flex h-11 w-12 shrink-0 items-center justify-center bg-white">
@@ -165,7 +169,7 @@ export default function Auth() {
                   </svg>
                 </span>
                 <span className="flex-1 py-3 text-center text-sm font-semibold tracking-wide">
-                  Sign in with Microsoft
+                  Continue with Microsoft
                 </span>
               </button>
 
@@ -184,7 +188,7 @@ export default function Auth() {
                   </svg>
                 </span>
                 <span className="flex-1 py-3 text-center text-sm font-semibold tracking-wide">
-                  Sign in with Google
+                  Continue with Google
                 </span>
               </button>
 

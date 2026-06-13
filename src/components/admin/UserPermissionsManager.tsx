@@ -2,16 +2,49 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { Shield, ShieldOff } from "lucide-react";
+import { CheckCircle2, Shield, ShieldOff, XCircle } from "lucide-react";
 
 type Role = "admin" | "user" | "store_readonly" | "china_readonly";
+type ApprovalStatus = "approved" | "pending" | "blocked";
+type SupabaseError = { message: string; code?: string };
+type QueryResult<T> = PromiseLike<{ data: T | null; error: SupabaseError | null }>;
+
+interface ProfileRow {
+  id: string;
+  email: string | null;
+  display_name: string | null;
+  approval_status: ApprovalStatus | null;
+  approval_reason: string | null;
+  auth_provider: string | null;
+  auth_tenant_id: string | null;
+}
+
+interface RoleRow {
+  user_id: string;
+  role: Role;
+}
+
+interface AccessSupabaseClient {
+  from(table: "profiles"): {
+    select(columns: string): {
+      order(column: string): QueryResult<ProfileRow[]>;
+    };
+  };
+  rpc(name: "approve_user" | "block_user", args: { _user_id: string }): QueryResult<unknown>;
+}
 
 interface UserRow {
   id: string;
   email: string | null;
   display_name: string | null;
+  approval_status: ApprovalStatus;
+  approval_reason: string | null;
+  auth_provider: string | null;
+  auth_tenant_id: string | null;
   roles: Role[];
 }
 
@@ -30,19 +63,26 @@ export default function UserPermissionsManager() {
   async function load() {
     setLoading(true);
     const [{ data: profiles }, { data: roleRows }] = await Promise.all([
-      supabase.from("profiles").select("id, email, display_name").order("display_name"),
+      (supabase as unknown as AccessSupabaseClient)
+        .from("profiles")
+        .select("id, email, display_name, approval_status, approval_reason, auth_provider, auth_tenant_id")
+        .order("display_name"),
       supabase.from("user_roles").select("user_id, role"),
     ]);
     const rolesByUser = new Map<string, Role[]>();
-    (roleRows ?? []).forEach((r: any) => {
+    ((roleRows ?? []) as RoleRow[]).forEach((r) => {
       const list = rolesByUser.get(r.user_id) ?? [];
       list.push(r.role);
       rolesByUser.set(r.user_id, list);
     });
-    const rows: UserRow[] = (profiles ?? []).map((p: any) => ({
+    const rows: UserRow[] = (profiles ?? []).map((p) => ({
       id: p.id,
       email: p.email,
       display_name: p.display_name,
+      approval_status: p.approval_status ?? "approved",
+      approval_reason: p.approval_reason,
+      auth_provider: p.auth_provider,
+      auth_tenant_id: p.auth_tenant_id,
       roles: rolesByUser.get(p.id) ?? [],
     }));
     setUsers(rows);
@@ -71,6 +111,17 @@ export default function UserPermissionsManager() {
     load();
   }
 
+  async function setApproval(userId: string, action: "approve" | "block") {
+    const rpc = action === "approve" ? "approve_user" : "block_user";
+    const { error } = await (supabase as unknown as AccessSupabaseClient).rpc(rpc, { _user_id: userId });
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: action === "approve" ? "User approved" : "User blocked" });
+    load();
+  }
+
   return (
     <Card className="md:col-span-2 xl:col-span-3">
       <CardHeader>
@@ -83,8 +134,9 @@ export default function UserPermissionsManager() {
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : (
           <div className="space-y-2">
-            <div className="hidden grid-cols-[1fr_auto_auto] gap-4 px-3 pb-1 text-xs font-medium text-muted-foreground sm:grid">
+            <div className="hidden grid-cols-[1fr_auto_auto_auto] gap-4 px-3 pb-1 text-xs font-medium text-muted-foreground sm:grid">
               <span>User</span>
+              <span className="w-48 text-center">Access</span>
               <span className="w-32 text-center">Read-only Store</span>
               <span className="w-32 text-center">Read-only Asia</span>
             </div>
@@ -96,7 +148,7 @@ export default function UserPermissionsManager() {
               return (
                 <div
                   key={u.id}
-                  className="grid grid-cols-1 items-center gap-2 rounded-md border p-3 sm:grid-cols-[1fr_auto_auto] sm:gap-4"
+                  className="grid grid-cols-1 items-center gap-2 rounded-md border p-3 sm:grid-cols-[1fr_auto_auto_auto] sm:gap-4"
                 >
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">
@@ -110,6 +162,37 @@ export default function UserPermissionsManager() {
                     </p>
                     {u.email && u.display_name && (
                       <p className="truncate text-xs text-muted-foreground">{u.email}</p>
+                    )}
+                    <p className="truncate text-xs text-muted-foreground">
+                      {u.auth_provider || "email"}
+                      {u.auth_tenant_id ? ` · ${u.auth_tenant_id}` : ""}
+                    </p>
+                  </div>
+                  <div className="flex w-48 flex-col gap-2 sm:items-center">
+                    <Badge
+                      variant={u.approval_status === "blocked" ? "destructive" : u.approval_status === "approved" ? "default" : "secondary"}
+                      className="w-fit capitalize"
+                    >
+                      {u.approval_status}
+                    </Badge>
+                    {!isMe && !isAdminRow && (
+                      <div className="flex gap-2">
+                        {u.approval_status !== "approved" && (
+                          <Button size="sm" variant="outline" className="h-8 gap-1" onClick={() => setApproval(u.id, "approve")}>
+                            <CheckCircle2 className="h-3.5 w-3.5" /> Approve
+                          </Button>
+                        )}
+                        {u.approval_status !== "blocked" && (
+                          <Button size="sm" variant="outline" className="h-8 gap-1" onClick={() => setApproval(u.id, "block")}>
+                            <XCircle className="h-3.5 w-3.5" /> Block
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                    {u.approval_reason && (
+                      <p className="max-w-48 truncate text-xs text-muted-foreground" title={u.approval_reason}>
+                        {u.approval_reason}
+                      </p>
                     )}
                   </div>
                   <div className="flex w-32 items-center justify-between sm:justify-center">

@@ -76,25 +76,29 @@ keys do not match, all authenticated requests will return 401.
 
 The redirect URI must match exactly what is registered in the Google Cloud Console.
 
-### Authentik SSO ("Sign in with Microsoft")
+### Microsoft OAuth
 
-The "Sign in with Microsoft" button on the login page routes through Authentik (self-hosted identity provider at `auth.designflow.app`), not directly to Azure AD. Authentik acts as an OIDC broker — it handles Microsoft 365 SSO, Google OAuth, Active Directory LDAP, and local accounts, then presents a single OIDC endpoint to Supabase.
+The "Continue with Microsoft" button uses Supabase GoTrue's direct Azure provider. It does not route through Authentik.
 
 | Variable | Notes |
 |----------|-------|
-| `GOTRUE_EXTERNAL_KEYCLOAK_ENABLED` | `true` |
-| `GOTRUE_EXTERNAL_KEYCLOAK_CLIENT_ID` | OAuth2 client ID from Authentik → CompShop provider |
-| `GOTRUE_EXTERNAL_KEYCLOAK_SECRET` | Client secret from same provider |
-| `GOTRUE_EXTERNAL_KEYCLOAK_REDIRECT_URI` | `https://api.comp.designflow.app/auth/v1/callback` |
-| `GOTRUE_EXTERNAL_KEYCLOAK_URL` | `https://api.comp.designflow.app/oidc-compat` |
+| `GOTRUE_EXTERNAL_AZURE_ENABLED` | `true` to enable Microsoft sign-in |
+| `GOTRUE_EXTERNAL_AZURE_CLIENT_ID` | Azure app registration client ID |
+| `GOTRUE_EXTERNAL_AZURE_SECRET` | Azure app registration client secret |
+| `GOTRUE_EXTERNAL_AZURE_REDIRECT_URI` | Must be `https://api.comp.designflow.app/auth/v1/callback` |
 
-GoTrue v2.x uses the `keycloak` provider for this integration. The `oidc-compat` nginx service in `selfhost/compose.supabase.yml` translates Keycloak-style paths to Authentik's OIDC endpoints.
+Configure the Azure app registration account type for the desired sign-in surface. For CompShop's current model, use a registration that permits the POP Creations tenant and invited external Microsoft personal/work accounts. Do not rely on Azure tenant restriction for app authorization; CompShop enforces access with database approval rules:
 
-**Critical Authentik-side requirements** (must be set on every OAuth2 provider in Authentik, or SSO returns `insufficient_scope`):
-- Property mappings: `openid`, `email`, `profile` scope mappings must all be attached
-- Signing key: must be set (use "authentik Internal JWT Certificate")
+- Company Microsoft users can be auto-approved by adding an `auth_access_rules` row with `rule_type = 'microsoft_tenant'`, `provider = 'azure'`, and `status = 'approved'`.
+- External Microsoft, Google, or email/password users can be invited by email or approved by an admin after first sign-in.
+- Unknown OAuth users remain pending and receive no app role until approved.
 
-See `docs/authentik.md` for full Authentik configuration details.
+The old Authentik/Keycloak bridge variables should remain disabled for CompShop direct SSO:
+
+| Variable | Notes |
+|----------|-------|
+| `GOTRUE_EXTERNAL_KEYCLOAK_ENABLED` | `false` for CompShop direct SSO |
+| `GOTRUE_EXTERNAL_KEYCLOAK_*` | Legacy Authentik bridge settings kept only for rollback/reference |
 
 ### SMTP (Brevo)
 
