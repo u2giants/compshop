@@ -19,6 +19,14 @@ on:
         options:
           - "false"
           - "true"
+      restart_supabase_service:
+        description: "Restart the supabase-compshop Coolify service"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
 
 jobs:
   audit:
@@ -30,6 +38,7 @@ jobs:
           BASE: ${{ secrets.COOLIFY_BASE_URL }}
           DELETE_STALE_COMPSHOP_APP: ${{ inputs.delete_stale_compshop_app }}
           ADD_COMPSHOP_DOMAIN: ${{ inputs.add_compshop_domain }}
+          RESTART_SUPABASE_SERVICE: ${{ inputs.restart_supabase_service }}
         run: |
           python3 << 'PYEOF'
           import json, os, subprocess, sys
@@ -146,6 +155,40 @@ jobs:
               applications = rows(get("/api/v1/applications"))
               resources = rows(get("/api/v1/resources"))
 
+          services = rows(get("/api/v1/services"))
+          supabase_service = next(
+              (
+                  service for service in services
+                  if service.get("uuid") == "lc7f483hklyq89eej67idpbx"
+                  or service.get("name") == "supabase-compshop"
+              ),
+              None,
+          )
+
+          if os.environ.get("RESTART_SUPABASE_SERVICE") == "true":
+              if not supabase_service:
+                  print("Supabase service not found")
+                  sys.exit(1)
+              print(f"Restarting Supabase service {supabase_service.get('uuid')}")
+              r = subprocess.run(
+                  [
+                      "curl",
+                      "-sf",
+                      "--max-time",
+                      "30",
+                      f"{base}/api/v1/services/{supabase_service['uuid']}/restart",
+                      "-H",
+                      auth,
+                  ],
+                  capture_output=True,
+                  text=True,
+              )
+              if r.returncode != 0:
+                  print(f"Supabase restart failed: {r.stderr[:300] or '(no stderr)'}")
+                  sys.exit(1)
+              print(f"Supabase restart response: {r.stdout[:300]}")
+              services = rows(get("/api/v1/services"))
+
           print("=== APPLICATIONS ===")
           for app in applications:
               print(json.dumps(pick(app, [
@@ -169,6 +212,17 @@ jobs:
                   "name",
                   "uuid",
                   "fqdn",
+                  "status",
+                  "type",
+                  "created_at",
+                  "updated_at",
+              ]), sort_keys=True))
+
+          print("=== SERVICES ===")
+          for service in services:
+              print(json.dumps(pick(service, [
+                  "name",
+                  "uuid",
                   "status",
                   "type",
                   "created_at",
