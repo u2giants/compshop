@@ -46,6 +46,18 @@ export default function Auth() {
       provider: "azure",
       options: { redirectTo: window.location.origin },
     });
+
+    if (error && /provider is not enabled|unsupported provider/i.test(error.message)) {
+      const fallback = await supabase.auth.signInWithOAuth({
+        provider: "keycloak",
+        options: { redirectTo: window.location.origin },
+      });
+      if (fallback.error) {
+        toast({ title: "Microsoft sign-in failed", description: String(fallback.error), variant: "destructive" });
+      }
+      return;
+    }
+
     if (error) {
       toast({ title: "Microsoft sign-in failed", description: String(error), variant: "destructive" });
     }
