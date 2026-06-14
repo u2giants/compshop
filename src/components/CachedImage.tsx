@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { getCachedImageBlob, cacheImageBlob, getCachedSignedUrl, cacheSignedUrls } from "@/lib/offline-db";
 
@@ -53,8 +53,20 @@ export default function CachedImage({ filePath, signedUrl, fallback, ...imgProps
   const [src, setSrc] = useState<string | undefined>(() => memBlobUrlCache.get(filePath) ?? signedUrl);
   const [blobUrl, setBlobUrl] = useState<string | undefined>(() => memBlobUrlCache.get(filePath));
   const [failed, setFailed] = useState(false);
+  const lastFilePathRef = useRef<string | null>(null);
 
   useEffect(() => {
+    // A re-signed URL for the SAME image (same filePath, new token) must never
+    // reset what's already on screen — otherwise re-renders that hand us a fresh
+    // signed URL (e.g. realtime-driven refetches) make the grid blink. Only adopt
+    // the new URL if we currently have nothing to show.
+    if (lastFilePathRef.current === filePath) {
+      // Don't re-adopt after a real load failure, or churn would retry-blink it.
+      if (signedUrl && !failed) setSrc((prev) => prev ?? signedUrl);
+      return;
+    }
+    lastFilePathRef.current = filePath;
+
     setFailed(false);
 
     // Already have a blob URL in memory for this path — nothing to do.
@@ -120,7 +132,7 @@ export default function CachedImage({ filePath, signedUrl, fallback, ...imgProps
       cancelled = true;
       // Don't revoke blob URLs — memBlobUrlCache keeps them alive for instant remounts.
     };
-  }, [filePath, signedUrl]);
+  }, [filePath, signedUrl, failed]);
 
   const handleLoad = useCallback(
     (e: React.SyntheticEvent<HTMLImageElement>) => {
