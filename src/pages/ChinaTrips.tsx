@@ -164,14 +164,25 @@ export default function ChinaTrips() {
         // Prefer the pre-generated thumbnail and sign it WITHOUT an imgproxy
         // transform — the self-hosted render service rejects these source photos
         // with 422 "Invalid source image". A plain object URL just serves bytes.
+        //
+        // Look the thumbnails up in small chunks: file paths are long, so a single
+        // `.in(...)` over every cover overflows the gateway's URI limit and the
+        // error response (no CORS headers) reads as a CORS failure. Isolated in
+        // try/catch so a lookup miss never blocks cover signing — we just fall
+        // back to signing the full image, which still renders.
         const coverThumbPaths = new Map<string, string>();
-        if (coverFilePaths.length > 0) {
-          const { data: thumbRows } = await supabase
-            .from("china_photos")
-            .select("file_path, thumbnail_path")
-            .in("file_path", coverFilePaths);
-          for (const r of (thumbRows ?? []) as { file_path: string; thumbnail_path: string | null }[]) {
-            if (r.thumbnail_path) coverThumbPaths.set(r.file_path, r.thumbnail_path);
+        for (let i = 0; i < coverFilePaths.length; i += 10) {
+          const chunk = coverFilePaths.slice(i, i + 10);
+          try {
+            const { data: thumbRows } = await supabase
+              .from("china_photos")
+              .select("file_path, thumbnail_path")
+              .in("file_path", chunk);
+            for (const r of (thumbRows ?? []) as { file_path: string; thumbnail_path: string | null }[]) {
+              if (r.thumbnail_path) coverThumbPaths.set(r.file_path, r.thumbnail_path);
+            }
+          } catch {
+            // Ignore — covers in this chunk fall back to the full-image URL.
           }
         }
 
