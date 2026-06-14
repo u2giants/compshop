@@ -160,7 +160,7 @@ function useContainerWidth() {
 
 function useCachedBlobUrl(filePath: string, signedUrl: string | undefined, online: boolean) {
   const [blobUrl, setBlobUrl] = useState(() => blobUrlCache.get(filePath));
-  const [src, setSrc] = useState(() => blobUrlCache.get(filePath) || (online ? signedUrl : undefined));
+  const [src, setSrc] = useState<string | undefined>(() => blobUrlCache.get(filePath) ?? (online ? signedUrl : undefined));
 
   useEffect(() => {
     let cancelled = false;
@@ -170,9 +170,8 @@ function useCachedBlobUrl(filePath: string, signedUrl: string | undefined, onlin
       setSrc(cached);
       return;
     }
-
-    setBlobUrl(undefined);
-    setSrc(online ? signedUrl : undefined);
+    // No blob cache — use signedUrl if available; never clear an existing src to undefined
+    if (signedUrl) setSrc(signedUrl);
     if (blobMissCache.has(filePath)) return;
 
     getCachedImageBlob(filePath).then((blob) => {
@@ -188,7 +187,7 @@ function useCachedBlobUrl(filePath: string, signedUrl: string | undefined, onlin
     }).catch(() => blobMissCache.add(filePath));
 
     return () => { cancelled = true; };
-  }, [filePath, online, signedUrl]);
+  }, [filePath, signedUrl]); // `online` intentionally omitted: network status changes must not clear image sources
 
   return { src, cached: Boolean(blobUrl) };
 }
@@ -246,6 +245,8 @@ export default function FairTripStreamV2() {
   const [loadedFromCache, setLoadedFromCache] = useState(false);
   const [cacheProgress, setCacheProgress] = useState<CacheProgress | null>(null);
   const [cacheStatus, setCacheStatus] = useState<string | null>(null);
+  // Track which fair id we've already loaded from cache so `online` toggles don't re-run it
+  const cacheLoadedForIdRef = useRef<string | null>(null);
 
   const loadCachedStream = useCallback(async (): Promise<boolean> => {
     if (!id) return false;
@@ -331,8 +332,13 @@ export default function FairTripStreamV2() {
 
     (async () => {
       setLoading(true);
-      const hadCachedData = await loadCachedStream();
-      if (!cancelled && hadCachedData) setLoading(false);
+
+      // Only load from IndexedDB cache once per fair id — not on every `online` toggle
+      if (cacheLoadedForIdRef.current !== id) {
+        const hadCachedData = await loadCachedStream();
+        if (!cancelled && hadCachedData) setLoading(false);
+        if (!cancelled) cacheLoadedForIdRef.current = id;
+      }
 
       if (!online) {
         if (!cancelled) setLoading(false);
