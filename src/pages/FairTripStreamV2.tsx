@@ -52,13 +52,7 @@ interface CacheProgress {
   failed: number;
 }
 
-type VirtualRow =
-  | { type: "header"; key: string; top: number; height: number; section: BoothSection; sectionIndex: number }
-  | { type: "photos"; key: string; top: number; height: number; section: BoothSection; photos: PhotoItem[]; rowIndex: number };
-
 const GAP = 6;
-const HEADER_HEIGHT = 58;
-const OVERSCAN_PX = 1400;
 const blobUrlCache = new Map<string, string>();
 const blobMissCache = new Set<string>();
 
@@ -164,41 +158,21 @@ function useContainerWidth() {
   return { ref, width };
 }
 
-function useWindowScrollY() {
-  const [scrollY, setScrollY] = useState(() => window.scrollY);
-
-  useEffect(() => {
-    let raf = 0;
-    const update = () => {
-      if (raf) return;
-      raf = window.requestAnimationFrame(() => {
-        raf = 0;
-        setScrollY(window.scrollY);
-      });
-    };
-    window.addEventListener("scroll", update, { passive: true });
-    window.addEventListener("resize", update);
-    return () => {
-      if (raf) window.cancelAnimationFrame(raf);
-      window.removeEventListener("scroll", update);
-      window.removeEventListener("resize", update);
-    };
-  }, []);
-
-  return scrollY;
-}
-
 function useCachedBlobUrl(filePath: string, signedUrl: string | undefined, online: boolean) {
   const [blobUrl, setBlobUrl] = useState(() => blobUrlCache.get(filePath));
+  const [src, setSrc] = useState(() => blobUrlCache.get(filePath) || (online ? signedUrl : undefined));
 
   useEffect(() => {
     let cancelled = false;
     const cached = blobUrlCache.get(filePath);
     if (cached) {
       setBlobUrl(cached);
+      setSrc(cached);
       return;
     }
+
     setBlobUrl(undefined);
+    setSrc(online ? signedUrl : undefined);
     if (blobMissCache.has(filePath)) return;
 
     getCachedImageBlob(filePath).then((blob) => {
@@ -207,15 +181,15 @@ function useCachedBlobUrl(filePath: string, signedUrl: string | undefined, onlin
         const url = URL.createObjectURL(blob);
         blobUrlCache.set(filePath, url);
         setBlobUrl(url);
+        setSrc(url);
       } else {
         blobMissCache.add(filePath);
       }
     }).catch(() => blobMissCache.add(filePath));
 
     return () => { cancelled = true; };
-  }, [filePath]);
+  }, [filePath, online, signedUrl]);
 
-  const src = blobUrl || (online ? signedUrl : undefined);
   return { src, cached: Boolean(blobUrl) };
 }
 
@@ -265,7 +239,6 @@ export default function FairTripStreamV2() {
   const { user } = useAuth();
   const online = useOnlineStatus();
   const { ref: streamRef, width } = useContainerWidth();
-  const scrollY = useWindowScrollY();
 
   const [fair, setFair] = useState<CachedChinaTrip | null>(null);
   const [sections, setSections] = useState<BoothSection[]>([]);
@@ -376,47 +349,13 @@ export default function FairTripStreamV2() {
     return () => { cancelled = true; };
   }, [user, id, online, loadCachedStream, loadOnlineStream]);
 
-  const { columns, cellSize, rows, totalHeight } = useMemo(() => {
+  const { columns, cellSize } = useMemo(() => {
     const columnCount = getColumnCount(window.innerWidth);
     const measuredWidth = width || 360;
     const size = Math.max(72, Math.floor((measuredWidth - GAP * (columnCount - 1)) / columnCount));
-    const virtualRows: VirtualRow[] = [];
-    let top = 0;
+    return { columns: columnCount, cellSize: size };
+  }, [width]);
 
-    sections.forEach((section, sectionIndex) => {
-      virtualRows.push({
-        type: "header",
-        key: `header-${section.trip.id}`,
-        top,
-        height: HEADER_HEIGHT,
-        section,
-        sectionIndex,
-      });
-      top += HEADER_HEIGHT;
-
-      for (let i = 0; i < section.photos.length; i += columnCount) {
-        virtualRows.push({
-          type: "photos",
-          key: `photos-${section.trip.id}-${i}`,
-          top,
-          height: size + GAP,
-          section,
-          photos: section.photos.slice(i, i + columnCount),
-          rowIndex: Math.floor(i / columnCount),
-        });
-        top += size + GAP;
-      }
-
-      top += 26;
-    });
-
-    return { columns: columnCount, cellSize: size, rows: virtualRows, totalHeight: top };
-  }, [sections, width]);
-
-  const streamTop = streamRef.current ? streamRef.current.getBoundingClientRect().top + window.scrollY : 0;
-  const viewportTop = Math.max(0, scrollY - streamTop - OVERSCAN_PX);
-  const viewportBottom = scrollY - streamTop + window.innerHeight + OVERSCAN_PX;
-  const visibleRows = rows.filter((row) => row.top + row.height >= viewportTop && row.top <= viewportBottom);
   const totalPhotos = sections.reduce((sum, section) => sum + section.photos.length, 0);
   const firstPriorityIds = new Set(sections.flatMap((section) => section.photos).slice(0, columns * 3).map((photo) => photo.id));
 
@@ -546,34 +485,33 @@ export default function FairTripStreamV2() {
       ) : sections.length === 0 ? (
         <div className="py-16 text-center text-sm text-muted-foreground">No photos found in this fair trip.</div>
       ) : (
-        <div ref={streamRef} className="relative" style={{ height: totalHeight }}>
-          {visibleRows.map((row) => (
-            <div key={row.key} className="absolute left-0 right-0" style={{ top: row.top, height: row.height }}>
-              {row.type === "header" ? (
-                <div className="border-t pt-5">
-                  <button
-                    onClick={() => navigate(`/china/${row.section.trip.id}`)}
-                    className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-left group"
-                  >
-                    <h2 className="font-sans text-base font-semibold transition-colors group-hover:text-primary">
-                      {row.section.trip.supplier || row.section.trip.name}
-                    </h2>
-                    <span className="text-xs text-muted-foreground">
-                      {format(new Date(row.section.trip.date), "MMM d")} · {row.section.photos.length} photo{row.section.photos.length !== 1 ? "s" : ""}
-                    </span>
-                  </button>
-                </div>
-              ) : (
-                <div
-                  className="grid gap-1.5"
-                  style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, height: cellSize }}
-                  onClick={() => navigate(`/china/${row.section.trip.id}`)}
-                >
-                  {row.photos.map((photo) => (
-                    <StreamThumb key={photo.id} photo={photo} online={online} priority={firstPriorityIds.has(photo.id)} />
-                  ))}
-                </div>
-              )}
+        <div ref={streamRef} className="space-y-8">
+          {sections.map((section, sectionIndex) => (
+            <div key={section.trip.id}>
+              {sectionIndex > 0 && <div className="mb-6 border-t" />}
+              <button
+                onClick={() => navigate(`/china/${section.trip.id}`)}
+                className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-left group"
+              >
+                <h2 className="font-sans text-base font-semibold transition-colors group-hover:text-primary">
+                  {section.trip.supplier || section.trip.name}
+                </h2>
+                <span className="text-xs text-muted-foreground">
+                  {format(new Date(section.trip.date), "MMM d")} · {section.photos.length} photo{section.photos.length !== 1 ? "s" : ""}
+                </span>
+              </button>
+              <div
+                className="grid gap-1.5"
+                style={{
+                  gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+                  gridAutoRows: cellSize,
+                }}
+                onClick={() => navigate(`/china/${section.trip.id}`)}
+              >
+                {section.photos.map((photo) => (
+                  <StreamThumb key={photo.id} photo={photo} online={online} priority={firstPriorityIds.has(photo.id)} />
+                ))}
+              </div>
             </div>
           ))}
         </div>
