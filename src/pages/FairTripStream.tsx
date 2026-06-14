@@ -3,8 +3,8 @@ import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { batchSignedUrls } from "@/lib/photo-utils";
-import CachedImage from "@/components/CachedImage";
-import { ArrowLeft, Calendar, MapPin, Factory, Play, Video } from "lucide-react";
+import StreamThumb from "@/components/trip/StreamThumb";
+import { ArrowLeft, Calendar, MapPin } from "lucide-react";
 import { format } from "date-fns";
 
 interface PhotoItem {
@@ -189,54 +189,19 @@ export default function FairTripStream() {
                   </span>
                 </button>
                 <div className="grid gap-1.5 grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8">
-                  {photos.map((photo) => {
-                    const isVideo = photo.media_type === "video";
-                    const displayPath = photo.thumbnail_path || photo.file_path;
-                    const isPriority = priorityPhotoIds.has(photo.id);
-                    return (
-                      <div
-                        key={photo.id}
-                        className="group relative aspect-square cursor-pointer overflow-hidden rounded-md bg-muted"
-                        onClick={() => navigate(`/china/${trip.id}`)}
-                      >
-                        {/* CachedImage keeps a stable src and caches the blob in the
-                            background after load — it never swaps the visible src,
-                            which is what stops the grid blinking on scroll. */}
-                        <CachedImage
-                          filePath={displayPath}
-                          signedUrl={photo.display_url}
-                          alt={photo.product_name ?? (isVideo ? "Video" : "Photo")}
-                          className="h-full w-full object-cover"
-                          loading={isPriority ? "eager" : "lazy"}
-                          decoding="async"
-                          draggable={false}
-                          fallback={
-                            isVideo ? (
-                              <div className="flex h-full w-full items-center justify-center bg-black/80">
-                                <Video className="h-6 w-6 text-white/70" />
-                              </div>
-                            ) : (
-                              <div className="flex h-full w-full items-center justify-center">
-                                <Factory className="h-6 w-6 text-muted-foreground/30" />
-                              </div>
-                            )
-                          }
-                        />
-                        {isVideo && (
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            <div className="rounded-full bg-black/60 p-2 backdrop-blur-sm">
-                              <Play className="h-4 w-4 fill-white text-white" />
-                            </div>
-                          </div>
-                        )}
-                        {photo.product_name && (
-                          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-1.5">
-                            <p className="text-[10px] text-white truncate">{photo.product_name}</p>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                  {photos.map((photo) => (
+                    <StreamThumb
+                      key={photo.id}
+                      photo={{
+                        display_path: photo.thumbnail_path || photo.file_path,
+                        display_url: photo.display_url,
+                        product_name: photo.product_name,
+                        media_type: photo.media_type,
+                      }}
+                      priority={priorityPhotoIds.has(photo.id)}
+                      onClick={() => navigate(`/china/${trip.id}`)}
+                    />
+                  ))}
                 </div>
               </div>
             );

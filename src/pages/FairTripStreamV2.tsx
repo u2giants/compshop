@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { format } from "date-fns";
-import { ArrowLeft, Calendar, Download, Factory, Loader2, MapPin, Play, Video } from "lucide-react";
+import { ArrowLeft, Calendar, Download, Loader2, MapPin } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOnlineStatus } from "@/hooks/use-online-status";
 import { batchSignedUrls } from "@/lib/photo-utils";
-import CachedImage from "@/components/CachedImage";
+import StreamThumb from "@/components/trip/StreamThumb";
 import {
   cacheChinaPhotos,
   cacheChinaTrips,
@@ -157,48 +157,6 @@ function useContainerWidth() {
   }, []);
 
   return { ref, width };
-}
-
-function StreamThumb({ photo, priority }: { photo: PhotoItem; priority: boolean }) {
-  const isVideo = photo.media_type === "video";
-
-  return (
-    <button
-      type="button"
-      className="group relative aspect-square overflow-hidden rounded-md bg-muted text-left focus:outline-none focus:ring-2 focus:ring-primary"
-      aria-label={photo.product_name ?? (isVideo ? "Video" : "Photo")}
-    >
-      {/* CachedImage keeps a stable src (signed URL) and caches the blob in the
-          background after load — it never swaps the visible src, which is what
-          prevented the grid from blinking on scroll. */}
-      <CachedImage
-        filePath={photo.display_path}
-        signedUrl={photo.display_url}
-        alt={photo.product_name ?? (isVideo ? "Video" : "Photo")}
-        className="h-full w-full object-cover"
-        loading={priority ? "eager" : "lazy"}
-        decoding="async"
-        draggable={false}
-        fallback={
-          <div className="flex h-full w-full items-center justify-center bg-muted">
-            {isVideo ? <Video className="h-6 w-6 text-muted-foreground/40" /> : <Factory className="h-6 w-6 text-muted-foreground/30" />}
-          </div>
-        }
-      />
-      {isVideo && (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="rounded-full bg-black/60 p-2 backdrop-blur-sm">
-            <Play className="h-4 w-4 fill-white text-white" />
-          </div>
-        </div>
-      )}
-      {photo.product_name && (
-        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-1.5 pb-1 pt-5">
-          <p className="truncate text-[10px] leading-tight text-white">{photo.product_name}</p>
-        </div>
-      )}
-    </button>
-  );
 }
 
 export default function FairTripStreamV2() {
@@ -484,7 +442,12 @@ export default function FairTripStreamV2() {
                 onClick={() => navigate(`/china/${section.trip.id}`)}
               >
                 {section.photos.map((photo) => (
-                  <StreamThumb key={photo.id} photo={photo} priority={firstPriorityIds.has(photo.id)} />
+                  <StreamThumb
+                    key={photo.id}
+                    photo={photo}
+                    priority={firstPriorityIds.has(photo.id)}
+                    onClick={() => navigate(`/china/${section.trip.id}`)}
+                  />
                 ))}
               </div>
             </div>
