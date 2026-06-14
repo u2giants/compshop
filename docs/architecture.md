@@ -10,8 +10,9 @@ Browser / Capacitor app
         │
         ▼
   Traefik (ports 80/443)          ← coolify-proxy container
-   ├── comp.designflow.app         → compshop-frontend (Nginx, port 80)
-   ├── api.comp.designflow.app     → Kong (port 8000)
+   ├── comp.designflow.app         → frontend-uuid-comp-shop-prod-2026 (Nginx, port 80)
+   ├── compshop.designflow.app     → frontend-uuid-comp-shop-prod-2026 (Nginx, port 80)
+   ├── api.comp.designflow.app     → compshop-api-proxy → Kong
    ├── db.comp.designflow.app      → Studio (port 3000)
    └── coolify.comp.designflow.app → Coolify (port 8080)
         │
@@ -34,25 +35,30 @@ HTTP-01 challenge.
 
 ## Supabase stack
 
-The Supabase services are defined in `selfhost/compose.supabase.yml` and deployed as a
-single Coolify "dockercompose" application (UUID `h8nwhgk682eedokx8nh2eg1q`). Coolify
-clones the repo to a temp directory and runs `docker compose up -d` on each deploy.
+Production Supabase currently runs as Coolify service `supabase-compshop` (UUID
+`lc7f483hklyq89eej67idpbx`). The repo still contains `selfhost/compose.supabase.yml` as
+the project-owned self-hosting/deploy reference, but the live migrated Coolify service
+uses Coolify-template containers including MinIO, Supavisor, analytics, and vector.
 
 ### Services
 
-| Service | Image | Role |
+| Service/container | Image | Role |
 |---------|-------|------|
-| db | postgres:15.8.1.085 | Primary database |
-| auth | supabase/gotrue:v2.186.0 | Authentication + OAuth |
-| rest | postgrest/postgrest:v14.8 | REST API |
-| realtime | supabase/realtime:v2.76.5 | WebSocket subscriptions |
-| storage | supabase/storage-api:v1.48.26 | File storage |
-| imgproxy | darthsim/imgproxy:v3.30.1 | On-the-fly image resizing |
-| functions | supabase/edge-runtime:v1.71.2 | Deno edge functions |
-| kong | kong/kong:3.9.1 | API gateway (public entry point) |
-| studio | supabase/studio:2026.04.08-... | Admin UI |
-| meta | supabase/postgres-meta:v0.96.3 | Postgres metadata API |
-| backup | postgres:15-alpine | Daily `pg_dump`, 14-day retention |
+| `supabase-db-lc7f483hklyq89eej67idpbx` | `supabase/postgres:15.8.1.085` | Primary database |
+| `supabase-auth-lc7f483hklyq89eej67idpbx` | `supabase/gotrue:v2.186.0` | Authentication + OAuth |
+| `supabase-rest-lc7f483hklyq89eej67idpbx` | `postgrest/postgrest:v14.6` | REST API |
+| `realtime-dev-lc7f483hklyq89eej67idpbx` | `supabase/realtime:v2.76.5` | WebSocket subscriptions |
+| `supabase-storage-lc7f483hklyq89eej67idpbx` | `supabase/storage-api:v1.44.2` | File storage API |
+| `supabase-minio-lc7f483hklyq89eej67idpbx` | `ghcr.io/coollabsio/minio:RELEASE.2025-10-15T17-29-55Z` | Object storage backend |
+| `imgproxy-lc7f483hklyq89eej67idpbx` | `darthsim/imgproxy:v3.30.1` | On-the-fly image resizing |
+| `supabase-edge-functions-lc7f483hklyq89eej67idpbx` | `supabase/edge-runtime:v1.71.2` | Deno edge functions |
+| `supabase-kong-lc7f483hklyq89eej67idpbx` | `kong/kong:3.9.1` | Internal API gateway |
+| `compshop-api-proxy` | `nginx` | Public proxy from `api.comp.designflow.app` to Kong |
+| `supabase-studio-lc7f483hklyq89eej67idpbx` | `supabase/studio:2026.03.16-sha-5528817` | Admin UI |
+| `supabase-meta-lc7f483hklyq89eej67idpbx` | `supabase/postgres-meta:v0.95.2` | Postgres metadata API |
+| `supabase-supavisor-lc7f483hklyq89eej67idpbx` | `supabase/supavisor:2.7.4` | Postgres pooler |
+| `supabase-analytics-lc7f483hklyq89eej67idpbx` | `supabase/logflare:1.31.2` | Analytics/logging |
+| `supabase-vector-lc7f483hklyq89eej67idpbx` | `timberio/vector:0.53.0-alpine` | Log shipping |
 
 ### Kong: intentional configuration quirks
 
@@ -92,24 +98,25 @@ without needing a mounted config file.
 
 Kong's Traefik routing labels (`traefik.http.routers.*`) are injected by Coolify at deploy
 time using the `docker_compose_domains` setting — they are not in the compose file itself.
-Coolify reads `SERVICE_FQDN_KONG=api.comp.designflow.app` and generates the labels. If
-Kong is ever recreated outside of a Coolify deploy (e.g. manual `docker compose up`), the
-Traefik labels will be absent and `api.comp.designflow.app` will return 503.
+On the current migrated stack, `api.comp.designflow.app` reaches Kong through the
+`compshop-api-proxy` nginx container. If the proxy or Kong is recreated outside the
+documented deployment flow, verify public API routing before debugging app code.
 
 ## Frontend
 
 The frontend is deployed as a separate Coolify "dockerfile" application built from
-`selfhost/Dockerfile.frontend`. The frontend Coolify UUID is not recorded in this repo;
-verify it with `.github/workflows/coolify-audit.yml`, the Coolify UI, or the Coolify API
-before hardcoding it anywhere.
+`selfhost/Dockerfile.frontend`. The frontend Coolify UUID is
+`frontend-uuid-comp-shop-prod-2026`, resource name `compshop-frontend:main`, with domains
+`https://comp.designflow.app` and `https://compshop.designflow.app`.
 
 The build is two-stage:
 1. `node:20-alpine` — installs dependencies and runs `vite build` with build-time VITE_* args
 2. `nginx:1.27-alpine` — serves the static dist/ with SPA routing and long-lived cache headers
 
 Build-time env vars (`VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`,
-`VITE_SUPABASE_PROJECT_ID`) are injected by Coolify as Docker build args, so they are
-baked into the JS bundle. Changing them requires a new build + deploy.
+`VITE_SUPABASE_PROJECT_ID`, `VITE_COMMIT_HASH`, `VITE_COMMIT_DATE`) are injected by
+Coolify as Docker build args/env, so they are baked into the JS bundle. Changing them
+requires a new build + deploy.
 
 ## Edge functions
 
@@ -143,8 +150,19 @@ per-trip count/cover queries.
 RLS is enforced on all user-facing tables. The `profiles` table drives user identity;
 `user_roles` gates admin features.
 
-Daily backups are written to the `db-backups` Docker volume by the `backup` service
-(`pg_dump -Fc`). The last 14 dumps are kept.
+Backup retention depends on the current Coolify service configuration. The old repo
+compose file includes a `db-backups` volume and backup service, but the migrated
+production service should be verified in Coolify before promising a specific retention
+window.
+
+## Storage layout
+
+The live Storage API uses private buckets and signed URLs. After the 2026-06-14
+migration, production MinIO contains a mixed historical layout: some objects are stored as
+raw `bucket/name` keys and others as `bucket/name/version` keys. This is expected for the
+current data set. Storage audits must check both possible keys and compare object sizes
+against `storage.objects`; a versioned-key-only audit produces false missing-file
+reports.
 
 ## Offline upload queue
 

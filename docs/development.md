@@ -24,8 +24,8 @@ VITE_SUPABASE_PUBLISHABLE_KEY=<anon key from Coolify>
 VITE_SUPABASE_PROJECT_ID=selfhosted
 ```
 
-`ADDITIONAL_REDIRECT_URLS` in the Supabase auth settings includes `http://localhost:8080`
-so OAuth callbacks work locally against both backends.
+`ADDITIONAL_REDIRECT_URLS` in the Supabase auth settings must include
+`http://localhost:8080` so OAuth callbacks work locally against the self-hosted backend.
 
 ## Scripts
 
@@ -120,6 +120,7 @@ are set and correct. The app fails silently if the Supabase client cannot initia
 
 **OAuth redirect errors** — the redirect URI must exactly match one of:
 - `https://comp.designflow.app` (production)
+- `https://compshop.designflow.app` (alternate production domain)
 - `https://comp-staging.designflow.app` (staging)
 - `http://localhost:8080` (local dev)
 

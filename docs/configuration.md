@@ -4,9 +4,9 @@
 
 | Config | Location | Who sets it |
 |--------|----------|-------------|
-| Supabase runtime env vars | Coolify → Application → Environment Variables | Human / AI via Coolify API |
-| Frontend build-time env vars | Coolify → Application → Environment Variables (build args) | Human / AI via Coolify API |
-| Local development env vars | `.env` (root, committed) or `.env.local` (not committed) | Developer |
+| Supabase runtime env vars | Coolify → `supabase-compshop` → Environment Variables | Human / AI via Coolify API |
+| Frontend build-time env vars | Coolify → `compshop-frontend:main` → Environment Variables/build args | Human / AI via Coolify API |
+| Local development env vars | `.env.local` (not committed) or copied from `.env.example` | Developer |
 | Supabase stack compose defaults | `selfhost/.env.example` | Reference only |
 
 **Runtime env vars are not stored in this repo.** They live in Coolify and are injected at
@@ -22,13 +22,16 @@ These are baked into the JS bundle at build time. Changing them requires a new d
 | `VITE_SUPABASE_URL` | Full URL to the Kong gateway, e.g. `https://api.comp.designflow.app` |
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | Supabase anon (public) JWT — safe to expose in the bundle |
 | `VITE_SUPABASE_PROJECT_ID` | Used to construct storage URLs; set to `selfhosted` for the self-hosted backend |
+| `VITE_COMMIT_HASH` | Short commit hash shown in the app top bar; set by the deploy workflow |
+| `VITE_COMMIT_DATE` | Commit timestamp shown in the app top bar in New York time; set by the deploy workflow |
 
 See `selfhost/.env.frontend.example` for the self-hosted values.
 
 ## Supabase stack runtime variables
 
-All of these are set in Coolify under the "compshop:main" application. The full list with
-explanations is in `selfhost/.env.example`. Key groups:
+All of these are set in Coolify under the `supabase-compshop` service
+(`lc7f483hklyq89eej67idpbx`). The full list with explanations is in
+`selfhost/.env.example`. Key groups:
 
 ### Domains
 
@@ -37,7 +40,7 @@ explanations is in `selfhost/.env.example`. Key groups:
 | `API_EXTERNAL_URL` | `https://api.comp.designflow.app` |
 | `SUPABASE_PUBLIC_URL` | `https://api.comp.designflow.app` |
 | `SITE_URL` | `https://comp.designflow.app` |
-| `ADDITIONAL_REDIRECT_URLS` | `https://comp-staging.designflow.app,http://localhost:8080` |
+| `ADDITIONAL_REDIRECT_URLS` | `https://compshop.designflow.app,https://comp-staging.designflow.app,http://localhost:8080` |
 
 `SITE_URL` is GoTRUE's primary allowed redirect after auth. `ADDITIONAL_REDIRECT_URLS` is
 a comma-separated list of additional allowed origins — **must include** localhost for local
@@ -143,7 +146,7 @@ Used for password reset, magic link, and invite emails.
 | `DASHBOARD_USERNAME` | Basic-auth username for Supabase Studio |
 | `DASHBOARD_PASSWORD` | Basic-auth password for Supabase Studio |
 
-### Coolify service URLs (auto-injected)
+### Coolify service URLs (auto-injected or proxy-backed)
 
 Coolify injects these at deploy time — do not set them manually:
 
@@ -153,6 +156,10 @@ Coolify injects these at deploy time — do not set them manually:
 | `SERVICE_URL_KONG` | `https://api.comp.designflow.app` |
 | `SERVICE_FQDN_STUDIO` | `db.comp.designflow.app` |
 | `SERVICE_URL_STUDIO` | `https://db.comp.designflow.app` |
+
+The current production API is also fronted by the `compshop-api-proxy` nginx container,
+which routes `https://api.comp.designflow.app` to the live Kong container for
+`lc7f483hklyq89eej67idpbx`.
 
 ## Coolify instance settings
 
@@ -164,6 +171,6 @@ by the repo).
 
 ## Local development .env
 
-The committed root `.env` contains Lovable Cloud credentials (non-sensitive public anon
-key + project URL). It is safe to commit and usable for local dev. Do not put self-hosted
-credentials or service-role keys in the root `.env`.
+The repo does not commit a root `.env`. Copy `.env.example` to `.env.local` for local
+browser development and use only browser-safe values there. Do not commit self-hosted
+anon keys, service-role keys, SMTP keys, OAuth secrets, or other production credentials.

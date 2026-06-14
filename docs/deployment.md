@@ -13,9 +13,9 @@ git push origin main
         ▼
   Workflow queries Coolify resources and calls /api/v1/deploy
         │
-        ├── Supabase stack (compshop:main)
-        │     Coolify clones the repo → runs docker compose up -d
-        │     Only changed containers are recreated
+        ├── Supabase service (supabase-compshop)
+        │     Coolify deploys service UUID lc7f483hklyq89eej67idpbx
+        │     Only deployed when compose/functions paths changed
         │
         └── Frontend (compshop-frontend:main)
               Coolify clones the repo → builds Dockerfile.frontend
@@ -28,19 +28,26 @@ pushes to `main` that touch deployment-relevant paths (`src/**`, `supabase/funct
 package files, or the workflow itself). It uses GitHub Secrets `COOLIFY_BASE_URL` and
 `COOLIFY_TOKEN`.
 
+The workflow discovers resources through the Coolify API, pins the frontend app to the
+current `GITHUB_SHA`, updates `VITE_COMMIT_HASH` and `VITE_COMMIT_DATE`, deploys the
+frontend with `force=true`, and stops stale historical frontend apps named
+`compshop:main` if they reappear.
+
 ## What each deploy updates
 
-**Supabase stack** (`selfhost/compose.supabase.yml`)
+**Supabase service** (`supabase-compshop`, UUID `lc7f483hklyq89eej67idpbx`)
 
-Coolify tracks the compose file in the repo. When it changes, Coolify reruns
-`docker compose up -d` using the new file plus the env vars stored in Coolify.
-Only containers whose config hash changed are recreated.
+Production currently runs from the Coolify service `supabase-compshop`. The repo still
+keeps `selfhost/compose.supabase.yml` as the self-hosting/deploy reference, but the live
+service includes Coolify-template containers such as MinIO, Supavisor, analytics, and
+vector. The workflow deploys this service only when `selfhost/compose.supabase.yml` or
+`supabase/functions/**` changes.
 
 If you change an env var in Coolify (not in the compose file), trigger a manual
 redeploy from the Coolify UI or via:
 
 ```bash
-curl -X GET "https://coolify.comp.designflow.app/api/v1/deploy?uuid=h8nwhgk682eedokx8nh2eg1q" \
+curl -X GET "https://coolify.comp.designflow.app/api/v1/deploy?uuid=lc7f483hklyq89eej67idpbx" \
   -H "Authorization: Bearer $COOLIFY_TOKEN"
 ```
 
@@ -48,21 +55,25 @@ You can also run the `Deploy to Coolify` workflow manually from GitHub Actions.
 
 **Frontend** (`selfhost/Dockerfile.frontend`)
 
-A new Docker image is built from the Dockerfile on every deploy. Build-time VITE_* vars
-are read from the environment variables set in Coolify. The built image replaces the
-running `compshop-frontend` container.
+A new Docker image is built from the Dockerfile on every frontend deploy. Build-time
+VITE_* vars are read from the environment variables set in Coolify. The built image
+replaces the running `frontend-uuid-comp-shop-prod-2026` container. The frontend app is
+served at both `https://comp.designflow.app` and `https://compshop.designflow.app`.
 
 ## Database migrations
 
 Migrations in `supabase/migrations/` are **not** applied automatically on deploy. Apply
-them manually:
+them manually to the current production DB container:
 
 ```bash
-docker exec -it db-h8nwhgk682eedokx8nh2eg1q-<suffix> \
+docker exec -it supabase-db-lc7f483hklyq89eej67idpbx \
   psql -U postgres -d postgres -f /path/to/migration.sql
 ```
 
 Or via Supabase Studio (`https://db.comp.designflow.app`) → SQL Editor.
+
+After a migration, verify expected row counts and RLS behavior from the app or SQL before
+calling the deploy complete.
 
 ## Adding a new environment variable
 
@@ -71,15 +82,18 @@ Or via Supabase Studio (`https://db.comp.designflow.app`) → SQL Editor.
 3. Trigger a redeploy (Coolify does not auto-deploy on env var changes)
 4. Update `selfhost/.env.example` in the repo with the new variable and its explanation
 
-## Kong routing and Traefik labels
+## API routing and Traefik labels
 
-Kong's Traefik labels (which tell Traefik to route `api.comp.designflow.app` to Kong)
-are injected by Coolify at deploy time. They are derived from the
-`docker_compose_domains` config in Coolify's database, not from the compose file.
+The current migrated production API route is:
+
+`api.comp.designflow.app` → Traefik → `compshop-api-proxy` → `supabase-kong-lc7f483hklyq89eej67idpbx`.
+
+The repo compose reference still documents the older Coolify-injected Kong label pattern.
+If `api.comp.designflow.app` returns 502/503, check the proxy and live Kong container
+before changing frontend auth code.
 
 **If Kong is ever restarted outside of a Coolify deploy** (e.g. manual `docker compose up`),
-the resulting container will not have the Traefik labels and `api.comp.designflow.app`
-will return 503. Fix by triggering a full Coolify redeploy.
+verify that `compshop-api-proxy` still points to the current Kong container.
 
 ## Frontend Coolify deployment settings
 
@@ -106,7 +120,7 @@ also be read/written directly:
 # Verify
 docker exec coolify-db psql -U coolify -d coolify \
   -c "SELECT is_consistent_container_name_enabled, docker_images_to_keep \
-      FROM application_settings WHERE application_id = 2;"
+      FROM application_settings;"
 ```
 
 ## Supabase Studio "unhealthy" status

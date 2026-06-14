@@ -145,16 +145,18 @@ Purpose: prevent AI agents from scattering project logic into unrelated framewor
 | Entity/System | Identifier | Where defined | Notes |
 |---|---|---|---|
 | Supabase CLI project | `aqbyrzknbhyshjzlfsyv` | `supabase/config.toml` | Old Lovable Cloud project ID for CLI/local context; self-hosted prod uses Coolify stack. Do not treat as production backend ID. |
-| Production frontend | `https://comp.designflow.app` | `README.md`, `docs/architecture.md`, Coolify | Public app URL. |
+| Production frontend | `https://comp.designflow.app`, `https://compshop.designflow.app` | `README.md`, `docs/architecture.md`, Coolify | Public app URLs served by the frontend app. `comp.designflow.app` is the primary URL. |
 | Production API/Kong | `https://api.comp.designflow.app` | `selfhost/.env.example`, `selfhost/compose.supabase.yml` | Public Supabase API gateway URL. |
 | Supabase Studio | `https://db.comp.designflow.app` | `selfhost/.env.example`, `docs/architecture.md` | Admin UI; credentials live in Coolify env/basic auth. |
 | Coolify dashboard | `https://coolify.comp.designflow.app` | Docs | Deployment platform UI. |
-| Supabase compose app | `h8nwhgk682eedokx8nh2eg1q` | `selfhost/README.md`, `docs/architecture.md`, deploy docs | Coolify application UUID for the Supabase stack. |
-| Frontend Coolify app | unknown | GitHub workflow discovers by resource name through Coolify API | Verify with `.github/workflows/coolify-audit.yml` or Coolify UI/API before hardcoding. |
+| Production Supabase service | `lc7f483hklyq89eej67idpbx` | Coolify, `docs/architecture.md`, deploy docs | Current production self-hosted Supabase stack. Coolify resource name: `supabase-compshop`. |
+| Historical Supabase app | `h8nwhgk682eedokx8nh2eg1q` | Old Coolify resource, migration notes | Former Supabase stack. Do not treat as production unless deliberately inspecting old rescue data. |
+| Frontend Coolify app | `frontend-uuid-comp-shop-prod-2026` | Coolify, `.github/workflows/deploy.yml` discovery output | Resource name: `compshop-frontend:main`; domains are `comp.designflow.app` and `compshop.designflow.app`. |
 | Capacitor app ID | `app.lovable.compshop` | `capacitor.config.ts` | Mobile wrapper identifier. |
 | App roles | `admin`, `user`, `store_readonly`, `china_readonly` | `supabase/migrations/20260420075829_*.sql`, `src/integrations/supabase/types.ts` | Do not rename casually; used by RLS/auth UI. |
 | Storage bucket | `photos` | `supabase/migrations/20260212171102_*.sql` | Private bucket; use signed URLs. |
 | Storage bucket | `retailer-logos` | `supabase/migrations/20260213005958_*.sql` | Public bucket. |
+| Storage object layout | Raw `bucket/name` and versioned `bucket/name/version` keys | Production MinIO/storage volume | 2026-06-14 audit found all 2,006 DB storage rows backed by a raw or versioned object; do not require only versioned keys. |
 | Domestic trips | `shopping_trips` | `supabase/migrations/`, `src/integrations/supabase/types.ts` | Main domestic/store shopping trip table. |
 | Asia trips | `china_trips` | `supabase/migrations/`, `src/integrations/supabase/types.ts` | China/Hong Kong trip table; `venue_type` includes `canton_fair`, `factory_visit`, `booth_visit`. |
 | Photos | `photos`, `china_photos` | `supabase/migrations/`, `src/integrations/supabase/types.ts` | Domestic and Asia photo records. |
@@ -166,19 +168,23 @@ Purpose: prevent AI agents from scattering project logic into unrelated framewor
 
 | Container/service | Purpose | Managed by | App/project ID | Image/source |
 |---|---|---|---|---|
-| Frontend app | Serves Vite build with Nginx | Coolify dockerfile app | Frontend UUID unknown; verify via Coolify audit workflow | `selfhost/Dockerfile.frontend` (`node:20-alpine` build, `nginx:1.27-alpine` runtime) |
-| `db` | Postgres database | Coolify Docker Compose | `h8nwhgk682eedokx8nh2eg1q` | `supabase/postgres:15.8.1.085` |
-| `auth` | GoTrue auth/OAuth/email auth | Coolify Docker Compose | `h8nwhgk682eedokx8nh2eg1q` | `supabase/gotrue:v2.186.0` |
-| `rest` | PostgREST API | Coolify Docker Compose | `h8nwhgk682eedokx8nh2eg1q` | `postgrest/postgrest:v14.8` |
-| `realtime` | WebSocket subscriptions | Coolify Docker Compose | `h8nwhgk682eedokx8nh2eg1q` | `supabase/realtime:v2.76.5` |
-| `storage` | Supabase Storage API | Coolify Docker Compose | `h8nwhgk682eedokx8nh2eg1q` | `supabase/storage-api:v1.48.26` |
-| `imgproxy` | Image transforms/thumbnails | Coolify Docker Compose | `h8nwhgk682eedokx8nh2eg1q` | `darthsim/imgproxy:v3.30.1` |
-| `functions` | Deno edge functions | Coolify Docker Compose | `h8nwhgk682eedokx8nh2eg1q` | `supabase/edge-runtime:v1.71.2` |
-| `kong` | Public API gateway | Coolify Docker Compose | `h8nwhgk682eedokx8nh2eg1q` | `kong/kong:3.9.1` |
-| `studio` | Supabase Studio | Coolify Docker Compose | `h8nwhgk682eedokx8nh2eg1q` | `supabase/studio:2026.04.08-sha-205cbe7` |
-| `meta` | Postgres metadata API | Coolify Docker Compose | `h8nwhgk682eedokx8nh2eg1q` | `supabase/postgres-meta:v0.96.3` |
-| `backup` | Daily Postgres dump retention | Coolify Docker Compose | `h8nwhgk682eedokx8nh2eg1q` | `postgres:15-alpine` |
-| `oidc-compat` | Legacy nginx proxy translating GoTrue keycloak paths to Authentik OIDC endpoints | Coolify Docker Compose | `h8nwhgk682eedokx8nh2eg1q` | `nginx:alpine` |
+| `frontend-uuid-comp-shop-prod-2026` | Serves Vite build with Nginx | Coolify dockerfile app | `frontend-uuid-comp-shop-prod-2026` | `selfhost/Dockerfile.frontend` (`node:20-alpine` build, `nginx:1.27-alpine` runtime) |
+| `supabase-db-lc7f483hklyq89eej67idpbx` | Postgres database | Coolify service | `lc7f483hklyq89eej67idpbx` | `supabase/postgres:15.8.1.085` |
+| `supabase-auth-lc7f483hklyq89eej67idpbx` | GoTrue auth/OAuth/email auth | Coolify service | `lc7f483hklyq89eej67idpbx` | `supabase/gotrue:v2.186.0` |
+| `supabase-rest-lc7f483hklyq89eej67idpbx` | PostgREST API | Coolify service | `lc7f483hklyq89eej67idpbx` | `postgrest/postgrest:v14.6` |
+| `realtime-dev-lc7f483hklyq89eej67idpbx` | WebSocket subscriptions | Coolify service | `lc7f483hklyq89eej67idpbx` | `supabase/realtime:v2.76.5` |
+| `supabase-storage-lc7f483hklyq89eej67idpbx` | Supabase Storage API | Coolify service | `lc7f483hklyq89eej67idpbx` | `supabase/storage-api:v1.44.2` |
+| `supabase-kong-lc7f483hklyq89eej67idpbx` | Internal Supabase API gateway | Coolify service | `lc7f483hklyq89eej67idpbx` | `kong/kong:3.9.1` |
+| `compshop-api-proxy` | Public proxy from `api.comp.designflow.app` to the current Kong container | Docker/nginx on host | Outside Coolify app UUID | `nginx` |
+| `supabase-minio-lc7f483hklyq89eej67idpbx` | Object storage backend for Supabase Storage | Coolify service | `lc7f483hklyq89eej67idpbx` | `ghcr.io/coollabsio/minio:RELEASE.2025-10-15T17-29-55Z` |
+| `imgproxy-lc7f483hklyq89eej67idpbx` | Image transforms/thumbnails | Coolify service | `lc7f483hklyq89eej67idpbx` | `darthsim/imgproxy:v3.30.1` |
+| `supabase-edge-functions-lc7f483hklyq89eej67idpbx` | Deno edge functions | Coolify service | `lc7f483hklyq89eej67idpbx` | `supabase/edge-runtime:v1.71.2` |
+| `supabase-studio-lc7f483hklyq89eej67idpbx` | Supabase Studio | Coolify service | `lc7f483hklyq89eej67idpbx` | `supabase/studio:2026.03.16-sha-5528817` |
+| `supabase-meta-lc7f483hklyq89eej67idpbx` | Postgres metadata API | Coolify service | `lc7f483hklyq89eej67idpbx` | `supabase/postgres-meta:v0.95.2` |
+| `supabase-supavisor-lc7f483hklyq89eej67idpbx` | Postgres connection pooler | Coolify service | `lc7f483hklyq89eej67idpbx` | `supabase/supavisor:2.7.4` |
+| `supabase-analytics-lc7f483hklyq89eej67idpbx` | Supabase analytics/logging | Coolify service | `lc7f483hklyq89eej67idpbx` | `supabase/logflare:1.31.2` |
+| `supabase-vector-lc7f483hklyq89eej67idpbx` | Log shipping/observability pipeline | Coolify service | `lc7f483hklyq89eej67idpbx` | `timberio/vector:0.53.0-alpine` |
+| `compshop-old-db-rescue` and related `compshop-old-*-rescue` containers | Old-stack rescue/reference after migration | Host Docker | Historical `h8nwhgk682eedokx8nh2eg1q` data | Old stack images; not production traffic |
 | `coolify-proxy` | Traefik reverse proxy | Coolify platform | Outside this repo | Coolify-managed Traefik |
 | Coolify core services | Deployment platform, DB, Redis, realtime/sentinel | Coolify platform | Outside this repo | Managed by Coolify install |
 
@@ -262,6 +268,34 @@ This is how Coolify manages domains/SSL for Docker Compose resources.
 
 Do not change because:
 Manual labels can conflict with Coolify. If containers are recreated outside Coolify, trigger a proper Coolify redeploy to restore labels.
+
+### Live Supabase stack is not only the repo compose file
+
+Looks like:
+`selfhost/compose.supabase.yml` is the complete source of truth for every production Supabase container.
+
+Actually:
+Production is currently the Coolify service `supabase-compshop` (`lc7f483hklyq89eej67idpbx`) with Coolify-template containers including MinIO, Supavisor, analytics, and vector. The repo compose file remains the project-owned reference for self-hosting and deploy-related changes.
+
+Why:
+The 2026-06-14 migration moved production to the new Coolify-managed Supabase service while preserving the repo's self-hosting kit and scripts.
+
+Do not change because:
+Assuming production only has the repo-compose service names can make DB, storage, or auth repairs target the old or wrong containers.
+
+### Storage objects can be raw or versioned keys
+
+Looks like:
+Every Supabase Storage object should exist only at `bucket/name/version` in MinIO.
+
+Actually:
+The 2026-06-14 migration audit found 2,006 `storage.objects` rows backed by files: 1,416 as raw `bucket/name` objects and 590 as versioned `bucket/name/version` objects. Public signed fetches work through the Storage API for both layouts, and the exact old physical storage tree is also preserved in the new MinIO data.
+
+Why:
+The migration preserved mixed historical Storage layouts from the old stack. A strict versioned-key-only audit reports false missing files.
+
+Do not change because:
+Deleting or rewriting the raw objects can break access to older uploads and removes a recovery path. Audit storage by checking raw or versioned key presence and size.
 
 ### Capacitor still points at Lovable URL
 
@@ -364,21 +398,20 @@ Real deployment path:
 1. Commit to `main`.
 2. Push to GitHub.
 3. GitHub Actions workflow `Deploy to Coolify` (`.github/workflows/deploy.yml`) runs on `workflow_dispatch` or on pushes to `main` that touch `selfhost/compose.supabase.yml`, `selfhost/Dockerfile.frontend`, `selfhost/nginx.conf`, `supabase/functions/**`, `src/**`, `package.json`, `bun.lockb`, `package-lock.json`, or the workflow itself.
-4. The workflow uses GitHub Secrets `COOLIFY_BASE_URL` and `COOLIFY_TOKEN`, queries `/api/v1/resources`, finds the Supabase compose stack and frontend app by resource name, and calls `/api/v1/deploy?uuid=...`.
-5. Coolify pulls/clones the repo and deploys:
-   - Supabase stack from `selfhost/compose.supabase.yml`.
-   - Frontend from `selfhost/Dockerfile.frontend`.
+4. The workflow uses GitHub Secrets `COOLIFY_BASE_URL` and `COOLIFY_TOKEN`, queries `/api/v1/resources`, finds the production Supabase service and frontend app by resource name/domain, stops stale historical frontend apps named `compshop:main`, and calls `/api/v1/deploy?uuid=...`.
+5. Supabase deploys only when `selfhost/compose.supabase.yml` or `supabase/functions/**` changed. The frontend deploys for app/package/nginx/workflow changes or manual workflow dispatch.
+6. Before frontend deploy, the workflow pins the Coolify app to `GITHUB_SHA` and updates `VITE_COMMIT_HASH` and `VITE_COMMIT_DATE` so the top bar shows the live commit stamp.
 
 Image/package names:
 
-- Frontend image is built by Coolify from `selfhost/Dockerfile.frontend`; tag naming is Coolify-managed and not defined in this repo.
-- Supabase service images are pinned in `selfhost/compose.supabase.yml`.
+- Frontend image is built by Coolify from `selfhost/Dockerfile.frontend`; recent tags use the app UUID plus commit SHA, for example `frontend-uuid-comp-shop-prod-2026:<sha>`.
+- The repo self-hosting compose pins its service images. The current live `supabase-compshop` service image set is documented in the container inventory above and should be verified in Coolify before changing production service versions.
 
 Deployment platform/app IDs:
 
 - Coolify at `https://coolify.comp.designflow.app`.
-- Supabase compose app UUID: `h8nwhgk682eedokx8nh2eg1q`.
-- Frontend app UUID: unknown in repo; verify via Coolify UI/API or `.github/workflows/coolify-audit.yml`.
+- Supabase production service UUID: `lc7f483hklyq89eej67idpbx`.
+- Frontend app UUID: `frontend-uuid-comp-shop-prod-2026`.
 
 Runtime environment variables:
 
@@ -468,13 +501,48 @@ Docs state `is_consistent_container_name_enabled=true` and `docker_images_to_kee
 Rule added to prevent recurrence:
 Do not disable consistent container naming for `compshop-frontend:main` without testing the Traefik router behavior.
 
+### 2026-06-14 Production migration to new Coolify Supabase service
+
+What happened:
+The active production app was empty after moving domains because the new Supabase service did not yet contain all data and files from the old `compshop.designflow.app` stack.
+
+Impact:
+The live `comp.designflow.app` app could authenticate but did not show the expected trips/photos until the old database and storage were migrated.
+
+Root cause:
+The frontend/domain move happened before the new self-hosted Supabase service had a complete copy of the old stack's database rows and storage objects.
+
+Recovery:
+Migrated old stack data into `lc7f483hklyq89eej67idpbx`, preserved old rescue containers, patched Coolify service env for future redeploys, and audited row counts, primary keys, row checksums, `storage.objects`, physical object paths, object sizes, and signed fetches. Audit result: no missing primary keys, no missing public app data/storage metadata rows, and all 2,006 DB storage rows backed by raw or versioned files.
+
+Rule added to prevent recurrence:
+Before switching production domains or declaring a migration done, verify database row counts, primary-key presence, row checksums, storage metadata, physical storage files, and signed URL fetches from the public API.
+
+### 2026-06-14 Fair stream v2 image remount flicker
+
+What happened:
+The experimental Fair Trips stream at `/china/:id/stream-v2` still blinked and delayed images during fast scrolling, especially on Windows Chrome.
+
+Impact:
+The section most important for Canton Fair browsing remained visually unreliable despite thumbnail caching.
+
+Root cause:
+Row/section virtualization kept unmounting and remounting image grids during native scroll, causing image decode/render churn that looked like cache misses.
+
+Recovery:
+Commit `4468b2a` removed scroll-driven row virtualization from the v2 page, kept grouped thumbnail grids mounted, and kept image `src` values stable while IndexedDB cache checks run.
+
+Rule added to prevent recurrence:
+For photo-heavy offline views, separate cache work from scroll rendering and avoid scroll listeners or virtualization that repeatedly remount loaded thumbnails unless browser performance has been tested on Windows Chrome.
+
 ## Pending work
 
 | Status | Item | Owner/next action |
 |---|---|---|
-| open | Confirm frontend Coolify application UUID | Run `.github/workflows/coolify-audit.yml` or query Coolify API and update this file/docs if the UUID should be documented. |
 | open | Decide whether to update `capacitor.config.ts` away from the Lovable URL | Mobile owner should verify current mobile release behavior, change config only as part of an intentional app-store release, and update docs. |
 | open | Verify rollback settings in Coolify after documentation cleanup | Check frontend image retention and Coolify rollback options before documenting a stronger rollback promise. |
 | open | Offline/PWA roadmap items | See `docs/offline-pwa-plan.md`; upload auto-delete, upload-stage tracking, retry backoff, direct-upload routing, object URL cleanup, and Storage persistent-state UI are now partly/completely addressed. Remaining items include offline fallback route, camera-roll save/share flow, offline bundle state, offline edits, and field diagnostics. |
 | done | Self-hosted migration | Completed before this audit; current deploy runs on Coolify/self-hosted Supabase. |
+| done | Confirm frontend Coolify application UUID | Current frontend UUID is `frontend-uuid-comp-shop-prod-2026`. |
 | done | `/china` image flicker/cache follow-up | Completed in commits `86528b6` and `9a32cb9`. |
+| done | `/china/:id/stream-v2` Fair stream remount flicker follow-up | Completed in commit `4468b2a`. |

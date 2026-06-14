@@ -21,6 +21,7 @@ work reliably in China where network conditions are poor.
 | URL | Purpose |
 |-----|---------|
 | `https://comp.designflow.app` | Production frontend |
+| `https://compshop.designflow.app` | Alternate production frontend domain |
 | `https://api.comp.designflow.app` | Kong API gateway (Supabase) |
 | `https://db.comp.designflow.app` | Supabase Studio |
 | `https://coolify.comp.designflow.app` | Coolify dashboard |
@@ -40,7 +41,7 @@ develop against the self-hosted backend, set `VITE_SUPABASE_URL`,
 ## Key features
 
 - **Trip management** — organize photos by buying trip (domestic and China trips tracked separately)
-- **Canton Fair support** — `CantonFairGroupCard` groups products by exhibition booth/group
+- **Canton Fair support** — booth/group browsing, plus experimental faster stream at `/china/:id/stream-v2`
 - **Bulk edit** — select and edit multiple photo records at once
 - **Offline-first** — IndexedDB caching with stale-while-revalidate; signed URLs cached 24h
 - **Durable upload queue** — photos/videos are saved to IndexedDB first, then synced with retry/backoff

@@ -29,9 +29,10 @@ It is preserved as reference but describes a completed one-time process.
 
 See [docs/deployment.md](../docs/deployment.md) for the normal deploy workflow.
 
-The Supabase stack is deployed as Coolify application `h8nwhgk682eedokx8nh2eg1q`. All
-runtime env vars are configured in Coolify — use `.env.example` as the reference for
-what must be set.
+Production Supabase currently runs as Coolify service `supabase-compshop`
+(`lc7f483hklyq89eej67idpbx`). The historical stack `h8nwhgk682eedokx8nh2eg1q` is not the
+active production backend. All runtime env vars are configured in Coolify — use
+`.env.example` as the reference for what must be set.
 
 ## If you need to re-run the migration
 
