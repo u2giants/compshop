@@ -44,7 +44,7 @@ export default function Auth() {
   const handleMicrosoftSignIn = async () => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "azure",
-      options: { redirectTo: window.location.origin },
+      options: { redirectTo: window.location.origin, scopes: "email profile" },
     });
 
     if (error && /provider is not enabled|unsupported provider/i.test(error.message)) {
