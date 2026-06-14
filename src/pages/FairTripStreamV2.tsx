@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOnlineStatus } from "@/hooks/use-online-status";
 import { batchSignedUrls } from "@/lib/photo-utils";
+import CachedImage from "@/components/CachedImage";
 import {
   cacheChinaPhotos,
   cacheChinaTrips,
@@ -158,42 +159,7 @@ function useContainerWidth() {
   return { ref, width };
 }
 
-function useCachedBlobUrl(filePath: string, signedUrl: string | undefined, online: boolean) {
-  const [blobUrl, setBlobUrl] = useState(() => blobUrlCache.get(filePath));
-  const [src, setSrc] = useState<string | undefined>(() => blobUrlCache.get(filePath) ?? (online ? signedUrl : undefined));
-
-  useEffect(() => {
-    let cancelled = false;
-    const cached = blobUrlCache.get(filePath);
-    if (cached) {
-      setBlobUrl(cached);
-      setSrc(cached);
-      return;
-    }
-    // No blob cache — use signedUrl if available; never clear an existing src to undefined
-    if (signedUrl) setSrc(signedUrl);
-    if (blobMissCache.has(filePath)) return;
-
-    getCachedImageBlob(filePath).then((blob) => {
-      if (cancelled) return;
-      if (blob && (blob.type.startsWith("image/") || blob.type.startsWith("video/"))) {
-        const url = URL.createObjectURL(blob);
-        blobUrlCache.set(filePath, url);
-        setBlobUrl(url);
-        setSrc(url);
-      } else {
-        blobMissCache.add(filePath);
-      }
-    }).catch(() => blobMissCache.add(filePath));
-
-    return () => { cancelled = true; };
-  }, [filePath, signedUrl]); // `online` intentionally omitted: network status changes must not clear image sources
-
-  return { src, cached: Boolean(blobUrl) };
-}
-
-function StreamThumb({ photo, online, priority }: { photo: PhotoItem; online: boolean; priority: boolean }) {
-  const { src, cached } = useCachedBlobUrl(photo.display_path, photo.display_url, online);
+function StreamThumb({ photo, priority }: { photo: PhotoItem; priority: boolean }) {
   const isVideo = photo.media_type === "video";
 
   return (
@@ -202,20 +168,23 @@ function StreamThumb({ photo, online, priority }: { photo: PhotoItem; online: bo
       className="group relative aspect-square overflow-hidden rounded-md bg-muted text-left focus:outline-none focus:ring-2 focus:ring-primary"
       aria-label={photo.product_name ?? (isVideo ? "Video" : "Photo")}
     >
-      {src ? (
-        <img
-          src={src}
-          alt={photo.product_name ?? (isVideo ? "Video" : "Photo")}
-          className="h-full w-full object-cover"
-          loading={priority || cached ? "eager" : "lazy"}
-          decoding="async"
-          draggable={false}
-        />
-      ) : (
-        <div className="flex h-full w-full items-center justify-center bg-muted">
-          {isVideo ? <Video className="h-6 w-6 text-muted-foreground/40" /> : <Factory className="h-6 w-6 text-muted-foreground/30" />}
-        </div>
-      )}
+      {/* CachedImage keeps a stable src (signed URL) and caches the blob in the
+          background after load — it never swaps the visible src, which is what
+          prevented the grid from blinking on scroll. */}
+      <CachedImage
+        filePath={photo.display_path}
+        signedUrl={photo.display_url}
+        alt={photo.product_name ?? (isVideo ? "Video" : "Photo")}
+        className="h-full w-full object-cover"
+        loading={priority ? "eager" : "lazy"}
+        decoding="async"
+        draggable={false}
+        fallback={
+          <div className="flex h-full w-full items-center justify-center bg-muted">
+            {isVideo ? <Video className="h-6 w-6 text-muted-foreground/40" /> : <Factory className="h-6 w-6 text-muted-foreground/30" />}
+          </div>
+        }
+      />
       {isVideo && (
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="rounded-full bg-black/60 p-2 backdrop-blur-sm">
@@ -515,7 +484,7 @@ export default function FairTripStreamV2() {
                 onClick={() => navigate(`/china/${section.trip.id}`)}
               >
                 {section.photos.map((photo) => (
-                  <StreamThumb key={photo.id} photo={photo} online={online} priority={firstPriorityIds.has(photo.id)} />
+                  <StreamThumb key={photo.id} photo={photo} priority={firstPriorityIds.has(photo.id)} />
                 ))}
               </div>
             </div>
