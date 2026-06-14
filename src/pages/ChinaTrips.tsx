@@ -46,6 +46,15 @@ function stripCoverUrls(trips: CachedChinaTrip[]): CachedChinaTrip[] {
   });
 }
 
+/**
+ * Old cover URLs were signed with an imgproxy transform (.../render/image/...).
+ * This self-hosted storage rejects those source images with 422 "Invalid source
+ * image", so such cached URLs are dead — treat them as a cache miss.
+ */
+function isTransformUrl(url: string | undefined): boolean {
+  return Boolean(url && url.includes("/render/image/"));
+}
+
 async function attachCachedCoverUrls(trips: CachedChinaTrip[]): Promise<CachedChinaTrip[]> {
   const coverFilePaths = trips.map((trip) => trip.cover_file_path).filter(Boolean) as string[];
   if (coverFilePaths.length === 0) return trips;
@@ -53,10 +62,10 @@ async function attachCachedCoverUrls(trips: CachedChinaTrip[]): Promise<CachedCh
   const cachedCoverUrls = await getCachedSignedUrls(coverFilePaths);
   if (cachedCoverUrls.size === 0) return trips;
 
-  return trips.map((trip) => ({
-    ...trip,
-    cover_url: trip.cover_file_path ? cachedCoverUrls.get(trip.cover_file_path) : undefined,
-  }));
+  return trips.map((trip) => {
+    const cached = trip.cover_file_path ? cachedCoverUrls.get(trip.cover_file_path) : undefined;
+    return { ...trip, cover_url: isTransformUrl(cached) ? undefined : cached };
+  });
 }
 
 export default function ChinaTrips() {
@@ -152,16 +161,32 @@ export default function ChinaTrips() {
         const cachedCoverUrls = await getCachedSignedUrls(coverFilePaths);
         const signedUrlCacheEntries: CachedSignedUrl[] = [];
 
+        // Prefer the pre-generated thumbnail and sign it WITHOUT an imgproxy
+        // transform — the self-hosted render service rejects these source photos
+        // with 422 "Invalid source image". A plain object URL just serves bytes.
+        const coverThumbPaths = new Map<string, string>();
+        if (coverFilePaths.length > 0) {
+          const { data: thumbRows } = await supabase
+            .from("china_photos")
+            .select("file_path, thumbnail_path")
+            .in("file_path", coverFilePaths);
+          for (const r of (thumbRows ?? []) as { file_path: string; thumbnail_path: string | null }[]) {
+            if (r.thumbnail_path) coverThumbPaths.set(r.file_path, r.thumbnail_path);
+          }
+        }
+
         const coverSignedUrls = await Promise.all(
           rows.map(async (trip) => {
             const fp = trip.cover_file_path;
             if (!fp) return undefined;
             const cachedUrl = cachedCoverUrls.get(fp);
-            if (cachedUrl) return cachedUrl;
+            // Reuse cache only if it's a valid plain URL (not a dead transform URL).
+            if (cachedUrl && !isTransformUrl(cachedUrl)) return cachedUrl;
 
+            const signPath = coverThumbPaths.get(fp) || fp;
             const { data } = await supabase.storage
               .from("photos")
-              .createSignedUrl(fp, COVER_SIGNED_URL_TTL, { transform: { width: 400, height: 400, resize: "cover" } });
+              .createSignedUrl(signPath, COVER_SIGNED_URL_TTL);
 
             if (data?.signedUrl) {
               signedUrlCacheEntries.push({
