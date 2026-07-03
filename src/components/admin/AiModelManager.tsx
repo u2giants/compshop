@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useCallback, useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,6 +12,10 @@ interface OpenRouterModel {
   name: string;
 }
 
+interface AppSettingRow {
+  value: string | null;
+}
+
 export default function AiModelManager() {
   const { isAdmin } = useAuth();
   const { toast } = useToast();
@@ -19,27 +23,21 @@ export default function AiModelManager() {
   const [models, setModels] = useState<OpenRouterModel[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (isAdmin) {
-      loadCurrentModel();
-      fetchAvailableModels();
-    }
-  }, [isAdmin]);
-
-  if (!isAdmin) return null;
-
-  async function loadCurrentModel() {
+  const loadCurrentModel = useCallback(async () => {
     const { data } = await supabase
-      .from("app_settings" as any)
+      .from("app_settings" as never)
       .select("value")
       .eq("key", "ai_model")
       .maybeSingle();
-    if (data) setCurrentModel((data as any).value ?? "");
-  }
+    const setting = data as AppSettingRow | null;
+    if (setting) setCurrentModel(setting.value ?? "");
+  }, []);
 
-  async function fetchAvailableModels() {
+  const fetchAvailableModels = useCallback(async ({ showToast = true }: { showToast?: boolean } = {}) => {
     setLoadingModels(true);
+    setLoadError(null);
     try {
       const { data, error } = await supabase.functions.invoke("list-openrouter-models");
       if (error) throw error;
@@ -51,18 +49,30 @@ export default function AiModelManager() {
       setModels(raw);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to load models";
-      toast({ title: "Couldn't load models", description: msg, variant: "destructive" });
+      setLoadError(msg);
+      if (showToast) {
+        toast({ title: "Couldn't load models", description: msg, variant: "destructive" });
+      }
     } finally {
       setLoadingModels(false);
     }
-  }
+  }, [toast]);
+
+  useEffect(() => {
+    if (isAdmin) {
+      loadCurrentModel();
+      fetchAvailableModels({ showToast: false });
+    }
+  }, [fetchAvailableModels, isAdmin, loadCurrentModel]);
+
+  if (!isAdmin) return null;
 
   async function handleSave() {
     if (!currentModel) return;
     setSaving(true);
     const { error } = await supabase
-      .from("app_settings" as any)
-      .upsert({ key: "ai_model", value: currentModel, updated_at: new Date().toISOString() });
+      .from("app_settings" as never)
+      .upsert({ key: "ai_model", value: currentModel, updated_at: new Date().toISOString() } as never);
     setSaving(false);
     if (error) {
       toast({ title: "Save failed", description: error.message, variant: "destructive" });
@@ -95,9 +105,15 @@ export default function AiModelManager() {
                 </SelectItem>
               ))}
               {models.length === 0 && !loadingModels && (
-                <SelectItem value={currentModel} className="text-xs">
-                  {currentModel || "No models found"}
-                </SelectItem>
+                currentModel ? (
+                  <SelectItem value={currentModel} className="text-xs">
+                    {currentModel}
+                  </SelectItem>
+                ) : (
+                  <SelectItem value="no-models-found" disabled className="text-xs">
+                    No models found
+                  </SelectItem>
+                )
               )}
             </SelectContent>
           </Select>
@@ -105,13 +121,18 @@ export default function AiModelManager() {
             size="icon"
             variant="ghost"
             className="h-8 w-8 shrink-0"
-            onClick={fetchAvailableModels}
+            onClick={() => fetchAvailableModels()}
             disabled={loadingModels}
             title="Refresh model list"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${loadingModels ? "animate-spin" : ""}`} />
           </Button>
         </div>
+        {loadError && (
+          <p className="text-xs text-muted-foreground">
+            Model list unavailable. The saved model can still be used.
+          </p>
+        )}
 
         <Button size="sm" onClick={handleSave} disabled={saving || !currentModel} className="w-full h-8 text-xs">
           {saving ? "Saving…" : "Save"}
