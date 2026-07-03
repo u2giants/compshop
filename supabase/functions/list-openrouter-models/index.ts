@@ -6,9 +6,27 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Returns ONLY the models the user has enabled on their OpenRouter account.
-// Endpoint: https://openrouter.ai/api/v1/models/user (account-scoped, never the full marketplace).
+// Prefer models enabled on the OpenRouter account. Fall back to the public catalog
+// so admins can still pick a model when account-scoped model listing is unavailable.
 const OPENROUTER_USER_MODELS_URL = "https://openrouter.ai/api/v1/models/user";
+const OPENROUTER_PUBLIC_MODELS_URL = "https://openrouter.ai/api/v1/models";
+
+async function fetchOpenRouterModels(url: string, apiKey?: string) {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (apiKey) {
+    headers.Authorization = `Bearer ${apiKey}`;
+  }
+
+  const response = await fetch(url, { method: "GET", headers });
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`OpenRouter error [${response.status}]: ${err}`);
+  }
+
+  return await response.json();
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -53,23 +71,26 @@ Deno.serve(async (req) => {
     }
 
     const apiKey = Deno.env.get("OPENROUTER_API_KEY");
-    if (!apiKey) throw new Error("OPENROUTER_API_KEY is not configured");
+    let warning: string | undefined;
+    let data: unknown;
 
-    const response = await fetch(OPENROUTER_USER_MODELS_URL, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-    });
-
-    if (!response.ok) {
-      const err = await response.text();
-      throw new Error(`OpenRouter error [${response.status}]: ${err}`);
+    if (apiKey) {
+      try {
+        data = await fetchOpenRouterModels(OPENROUTER_USER_MODELS_URL, apiKey);
+      } catch (error: unknown) {
+        warning = "Account-specific OpenRouter models are unavailable; showing public models.";
+        const message = error instanceof Error ? error.message : "Unknown error";
+        console.error("list-openrouter-models account fetch failed:", message);
+      }
+    } else {
+      warning = "OPENROUTER_API_KEY is not configured; showing public OpenRouter models.";
     }
 
-    const data = await response.json();
-    return new Response(JSON.stringify(data), {
+    if (!data) {
+      data = await fetchOpenRouterModels(OPENROUTER_PUBLIC_MODELS_URL);
+    }
+
+    return new Response(JSON.stringify({ ...(data as Record<string, unknown>), warning }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error: unknown) {

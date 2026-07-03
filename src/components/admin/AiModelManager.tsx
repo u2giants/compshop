@@ -12,6 +12,11 @@ interface OpenRouterModel {
   name: string;
 }
 
+interface OpenRouterModelsResponse {
+  data?: OpenRouterModel[];
+  warning?: string;
+}
+
 interface AppSettingRow {
   value: string | null;
 }
@@ -41,12 +46,16 @@ export default function AiModelManager() {
     try {
       const { data, error } = await supabase.functions.invoke("list-openrouter-models");
       if (error) throw error;
-      const raw: OpenRouterModel[] = (data?.data ?? []).filter(
+      const response = data as OpenRouterModelsResponse | null;
+      const raw: OpenRouterModel[] = (response?.data ?? []).filter(
         (m: OpenRouterModel) => m.id && m.name
       );
       // Sort: vision-capable models first (heuristic: name contains Flash/Pro/Vision/GPT/Claude)
       raw.sort((a, b) => a.name.localeCompare(b.name));
       setModels(raw);
+      if (response?.warning) {
+        setLoadError(response.warning);
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to load models";
       setLoadError(msg);
@@ -130,7 +139,7 @@ export default function AiModelManager() {
         </div>
         {loadError && (
           <p className="text-xs text-muted-foreground">
-            Model list unavailable. The saved model can still be used.
+            {loadError}
           </p>
         )}
 
