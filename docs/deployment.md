@@ -130,6 +130,34 @@ a health-check configuration issue in the Studio image version pinned in the com
 The Studio UI works despite this status — it is a false negative from the health check,
 not a real failure.
 
+## Backrest local dump hook
+
+The production host runs Backrest as an operational backup service. Backrest is outside
+the normal frontend/Supabase deploy path, but its hook script is repo-owned so production
+does not depend on undocumented host-only behavior.
+
+Authoritative hook source:
+
+```text
+selfhost/backrest/pre-backup.sh
+```
+
+Current production mount:
+
+```text
+/opt/backrest/scripts/pre-backup.sh -> /scripts/pre-backup.sh in the backrest container
+/opt/backrest/db-dumps -> /db-dumps in the backrest container
+```
+
+The hook writes short-lived local `*-latest.*` files plus timestamped SQL/RDB dumps for
+Backrest to snapshot. It prunes timestamped local dumps before and after each run, keeps
+24 hours by default (`DUMP_RETENTION_MINUTES=1440`), and exits before dumping if less
+than 5 GB is free in the dump directory (`DUMP_MIN_FREE_MB=5120`).
+
+If an emergency host-side edit is made to `/opt/backrest/scripts/pre-backup.sh`, copy the
+fix back into `selfhost/backrest/pre-backup.sh` in the same incident follow-up. The server
+copy must not become the long-term source of truth.
+
 ## Releasing a Capacitor mobile build
 
 1. `npm run build` to produce `dist/`

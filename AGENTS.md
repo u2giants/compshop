@@ -137,6 +137,7 @@ Purpose: prevent AI agents from scattering project logic into unrelated framewor
 | Add edge function behavior | Relevant `supabase/functions/<name>/index.ts`, `supabase/config.toml` if JWT setting changes, `docs/configuration.md` if env changes | Frontend pages unless UI calls change |
 | Add or change env var | `.env.example`, `selfhost/.env.example`, `selfhost/.env.frontend.example`, `docs/configuration.md`, `docs/deployment.md` if deploy steps change | Production `.env` values in git |
 | Change deployment pipeline | `.github/workflows/deploy.yml`, `.github/workflows/coolify-audit.yml`, `selfhost/compose.supabase.yml`, `selfhost/Dockerfile.frontend`, `docs/deployment.md` | App source unless deploy behavior requires it |
+| Change Backrest backup hook or local dump retention | `selfhost/backrest/pre-backup.sh`, `docs/deployment.md` | Host-only `/opt/backrest/scripts/pre-backup.sh` as final source of truth |
 | Change PWA/Capacitor behavior | `vite.config.ts`, `capacitor.config.ts`, `public/`, `docs/development.md` or `docs/deployment.md` as appropriate | Supabase migrations |
 | Update documentation routing | `AGENTS.md`, `README.md`, affected doc under `docs/`, folder README if relevant | Source files except to verify facts |
 
@@ -187,6 +188,7 @@ Purpose: prevent AI agents from scattering project logic into unrelated framewor
 | `compshop-old-db-rescue` and related `compshop-old-*-rescue` containers | Old-stack rescue/reference after migration | Host Docker | Historical `h8nwhgk682eedokx8nh2eg1q` data | Old stack images; not production traffic |
 | `coolify-proxy` | Traefik reverse proxy | Coolify platform | Outside this repo | Coolify-managed Traefik |
 | Coolify core services | Deployment platform, DB, Redis, realtime/sentinel | Coolify platform | Outside this repo | Managed by Coolify install |
+| `backrest` | Operational backups and pre-backup local DB/Redis dumps | Host Docker; hook source is repo-owned | Outside Coolify app UUID | `garethgeorge/backrest:latest`; hook source at `selfhost/backrest/pre-backup.sh` |
 
 ## What to ignore
 
@@ -534,6 +536,23 @@ Commit `4468b2a` removed scroll-driven row virtualization from the v2 page, kept
 
 Rule added to prevent recurrence:
 For photo-heavy offline views, separate cache work from scroll rendering and avoid scroll listeners or virtualization that repeatedly remount loaded thumbnails unless browser performance has been tested on Windows Chrome.
+
+### 2026-07-02 Backrest local dumps filled root disk
+
+What happened:
+Production returned Traefik "no available server" / HTTP 503 because `/` reached 100% usage. Docker health checks failed with `no space left on device`, the Supabase DB container was absent, and PostgREST had stale DNS failures for `supabase-db`.
+
+Impact:
+The frontend and API gateway were intermittently unavailable, and database-backed API requests could not reach Postgres until the DB container was recreated and dependent services were restarted.
+
+Root cause:
+Backrest's pre-backup hook created timestamped local SQL/RDB dump files under `/opt/backrest/db-dumps` every 15 minutes, but cleanup happened after dumping. Once the disk was full, cleanup could not save the run, leaving about 43 GB of local staging dumps.
+
+Recovery:
+Older local timestamped dump files were pruned, `supabase-db-lc7f483hklyq89eej67idpbx` was recreated from its existing volume, DB-dependent Supabase services were restarted, and the Backrest hook was changed to prune before dumping and require at least 5 GB free. The repo-owned hook now lives at `selfhost/backrest/pre-backup.sh`, and the production host copy was synced to it.
+
+Rule added to prevent recurrence:
+Do not leave Backrest hook changes as host-only state. Update `selfhost/backrest/pre-backup.sh` and `docs/deployment.md`, then sync the production copy if this is an emergency repair. Verify with `docker exec backrest /scripts/pre-backup.sh`, `df -h /`, and a database-backed API probe.
 
 ## Pending work
 
