@@ -26,7 +26,6 @@ import { useCategories } from "@/hooks/use-categories";
 import ChinaDraftTrips from "@/components/trip/ChinaDraftTrips";
 
 import CantonFairGroupCard, { type ChinaTripListItem } from "@/components/trip/CantonFairGroupCard";
-import ChinaTripCard from "@/components/trip/ChinaTripCard";
 
 type ChinaTrip = ChinaTripListItem;
 
@@ -622,11 +621,14 @@ export default function ChinaTrips() {
     return true;
   });
 
-  // Separate into groups (parent_id is null, venue_type is canton_fair with end_date) and standalone trips
-  // Only show Canton Fair related trips here — standalone factory visits go to "Fty Visits" tab
-  const groupTrips = filteredTrips.filter(t => !t.parent_id && t.end_date != null);
-  const childTrips = filteredTrips.filter(t => t.parent_id != null);
-  const standaloneTrips = filteredTrips.filter(t => !t.parent_id && t.end_date == null && t.venue_type !== "factory_visit");
+  // One unified, date-sorted list of top-level fair trips. Canton Fair *groups*
+  // (a date range and/or sub-trips) and standalone single fairs now render in the
+  // same row style so the tab reads as a single consistent timeline instead of
+  // "groups up top, loose cards at the bottom".
+  // Standalone factory visits are excluded here — they live in the "Fty Visits" tab.
+  const topLevelTrips = filteredTrips
+    .filter(t => !t.parent_id && (t.end_date != null || t.venue_type !== "factory_visit"))
+    .sort((a, b) => b.date.localeCompare(a.date) || b.created_at.localeCompare(a.created_at));
 
   // Build from unfiltered trips so venue/date filters don't strip children and break
   // the photo count used by CantonFairGroupCard to show the "view all photos" button.
@@ -808,7 +810,7 @@ export default function ChinaTrips() {
             </Card>
           ))}
         </div>
-      ) : filteredTrips.length === 0 ? (
+      ) : topLevelTrips.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
             <Factory className="mb-4 h-12 w-12 text-muted-foreground/50" />
@@ -827,30 +829,15 @@ export default function ChinaTrips() {
         </Card>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {/* Render Canton Fair group cards */}
-          {groupTrips.map((group) => (
+          {/* One unified timeline: groups expand in place, single fairs link to detail */}
+          {topLevelTrips.map((trip) => (
             <CantonFairGroupCard
-              key={group.id}
-              group={group}
-              children={childrenByParent.get(group.id) || []}
+              key={trip.id}
+              group={trip}
+              children={childrenByParent.get(trip.id) || []}
               selectMode={selectMode}
               selected={selected}
               onToggleSelect={toggleSelect}
-              onReclassified={loadTrips}
-            />
-          ))}
-          {/* Render standalone trips */}
-          {standaloneTrips.map((trip) => (
-            <ChinaTripCard
-              key={trip.id}
-              trip={trip}
-              selectMode={selectMode}
-              isSelected={selected.has(trip.id)}
-              onToggleSelect={toggleSelect}
-              onClick={() => {
-                if (selectMode) toggleSelect(trip.id);
-                else navigate(`/china/${trip.id}`);
-              }}
               onReclassified={loadTrips}
             />
           ))}
