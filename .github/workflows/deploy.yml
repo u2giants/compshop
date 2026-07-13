@@ -37,12 +37,24 @@ jobs:
           ct    = "Content-Type: application/json"
 
           def curl(*args):
-              r = subprocess.run(["curl", "-sf", "--max-time", "30"] + list(args),
-                                 capture_output=True, text=True)
+              command = ["curl", "-sS", "--max-time", "30"] + list(args)
+              r = subprocess.run(
+                  command + ["-w", "\nHTTP_STATUS:%{http_code}"],
+                  capture_output=True,
+                  text=True,
+              )
+              stdout, _, status_text = r.stdout.rpartition("\nHTTP_STATUS:")
+              status = int(status_text.strip() or "0") if status_text.strip().isdigit() else 0
               if r.returncode != 0:
-                  print("curl error:", r.stderr[:300] or "(no stderr)")
+                  print("curl transport error:", r.stderr[:500] or "(no stderr)")
+                  print("curl command:", " ".join(command[:3] + ["<redacted args>"]))
                   sys.exit(1)
-              return r.stdout
+              if status < 200 or status >= 300:
+                  print(f"curl HTTP error: {status}")
+                  print("curl command:", " ".join(command[:3] + ["<redacted args>"]))
+                  print("response body:", stdout[:1000] or "(empty)")
+                  sys.exit(1)
+              return stdout
 
           github_sha = os.environ.get("GITHUB_SHA", "")
           commit_hash = github_sha[:7]
