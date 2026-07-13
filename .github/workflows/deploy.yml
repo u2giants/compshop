@@ -37,7 +37,10 @@ jobs:
           ct    = "Content-Type: application/json"
 
           def curl(*args):
-              command = ["curl", "-sS", "--max-time", "30"] + list(args)
+              # Coolify currently presents a self-signed certificate to GitHub's
+              # hosted runner. Keep the deploy API path working until the
+              # instance certificate chain is repaired.
+              command = ["curl", "-k", "-sS", "--max-time", "30"] + list(args)
               r = subprocess.run(
                   command + ["-w", "\nHTTP_STATUS:%{http_code}"],
                   capture_output=True,
