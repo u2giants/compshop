@@ -7,6 +7,12 @@ interface CachedImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
   signedUrl?: string;
   /** Fallback content when no image is available */
   fallback?: React.ReactNode;
+  /**
+   * Cache the displayed URL in the full-photo IndexedDB cache after it loads.
+   * Disable this for derived thumbnails: their bytes must never be stored under
+   * the original photo's file path.
+   */
+  cacheAfterLoad?: boolean;
 }
 
 // Module-level cache: filePath → blob URL created from IndexedDB blob.
@@ -49,55 +55,48 @@ function cacheImageFromUrl(filePath: string, url: string) {
  * loads successfully from a URL, the blob is cached in the background for
  * offline use — no eager fetch on mount to avoid thundering-herd blinking.
  */
-export default function CachedImage({ filePath, signedUrl, fallback, ...imgProps }: CachedImageProps) {
-  const placeholderRef = useRef<HTMLDivElement>(null);
-  const [src, setSrc] = useState<string | undefined>(() => memBlobUrlCache.get(filePath));
-  const [blobUrl, setBlobUrl] = useState<string | undefined>(() => memBlobUrlCache.get(filePath));
+export default function CachedImage({
+  filePath,
+  signedUrl,
+  fallback,
+  cacheAfterLoad = true,
+  onLoad,
+  ...imgProps
+}: CachedImageProps) {
+  // A ready signed URL must paint immediately. Waiting for IndexedDB before
+  // showing it makes cover grids flash placeholders and can decode a cached
+  // full-resolution photo where the URL points to a lightweight thumbnail.
+  const [src, setSrc] = useState<string | undefined>(() => (
+    signedUrl && !cacheAfterLoad ? signedUrl : memBlobUrlCache.get(filePath) ?? signedUrl
+  ));
+  const [blobUrl, setBlobUrl] = useState<string | undefined>(() => (
+    signedUrl && !cacheAfterLoad ? undefined : memBlobUrlCache.get(filePath)
+  ));
   const [failed, setFailed] = useState(false);
-  const [inView, setInView] = useState(() => imgProps.loading !== "lazy" || memBlobUrlCache.has(filePath));
   const lastFilePathRef = useRef<string | null>(null);
+  const recoveryFilePathRef = useRef<string | null>(null);
 
   useEffect(() => {
-    setInView(imgProps.loading !== "lazy" || memBlobUrlCache.has(filePath));
-  }, [filePath, imgProps.loading]);
-
-  useEffect(() => {
-    if (inView) return;
-    const el = placeholderRef.current;
-    if (!el) return;
-    if (!("IntersectionObserver" in window)) {
-      setInView(true);
-      return;
-    }
-
-    const obs = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          setInView(true);
-          obs.disconnect();
-        }
-      },
-      { rootMargin: "700px 0px" }
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [inView]);
-
-  useEffect(() => {
-    if (!inView) return;
-
     // A re-signed URL for the SAME image (same filePath, new token) must never
     // reset what's already on screen — otherwise re-renders that hand us a fresh
     // signed URL (e.g. realtime-driven refetches) make the grid blink. Only adopt
     // the new URL if we currently have nothing to show.
     if (lastFilePathRef.current === filePath) {
-      // Don't re-adopt after a real load failure, or churn would retry-blink it.
-      if (signedUrl && !failed) setSrc((prev) => prev ?? signedUrl);
+      if (signedUrl) setSrc((prev) => prev ?? signedUrl);
       return;
     }
     lastFilePathRef.current = filePath;
+    recoveryFilePathRef.current = null;
 
     setFailed(false);
+
+    // Derived thumbnails must win over any in-memory full-photo blob left by a
+    // detail view in the same session.
+    if (signedUrl && !cacheAfterLoad) {
+      setBlobUrl(undefined);
+      setSrc(signedUrl);
+      return;
+    }
 
     // Already have a blob URL in memory for this path — nothing to do.
     if (memBlobUrlCache.has(filePath)) {
@@ -108,14 +107,19 @@ export default function CachedImage({ filePath, signedUrl, fallback, ...imgProps
     }
 
     setBlobUrl(undefined);
+    // Prefer a supplied URL and keep it mounted. The browser's native lazy
+    // loading already windows network work without replacing the <img> node.
+    if (signedUrl) {
+      setSrc(signedUrl);
+      return;
+    }
+
     setSrc(undefined);
 
     let cancelled = false;
 
     (async () => {
-      // 1. Check blob cache first (skip corrupted non-image entries). This is
-      // the fastest path for revisiting expanded trip groups, and avoids
-      // re-decoding already-cached covers from signed URLs.
+      // 1. With no usable URL, fall back to the offline blob cache.
       const blob = await getCachedImageBlob(filePath);
       if (cancelled) return;
       if (blob && (blob.type.startsWith("image/") || blob.type.startsWith("video/"))) {
@@ -160,46 +164,66 @@ export default function CachedImage({ filePath, signedUrl, fallback, ...imgProps
       cancelled = true;
       // Don't revoke blob URLs — memBlobUrlCache keeps them alive for instant remounts.
     };
-  }, [filePath, signedUrl, failed, inView, imgProps.loading]);
+  }, [filePath, signedUrl, cacheAfterLoad]);
 
   const handleLoad = useCallback(
     (e: React.SyntheticEvent<HTMLImageElement>) => {
       setFailed(false);
 
-      // Only cache if we're not already showing a blob URL (blob already cached)
-      if (blobUrl) return;
-      const imgSrc = (e.currentTarget as HTMLImageElement).src;
-      if (!imgSrc || imgSrc.startsWith("blob:")) return;
+      recoveryFilePathRef.current = null;
 
-      // Cache blob in background — fire and forget
-      (async () => {
-        try {
-          await cacheImageFromUrl(filePath, imgSrc);
-        } catch {
-          // Background cache writes must never disrupt the visible image.
+      // Only original photo URLs belong in the full-photo offline cache.
+      // Thumbnail callers opt out so a small derived image cannot overwrite
+      // the original filePath's cache entry.
+      if (cacheAfterLoad && !blobUrl) {
+        const imgSrc = (e.currentTarget as HTMLImageElement).src;
+        if (imgSrc && !imgSrc.startsWith("blob:")) {
+          cacheImageFromUrl(filePath, imgSrc).catch(() => {
+            // Background cache writes must never disrupt the visible image.
+          });
         }
-      })();
+      }
 
-      if (imgProps.onLoad) imgProps.onLoad(e);
+      if (onLoad) onLoad(e);
     },
-    [filePath, blobUrl, imgProps.onLoad]
+    [filePath, blobUrl, cacheAfterLoad, onLoad]
   );
 
-  if ((!inView || !src) && !failed) {
-    return (
-      <>
-        {fallback ?? (
-          <div
-            ref={placeholderRef}
-            className={imgProps.className + " bg-muted animate-pulse"}
-          />
-        )}
-      </>
-    );
-  }
+  const handleError = useCallback(async () => {
+    // A stale signed URL or a transient lazy-load failure should not leave a
+    // permanent blank card. Re-sign the original object once, then settle on
+    // the fallback if that recovery URL also fails.
+    if (recoveryFilePathRef.current === filePath) {
+      setFailed(true);
+      setSrc(undefined);
+      return;
+    }
+
+    recoveryFilePathRef.current = filePath;
+    const failedFilePath = filePath;
+    try {
+      const { data } = await supabase.storage.from("photos").createSignedUrl(filePath, SIGNED_URL_TTL);
+      if (lastFilePathRef.current !== failedFilePath) return;
+      if (!data?.signedUrl) throw new Error("No signed URL returned");
+
+      cacheSignedUrls([{
+        file_path: filePath,
+        url: data.signedUrl,
+        expires_at: Date.now() + SIGNED_URL_TTL_MS,
+      }]).catch(() => {});
+      setFailed(false);
+      setBlobUrl(undefined);
+      setSrc(data.signedUrl);
+    } catch {
+      if (lastFilePathRef.current === failedFilePath) {
+        setFailed(true);
+        setSrc(undefined);
+      }
+    }
+  }, [filePath]);
 
   if (!src) {
-    return <>{fallback ?? <div className={imgProps.className + " bg-muted"} />}</>;
+    return <>{fallback ?? <div className={`${imgProps.className ?? ""} bg-muted`} />}</>;
   }
 
   return (
@@ -207,10 +231,8 @@ export default function CachedImage({ filePath, signedUrl, fallback, ...imgProps
       {...imgProps}
       src={src}
       onLoad={handleLoad}
-      onError={() => {
-        setFailed(true);
-        setSrc(undefined);
-      }}
+      onError={handleError}
+      data-load-failed={failed ? "true" : undefined}
     />
   );
 }

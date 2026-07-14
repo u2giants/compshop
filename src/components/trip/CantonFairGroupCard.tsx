@@ -145,7 +145,10 @@ export default function CantonFairGroupCard({
     </CardContent>
   );
 
-  const cardClass = `overflow-hidden border-l-4 border-l-amber-500 bg-amber-50/40 dark:bg-amber-950/20 transition-shadow hover:shadow-md ${
+  // Never animate/shadow the entire expanded group. On large fairs that makes
+  // Chrome re-composite a very tall surface whenever the pointer crosses it,
+  // which can checkerboard or partially blank image tiles while scrolling.
+  const cardClass = `border-l-4 border-l-amber-500 bg-amber-50/40 shadow-none dark:bg-amber-950/20 ${
     selectMode && isSelected ? "ring-2 ring-primary" : ""
   }`;
 

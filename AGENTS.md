@@ -537,6 +537,23 @@ Commit `4468b2a` removed scroll-driven row virtualization from the v2 page, kept
 Rule added to prevent recurrence:
 For photo-heavy offline views, separate cache work from scroll rendering and avoid scroll listeners or virtualization that repeatedly remount loaded thumbnails unless browser performance has been tested on Windows Chrome.
 
+### 2026-07-13 Asia trip cover compositor blanking
+
+What happened:
+Expanding a large Canton Fair group on `/china`, scrolling through its cover cards, or hovering the pointer over the expanded group could make covers blink, disappear, or paint as partially black/blank tiles.
+
+Impact:
+The primary Asia Trips browsing screen was visually unreliable even though the underlying image elements remained loaded.
+
+Root cause:
+`CachedImage` preferred an IndexedDB blob before an already-available signed thumbnail URL, so a cover could decode a full-resolution blob cached under the original photo path. Cover thumbnails were also eligible to be written back under that same full-photo cache key. Separately, the expanded group used a large clipped, shadowed hover surface and each cover had a full-image gradient/backdrop-filter layer; Windows Chrome could fail to repaint those composited layers even while every image reported a valid `naturalWidth`.
+
+Recovery:
+`CachedImage` now paints ready signed URLs immediately, lets derived cover callers opt out of full-photo cache writes, preserves a stable source across re-signing, and retries a failed signed URL once. Asia cover cards opt out of the full-photo cache, and the expanded group no longer uses the large clipped/hover-shadow surface, full-image gradient, or backdrop blur. A 60-cover local stress test completed full down/up scrolling and repeated hover movement with all 60 images loaded and zero broken or blank tiles.
+
+Rule added to prevent recurrence:
+Never store a derived thumbnail under an original-photo cache key, never make a ready cover URL wait for IndexedDB, and do not apply clipping, hover shadows, gradients, or backdrop filters across large photo-grid containers without a Windows Chrome paint stress test.
+
 ### 2026-07-02 Backrest local dumps filled root disk
 
 What happened:

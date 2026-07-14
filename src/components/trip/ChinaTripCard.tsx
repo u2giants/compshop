@@ -32,15 +32,21 @@ export default function ChinaTripCard({ trip, selectMode, isSelected, onToggleSe
   return (
     <>
       <Card
-        className={`cursor-pointer overflow-hidden transition-shadow hover:shadow-md ${
+        className={`cursor-pointer overflow-hidden ${
           isBooth ? "border-l-4 border-l-violet-400 bg-violet-50/30 dark:bg-violet-950/15" : ""
         } ${selectMode && isSelected ? "ring-2 ring-primary" : ""}`}
         onClick={onClick}
       >
         {trip.cover_file_path ? (
           <div className="relative h-36 w-full">
-            <CachedImage filePath={trip.cover_file_path} signedUrl={trip.cover_url} alt="" className="h-full w-full object-cover" loading="lazy" />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
+            <CachedImage
+              filePath={trip.cover_file_path}
+              signedUrl={trip.cover_url}
+              alt=""
+              className="h-full w-full object-cover"
+              loading="lazy"
+              cacheAfterLoad={false}
+            />
             {selectMode && (
               <div className="absolute top-2 left-2">
                 <Checkbox checked={isSelected} className="h-5 w-5 border-white bg-black/30 data-[state=checked]:bg-primary" />
@@ -48,7 +54,7 @@ export default function ChinaTripCard({ trip, selectMode, isSelected, onToggleSe
             )}
             {!selectMode && (
               <button
-                className="absolute top-2 right-2 rounded-full bg-black/40 p-1.5 text-white backdrop-blur-sm hover:bg-black/60 transition-colors"
+                className="absolute top-2 right-2 rounded-full bg-black/60 p-1.5 text-white hover:bg-black/75 transition-colors"
                 title="Reclassify"
                 onClick={(e) => { e.stopPropagation(); setReclassifyOpen(true); }}
               >
@@ -56,7 +62,7 @@ export default function ChinaTripCard({ trip, selectMode, isSelected, onToggleSe
               </button>
             )}
             {trip.photographer && (
-              <div className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-black/50 px-2 py-0.5 text-[10px] text-white backdrop-blur-sm">
+              <div className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-black/65 px-2 py-0.5 text-[10px] text-white">
                 <User className="h-2.5 w-2.5" />
                 {trip.photographer}
               </div>
