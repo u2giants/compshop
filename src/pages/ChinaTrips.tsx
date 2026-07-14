@@ -8,7 +8,7 @@ import { runSync } from "@/lib/sync-service";
 import { extractExif, distanceKm } from "@/lib/exif-utils";
 import { getCantonFairSession, sessionKey } from "@/lib/canton-fair-utils";
 import { cacheChinaTripPhotos, type BulkCacheProgress } from "@/lib/bulk-cache";
-import { cacheChinaTrips, getCachedChinaTrips, clearCachedChinaTrips, setSyncTimestamp, getSyncTimestamp, cacheImageBlob, getCachedImageBlob, getCachedSignedUrls, cacheSignedUrls, type CachedChinaTrip, type CachedSignedUrl } from "@/lib/offline-db";
+import { cacheChinaTrips, getCachedChinaTrips, clearCachedChinaTrips, setSyncTimestamp, getSyncTimestamp, getCachedSignedUrls, cacheSignedUrls, type CachedChinaTrip, type CachedSignedUrl } from "@/lib/offline-db";
 import { useOnlineStatus } from "@/hooks/use-online-status";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -220,13 +220,6 @@ export default function ChinaTrips() {
         }));
         setTrips(tripsWithCounts as ChinaTrip[]);
 
-        // Pre-cache cover image blobs in background
-        for (const t of tripsWithCounts) {
-          if (t.cover_file_path && t.cover_url) {
-            preCacheCoverImage(t.cover_file_path, t.cover_url);
-          }
-        }
-
         await clearCachedChinaTrips();
         await cacheChinaTrips(stripCoverUrls(tripsWithCounts));
         await setSyncTimestamp("china_trips");
@@ -235,13 +228,6 @@ export default function ChinaTrips() {
       console.error("[ChinaTrips] Error loading trips", err);
     }
     setLoading(false);
-  }
-
-  function preCacheCoverImage(filePath: string, url: string) {
-    getCachedImageBlob(filePath).then((existing) => {
-      if (existing && (existing.type.startsWith("image/") || existing.type.startsWith("video/"))) return;
-      fetch(url).then(r => { if (!r.ok) throw new Error(); return r.blob(); }).then(b => cacheImageBlob(filePath, b)).catch(() => {});
-    });
   }
 
   function toggleSelect(id: string) {

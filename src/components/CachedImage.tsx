@@ -50,12 +50,42 @@ function cacheImageFromUrl(filePath: string, url: string) {
  * offline use — no eager fetch on mount to avoid thundering-herd blinking.
  */
 export default function CachedImage({ filePath, signedUrl, fallback, ...imgProps }: CachedImageProps) {
-  const [src, setSrc] = useState<string | undefined>(() => memBlobUrlCache.get(filePath) ?? signedUrl);
+  const placeholderRef = useRef<HTMLDivElement>(null);
+  const [src, setSrc] = useState<string | undefined>(() => memBlobUrlCache.get(filePath));
   const [blobUrl, setBlobUrl] = useState<string | undefined>(() => memBlobUrlCache.get(filePath));
   const [failed, setFailed] = useState(false);
+  const [inView, setInView] = useState(() => imgProps.loading !== "lazy" || memBlobUrlCache.has(filePath));
   const lastFilePathRef = useRef<string | null>(null);
 
   useEffect(() => {
+    setInView(imgProps.loading !== "lazy" || memBlobUrlCache.has(filePath));
+  }, [filePath, imgProps.loading]);
+
+  useEffect(() => {
+    if (inView) return;
+    const el = placeholderRef.current;
+    if (!el) return;
+    if (!("IntersectionObserver" in window)) {
+      setInView(true);
+      return;
+    }
+
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setInView(true);
+          obs.disconnect();
+        }
+      },
+      { rootMargin: "700px 0px" }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [inView]);
+
+  useEffect(() => {
+    if (!inView) return;
+
     // A re-signed URL for the SAME image (same filePath, new token) must never
     // reset what's already on screen — otherwise re-renders that hand us a fresh
     // signed URL (e.g. realtime-driven refetches) make the grid blink. Only adopt
@@ -78,23 +108,21 @@ export default function CachedImage({ filePath, signedUrl, fallback, ...imgProps
     }
 
     setBlobUrl(undefined);
-    if (signedUrl) {
-      setSrc(signedUrl);
-    } else {
-      setSrc(undefined);
-    }
+    setSrc(undefined);
 
     let cancelled = false;
 
     (async () => {
-      // 1. Check blob cache (skip corrupted non-image entries)
+      // 1. Check blob cache first (skip corrupted non-image entries). This is
+      // the fastest path for revisiting expanded trip groups, and avoids
+      // re-decoding already-cached covers from signed URLs.
       const blob = await getCachedImageBlob(filePath);
       if (cancelled) return;
       if (blob && (blob.type.startsWith("image/") || blob.type.startsWith("video/"))) {
         const url = URL.createObjectURL(blob);
         memBlobUrlCache.set(filePath, url);
         setBlobUrl(url);
-        if (!signedUrl) setSrc(url);
+        setSrc(url);
         return;
       }
 
@@ -132,7 +160,7 @@ export default function CachedImage({ filePath, signedUrl, fallback, ...imgProps
       cancelled = true;
       // Don't revoke blob URLs — memBlobUrlCache keeps them alive for instant remounts.
     };
-  }, [filePath, signedUrl, failed]);
+  }, [filePath, signedUrl, failed, inView, imgProps.loading]);
 
   const handleLoad = useCallback(
     (e: React.SyntheticEvent<HTMLImageElement>) => {
@@ -157,8 +185,17 @@ export default function CachedImage({ filePath, signedUrl, fallback, ...imgProps
     [filePath, blobUrl, imgProps.onLoad]
   );
 
-  if (!src && !failed) {
-    return <>{fallback ?? <div className={imgProps.className + " bg-muted animate-pulse"} />}</>;
+  if ((!inView || !src) && !failed) {
+    return (
+      <>
+        {fallback ?? (
+          <div
+            ref={placeholderRef}
+            className={imgProps.className + " bg-muted animate-pulse"}
+          />
+        )}
+      </>
+    );
   }
 
   if (!src) {
