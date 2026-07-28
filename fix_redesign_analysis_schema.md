@@ -9,7 +9,7 @@
 
 | Step | Status | Last updated | Evidence / next action |
 |---|---|---|---|
-| 0. Prove the shared-module and Qwen structured-output assumptions | ⬜ open | 2026-07-28 | Run the synthetic live spike and dual-runtime import proof before migration or UI work. |
+| 0. Prove the shared-module and Qwen structured-output assumptions | 🟨 partial | 2026-07-28 | Direct shared-module import passed Vitest and Vite build; `npx deno check` and changed-file ESLint passed. The full lint baseline has 78 unrelated errors. The live edge container has no `deno` binary and no `OPENROUTER_API_KEY` environment entry, so the required live Qwen call is blocked. The repository's current `analyze-photo` code would return “OPENROUTER_API_KEY is not configured” in that environment. No production data was used or changed. |
 | 1. Add the versioned analysis persistence schema | ⬜ open | 2026-07-28 | Start with the migration and generated database types described in §9. |
 | 2. Define and validate the v2 analysis contract | ⬜ open | 2026-07-28 | Create the shared pure TypeScript contract and its tests. |
 | 3. Rebuild `analyze-photo` around Qwen, validation, and durable persistence | ⬜ open | 2026-07-28 | Implement only after Steps 0-2 pass. |
@@ -19,9 +19,19 @@
 | 7. Present tags and analysis state in the UI | ⬜ open | 2026-07-28 | Add compact tags/status without redesigning photo cards. |
 | 8. Complete verification, documentation, migration, and deployment | ⬜ open | 2026-07-28 | Run all gates, land on `main`, apply migration, and verify live SHA. |
 
-**Fresh-session starting point:** Step 0. Nothing in this implementation plan has
-been implemented. The only work completed was read-only investigation and creation
-of this plan. The plan was amended on 2026-07-28 after an independent Grok review
+**Fresh-session starting point:** finish Step 0. The canonical shared contract module and
+its frontend boundary test now exist. Vitest, the Vite production build, changed-file
+ESLint, and `npx deno check` pass, which proves the frontend and Deno can consume the
+edge-runtime-owned module directly. The mandatory live Qwen structured-output call
+remains blocked because neither this checkout nor the live edge container exposes an
+`OPENROUTER_API_KEY`; 1Password is not authenticated in this session. The edge container
+also has no standalone `deno` binary, so the local `npx deno` package supplied the
+read-only check. The full lint command remains red on 78 pre-existing repository errors;
+none were introduced by the shared module. The current repository implementation of
+`analyze-photo` explicitly fails when `OPENROUTER_API_KEY` is absent, so the missing live
+environment entry is also a likely current runtime configuration problem. Per the
+Step 0 stop condition, Steps 1-8 have not started. No production data or infrastructure
+was changed. The plan was amended on 2026-07-28 after an independent Grok review
 identified the shared-module boundary, structured-output compatibility, misleading
 model-picker, and client-side persistence risks.
 
