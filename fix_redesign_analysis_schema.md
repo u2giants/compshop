@@ -9,18 +9,21 @@
 
 | Step | Status | Last updated | Evidence / next action |
 |---|---|---|---|
+| 0. Prove the shared-module and Qwen structured-output assumptions | ⬜ open | 2026-07-28 | Run the synthetic live spike and dual-runtime import proof before migration or UI work. |
 | 1. Add the versioned analysis persistence schema | ⬜ open | 2026-07-28 | Start with the migration and generated database types described in §9. |
 | 2. Define and validate the v2 analysis contract | ⬜ open | 2026-07-28 | Create the shared pure TypeScript contract and its tests. |
-| 3. Rebuild `analyze-photo` around Qwen and structured output | ⬜ open | 2026-07-28 | Implement only after Step 2 defines the contract. |
-| 4. Centralize frontend analysis and persistence | ⬜ open | 2026-07-28 | Replace direct edge-function calls with one typed service. |
+| 3. Rebuild `analyze-photo` around Qwen, validation, and durable persistence | ⬜ open | 2026-07-28 | Implement only after Steps 0-2 pass. |
+| 4. Centralize frontend analysis requests and OCR retry | ⬜ open | 2026-07-28 | Replace direct edge-function calls with one typed service; edge owns row persistence. |
 | 5. Integrate automatic incoming-photo analysis | ⬜ open | 2026-07-28 | Preserve upload durability and user-entered metadata. |
 | 6. Update manual, grouped, and bulk analysis flows | ⬜ open | 2026-07-28 | Remove first-non-null merging and use the shared service. |
 | 7. Present tags and analysis state in the UI | ⬜ open | 2026-07-28 | Add compact tags/status without redesigning photo cards. |
 | 8. Complete verification, documentation, migration, and deployment | ⬜ open | 2026-07-28 | Run all gates, land on `main`, apply migration, and verify live SHA. |
 
-**Fresh-session starting point:** Step 1. Nothing in this implementation plan has
+**Fresh-session starting point:** Step 0. Nothing in this implementation plan has
 been implemented. The only work completed was read-only investigation and creation
-of this plan.
+of this plan. The plan was amended on 2026-07-28 after an independent Grok review
+identified the shared-module boundary, structured-output compatibility, misleading
+model-picker, and client-side persistence risks.
 
 ---
 
@@ -134,13 +137,18 @@ data, must never be committed, and may be deleted after implementation evaluatio
 - Keep `qwen/qwen3-vl-32b-instruct` as the production model through OpenRouter.
 - Require structured JSON output and validate/normalize it before returning it to the
   frontend.
+- Prove Qwen/OpenRouter JSON Schema support and the shared-module import boundary before
+  creating the migration or building UI consumers.
 - Derive the category taxonomy server-side instead of trusting every caller to send it.
 - Persist normalized tags, content type, confidence, status, provenance, timestamps,
   and the full versioned analysis for both `photos` and `china_photos`.
+- For row-backed analysis, persist the paid validated result inside the authenticated
+  edge-function request before returning success to the browser.
 - Preserve the current flat product metadata fields for backward compatibility.
 - Never overwrite non-empty user-entered product metadata during automatic analysis.
 - Centralize all automatic, manual, grouped, and bulk analysis calls behind a typed
   frontend service.
+- Replace the misleading admin model selector with a read-only locked-model explanation.
 - Make tags and analysis status visible on existing photo cards/details.
 - Add focused contract, normalization, persistence, merge, and workflow tests.
 - Apply and verify the database migration, deploy through the documented GitHub/Coolify
@@ -163,6 +171,9 @@ data, must never be committed, and may be deleted after implementation evaluatio
   details live inside the full analysis JSON in this phase.
 - Altering authentication, RLS policy semantics, Storage layout, offline queue retry
   policy, or deployment architecture.
+- Guaranteeing durable persistence for preview analysis performed before a photo database
+  row exists. Preview mode is an explicit best-effort exception; automatic incoming-photo
+  analysis is row-backed and server-persisted.
 - Prompt caching. The repeated prompt/taxonomy is small relative to unique image input,
   so caching is not a design dependency.
 
@@ -243,9 +254,21 @@ different products and discards tags/context from all but the first usable respo
 
 `src/components/admin/AiModelManager.tsx` allows an admin to select a model stored under
 `app_settings.ai_model`. Production already contains
-`qwen/qwen3-vl-32b-instruct`. This plan does not remove the manager, but Step 3 must
-fail closed if analysis resolves to a model other than the locked Qwen model, unless a
-future code change deliberately updates the locked model constant and tests.
+`qwen/qwen3-vl-32b-instruct`. A functional picker is misleading once the analysis
+contract is locked to Qwen: it currently permits an admin to select a value the new
+function would reject. Step 3 replaces that control with a read-only locked-model
+display and clear explanation.
+
+### Existing runtime boundary for shared code
+
+`selfhost/compose.supabase.yml:197-217` mounts only `../supabase/functions` into the edge
+runtime at `/home/deno/functions`. A new root-level `shared/` package would not be
+available to the deployed edge runtime without changing deployment architecture.
+`tsconfig.app.json` currently includes `src`, while Vite can follow imported repository
+modules outside that include in many configurations. That cross-boundary behavior must
+be proven, not assumed. Step 0 therefore tests one pure canonical module at
+`supabase/functions/_shared/photo-analysis-v2.ts` through Deno, Vitest, lint, and the
+Vite production build before implementation depends on it.
 
 ### Existing database
 
@@ -277,8 +300,9 @@ after the migration.
 - Database migrations are **not** automatically applied by that workflow.
 - At plan creation, `main`, `origin/main`, and `origin/HEAD` all pointed to `dcd6836`;
   the worktree was clean.
-- This plan and its documentation links are planning-only changes. The implementation
-  described here is not committed, pushed, migrated, or deployed.
+- The original plan and its documentation links were pushed to `origin/main` at
+  `e3bd330` on 2026-07-28. This amendment follows an independent Grok review. No feature
+  code, Step 0 spike, migration, or deployment described here has been executed.
 
 ## 6. Key findings and root cause
 
@@ -329,6 +353,17 @@ after the migration.
     The inspected photos require OCR, multi-object scene handling, and fine product
     recognition. `qwen/qwen3-vl-32b-instruct` was chosen and is already configured in
     production. Do not spend implementation time reopening model selection.
+
+11. **A paid result can currently be lost between inference and client persistence.**
+    The browser invokes the edge function, receives the result, then separately updates
+    the photo row. Closing the tab or losing connectivity after inference but before the
+    update can discard tags that were already paid for. Row-backed analysis should
+    authorize, infer, validate, and persist within one edge request.
+
+12. **Strict structured output is an unproven external dependency.**
+    OpenRouter advertises `response_format` for the selected Qwen endpoint, but the exact
+    JSON Schema and `provider.require_parameters` combination must be exercised against
+    the live account/provider before database and UI work are built around it.
 
 ## 7. Approaches considered and rejected
 
@@ -387,6 +422,28 @@ Why: the durable image upload is the primary business operation. The current bes
 behavior intentionally prevents an OpenRouter outage from trapping photos in the
 offline queue. Persist AI failure status on the inserted row, but complete the upload.
 
+### Rejected: keep paid-result persistence entirely in the browser
+
+Why: a successful inference followed by a tab close or network loss can lose tags and
+provenance after cost has already been incurred. For an existing photo row, the edge
+function must persist through the authenticated request before returning success.
+Client-only persistence remains acceptable only for explicitly labeled preview analysis
+before a row exists.
+
+### Rejected: create a new root-level shared package without proving deployment
+
+Why: the current edge container mounts only `supabase/functions`; a root `shared/`
+directory would be absent at runtime unless deployment architecture changed. Keep the
+pure canonical contract in `supabase/functions/_shared` and prove frontend/tooling
+imports in Step 0. If that proof fails, use generated frontend types as the fallback
+described in Step 0 rather than silently changing the production mount.
+
+### Rejected: leave the admin model picker active while rejecting non-Qwen choices
+
+Why: this creates a UI trap where an apparently valid admin action breaks analysis.
+Display the locked model read-only. A future model change must deliberately update the
+contract, tests, and locked constant.
+
 ## 8. Design decisions already made
 
 All decisions are dated 2026-07-28.
@@ -409,6 +466,20 @@ All decisions are dated 2026-07-28.
    `photo`, `image`, `product`, `store`, `display`, `unknown`, or `miscellaneous`.
 9. **No historical backfill in this implementation.**
 10. **Videos remain excluded.**
+11. **Canonical contract location:** the source of truth is the pure, Deno-global-free
+    module `supabase/functions/_shared/photo-analysis-v2.ts`, because the deployed edge
+    runtime mounts `supabase/functions`. Step 0 must prove frontend build/test imports.
+12. **Durable row-backed results:** when `photoId` and `table` are supplied, the edge
+    function authorizes the row, validates Qwen output, and persists analysis before
+    returning HTTP 200.
+13. **Preview is explicitly non-durable:** analysis without a row is allowed only with
+    `mode: "preview"` for existing pre-insert UI flows; the response may be lost if the
+    browser exits.
+14. **Admin model UI:** replace the selector/save action with a read-only display saying
+    photo analysis is locked to Qwen3-VL-32B-Instruct.
+15. **OCR retry owner:** `src/lib/photo-analysis.ts` alone decides whether to submit one
+    1600-pixel retry. The edge function performs exactly one inference per request and
+    persists each valid row-backed result; it never loops.
 
 ### Locked v2 response contract
 
@@ -529,16 +600,14 @@ Status rules:
 
 These do not change the locked behavior:
 
-- Exact helper/module names may differ if repository conventions strongly favor another
-  name, but there must be one shared contract/normalizer and one frontend invocation
-  service.
 - The compact placement of tag chips/status within existing photo cards may be chosen
   to avoid crowding. Do not redesign cards.
 - The test fixture images may be synthetic/tiny checked-in fixtures or mocked base64.
   Never commit production photos or business-card data.
-- A second 1600-pixel OCR pass may reuse the same endpoint or a documented `detail`
-  request option. It must only occur under the criteria in Step 3 and must be capped at
-  one retry.
+- If Step 0 proves Vite cannot safely import the canonical `_shared` module, the locked
+  fallback is to generate a frontend type-only artifact from that canonical schema using
+  a checked-in deterministic script and verify it is current in tests/CI. Do not
+  hand-maintain two contracts or move the edge contract outside its deployed mount.
 
 ---
 
@@ -546,11 +615,84 @@ These do not change the locked behavior:
 
 ## 9. The plan
 
+### Phase 0 — Prove external and cross-runtime assumptions
+
+### Step 0. Prove the shared-module and Qwen structured-output assumptions
+
+**Dependencies:** none. This is a mandatory stop/go gate before the migration, contract,
+edge-function rewrite, or UI work. Use synthetic/non-sensitive data only. Do not change
+production rows.
+
+**Change/spike artifacts:**
+
+1. Create the smallest temporary/check-in-ready pure module at
+   `supabase/functions/_shared/photo-analysis-v2.ts` exporting a minimal version constant,
+   locked model constant, and tiny placeholder JSON Schema. It must use no Deno globals,
+   URL imports, DOM types, or provider SDK.
+2. Add a minimal temporary/final Vitest import test under
+   `src/test/photo-analysis-shared-boundary.test.ts`.
+3. Import the same module from a minimal edge-function test or the existing
+   `analyze-photo` module without yet replacing production behavior.
+4. Run:
+
+   ```bash
+   npm run test
+   npm run lint
+   npm run build
+   deno check supabase/functions/analyze-photo/index.ts
+   ```
+
+5. Confirm the deployed runtime boundary described in §5 still mounts
+   `supabase/functions/_shared`. If local/reference compose and live Coolify behavior
+   differ, stop and document the actual deployment packaging before continuing.
+6. Using the existing edge-runtime `OPENROUTER_API_KEY` without printing or copying it,
+   make one controlled live OpenRouter call with:
+   - model `qwen/qwen3-vl-32b-instruct`
+   - a tiny synthetic, non-sensitive product image
+   - `temperature: 0`
+   - the proposed `response_format: { type: "json_schema", ... }`
+   - `provider: { require_parameters: true }`
+7. Record only safe evidence in this plan: date, HTTP success/failure, resolved provider,
+   request/generation ID if non-sensitive, whether schema conformance passed, token/cost
+   usage, and latency. Never record the key, base64, authorization header, or raw
+   provider request.
+8. If strict JSON Schema succeeds, expand the canonical module in Step 2.
+9. If OpenRouter/Qwen rejects strict JSON Schema or no eligible provider supports the
+   parameters, stop before Step 1 and amend the plan. The permitted fallback design is
+   JSON-object mode or plain JSON plus the same strict server validator and at most one
+   corrective retry; it must be explicitly documented and cost-tested before proceeding.
+   Do not silently remove `require_parameters` or route to a different model.
+10. If Vite/Vitest cannot safely import the canonical `_shared` file, implement the
+    locked generated-type fallback from §8:
+    - canonical runtime schema/validator remains in `_shared`
+    - add a deterministic generator script under `scripts/`
+    - generate a type-only frontend artifact under `src/types/`
+    - add a test/CI command that fails when the artifact is stale
+    - document the generator command in `docs/development.md`
+
+**Behavior when done:** the two highest-risk assumptions are evidence-backed before the
+schema and callers depend on them: the same contract can serve the edge and frontend
+toolchains, and the live OpenRouter Qwen endpoint honors the proposed structured output.
+
+**Verification gate — you'll know it worked when:**
+
+- The same version/model/schema definition passes Deno checking and either imports
+  directly through Vitest/Vite or has a deterministic verified generated-type fallback.
+- `npm run test`, `npm run lint`, and `npm run build` pass.
+- The live synthetic Qwen call returns valid schema-conforming JSON with
+  `require_parameters: true`.
+- Safe provider/generation/cost/latency evidence is recorded in this STATUS row.
+- No database migration, UI work, production image use, production row write, or model
+  fallback occurred.
+
+**Stop condition:** do not start Step 1 if any verification bullet fails. Amend this plan
+with the proven alternative first.
+
 ### Phase A — Contract and persistence
 
 ### Step 1. Add the versioned analysis persistence schema
 
-**Dependencies:** none. Do this before frontend persistence code.
+**Dependencies:** Step 0 must pass. Do this before row-backed persistence code.
 
 **Change:**
 
@@ -592,9 +734,11 @@ but both must finish before Steps 3-6.
 
 **Change:**
 
-1. Create a pure TypeScript module at
-   `supabase/functions/_shared/photo-analysis-v2.ts`. It must not import Deno-only
-   globals so Vitest can import it.
+1. Expand the Step 0 canonical pure TypeScript module at
+   `supabase/functions/_shared/photo-analysis-v2.ts`. It must remain free of Deno-only
+   globals, URL imports, and DOM types. Use the proven direct frontend import or the
+   generated-type fallback selected and recorded in Step 0; do not create a second
+   hand-maintained interface.
 2. Export:
    - `PHOTO_ANALYSIS_SCHEMA_VERSION = 2`
    - `LOCKED_PHOTO_ANALYSIS_MODEL = "qwen/qwen3-vl-32b-instruct"`
@@ -642,7 +786,7 @@ of valid analysis and backward-compatible product metadata.
 
 ### Step 3. Rebuild `analyze-photo` around Qwen and structured output
 
-**Dependencies:** Step 2.
+**Dependencies:** Steps 0-2.
 
 **Change `supabase/functions/analyze-photo/index.ts`:**
 
@@ -655,56 +799,84 @@ of valid analysis and backward-compatible product metadata.
 4. Resolve the model from `app_settings.ai_model`, but require it to equal the locked
    Qwen slug. If absent, use the locked slug. If it contains another model, return a
    clear server configuration error rather than silently changing model behavior.
-5. Load active category names from `public.categories` inside the authenticated
+5. In the same step, update `src/components/admin/AiModelManager.tsx` to remove/disable
+   the selector, refresh button, and save action. Render a read-only message:
+   “Photo analysis is locked to Qwen3-VL-32B-Instruct.” It may show the stored setting
+   for diagnostics but must not offer an action that creates a rejected configuration.
+6. Load active category names from `public.categories` inside the authenticated
    Supabase context. Sort and dedupe them. Treat a database lookup error as a server
    error; do not fall back to model-invented categories. Ignore/remove client-supplied
    `categories` from the authoritative prompt.
-6. Validate request payload:
+7. Define and validate two explicit request modes:
+   - row-backed mode (default): requires `photoId`, `table` (`photos` or
+     `china_photos`), `imageBase64`, MIME type, and `applyLegacyMetadata`
+   - preview mode: requires `mode: "preview"` and image data; rejects row-persistence
+     fields and is explicitly non-durable
+   Common validation:
    - `imageBase64` required and non-empty
    - MIME restricted to supported image types
    - decoded payload capped to a documented safe maximum
-   - optional `detailRetry`/equivalent boolean defaults false
-7. Replace the current prompt with domain-specific instructions matching §8. Include
+8. In row-backed mode, use the caller-authenticated Supabase client to select the target
+   row before inference. If RLS denies it, the row/table pair is invalid, or the target
+   is not an image, return 403/404/400 as appropriate without calling OpenRouter.
+9. Set the row's analysis status to `pending` before inference. If that update fails,
+   do not incur inference cost.
+10. Replace the current prompt with domain-specific instructions matching §8. Include
    the active category list. Explicitly distinguish merchandise from imagery printed
    on merchandise (for example, “elephant wall art,” not simply “elephant”).
-8. Send OpenRouter:
+11. Send exactly one OpenRouter inference per edge request:
    - locked model
    - `temperature: 0`
    - a tight output limit sufficient for the v2 schema (start at 900 tokens; adjust only
      from measured valid output)
    - `response_format: { type: "json_schema", json_schema: ... }`
    - `provider: { require_parameters: true }`
-9. Parse JSON once; pass it through `normalizeAndValidatePhotoAnalysis`.
-10. Return the validated v2 object. Return a non-2xx validation/provider error with a
+12. Parse JSON once; pass it through `normalizeAndValidatePhotoAnalysis`.
+13. For row-backed mode, before returning success:
+    - derive one database update containing all AI persistence columns
+    - include derived legacy fields only when `applyLegacyMetadata: true` and the
+      corresponding authorized row values are null/blank
+    - update through the caller-authenticated client so existing RLS remains authoritative
+    - return non-2xx if durable persistence fails
+    - return the normalized analysis only after the update succeeds
+14. Support an optional `replaceOnlyIfTextConfidenceImproves: true` on a row-backed
+    request. After inference/validation, compare the new text confidence with the
+    currently persisted v2 result. If it did not improve, keep the existing persisted
+    result and return it with `retry_replaced: false`; otherwise persist the new result
+    with `retry_replaced: true`. This makes Step 4's OCR retry safe.
+15. On provider/validation failure in row-backed mode, best-effort update the row to
+    `failed` with a safe concise error. Preserve useful 402/429 status mapping. Never
+    store raw provider output.
+16. In preview mode, return the validated result without persistence in an envelope
+    containing `durable: false`, so callers cannot mistake it for a saved result.
+17. Return a non-2xx validation/provider error with a
     safe message and log diagnostic detail server-side. Never return `{}` as success.
-11. Include OpenRouter request/generation identifiers in server logs where available,
+18. Include OpenRouter request/generation identifiers in server logs where available,
     but never log image base64, full business-card text, credentials, or authorization
     headers.
-12. Implement at most one selective OCR retry:
-    - the normal client pass remains 1024 pixels
-    - retry at 1600 pixels only when the valid first result is
-      `business_card`/`packaging_or_label` and includes
-      `important_text_unreadable`
-    - the frontend service supplies a 1600-pixel re-encoding only after the first result;
-      do not send the original
-    - the second valid response replaces the first only if text confidence improves
-    - do not loop or retry ordinary provider failures here
+19. Do not implement an inference loop or OCR retry in the edge function. Each request
+    performs one inference. Step 4's frontend service is the sole retry owner.
 
 **Behavior when done:** Qwen returns one enforceable, domain-appropriate v2 result;
-taxonomy and provenance are consistent for every caller; malformed responses are visible
-failures.
+taxonomy/provenance are consistent; paid row-backed results are saved before HTTP 200;
+malformed responses are visible failures.
 
 **Verification gate — you'll know it worked when:**
 
-- An authenticated function call with a representative product fixture returns HTTP
-  200 and `schema_version: 2`, the locked model, normalized tags, and an exact category
-  or null.
+- An authenticated row-backed call returns HTTP 200 only after the target row contains
+  schema version 2, locked model, normalized tags, and an exact category or null.
 - Representative mocked business-card, display, packaging, screenshot, and non-product
   outputs validate correctly.
 - Missing auth returns 401; wrong configured model returns a clear 500/configuration
   error; malformed model output returns non-2xx, not `{}`.
+- Unauthorized/nonexistent targets produce no OpenRouter call.
+- Simulated persistence failure never returns a false HTTP 200.
+- Preview responses are explicitly `durable: false`.
+- A conditional retry with worse text confidence cannot overwrite the better stored
+  first result.
 - OpenRouter request inspection confirms `response_format`, `temperature: 0`, and
   `require_parameters: true`.
+- The admin panel displays the locked Qwen model and offers no conflicting save action.
 - Logs contain no base64 or extracted personal contact details.
 
 **Natural context cut point:** after Phase A passes. Before starting Phase B in a fresh
@@ -713,51 +885,50 @@ contract.
 
 ### Phase B — One client service and every workflow
 
-### Step 4. Centralize frontend analysis and persistence
+### Step 4. Centralize frontend analysis requests and OCR retry
 
 **Dependencies:** Steps 1-3.
 
 **Change:**
 
 1. Create `src/lib/photo-analysis.ts`.
-2. Import the shared v2 types/helpers from
-   `supabase/functions/_shared/photo-analysis-v2.ts` or expose a small project-owned
-   contract module without duplicating the interface. There must be one source of truth.
+2. Consume the canonical v2 types using the direct import or generated-type path proven
+   in Step 0. Do not choose a new module location here.
 3. Export a typed `analyzePhotoBlob` that:
-   - accepts a `Blob`
+   - accepts a `Blob` plus either a row-backed target (`photoId`, table,
+     `applyLegacyMetadata`) or explicit preview mode
    - creates the normal 1024-pixel base64 using `resizeToBase64`
    - invokes `analyze-photo`
    - verifies the returned schema/model
-   - performs the optional 1600-pixel OCR retry exactly as Step 3 defines
+   - treats a row-backed HTTP 200 as durably saved by the edge function
+   - performs one optional 1600-pixel retry only when the first valid result is
+     `business_card`/`packaging_or_label` with `important_text_unreadable`
+   - sends `replaceOnlyIfTextConfidenceImproves: true` on that second request
+   - never retries an ordinary product or provider failure
    - throws a typed/safe error for invalid responses
-4. Export a typed persistence function accepting table, photo ID, analysis, current
-   legacy values, and an `overwriteLegacy` policy.
-5. For automatic flows, update only empty legacy fields. For explicit user-triggered
-   **AI Detect**, retain current UI semantics: prefill/replace only through the existing
-   confirmation/edit flow; do not silently overwrite saved user values.
-6. Persist the complete analysis summary atomically in one photo-row update:
-   `ai_analysis`, `ai_tags`, `ai_content_type`, status, confidence, model, schema version,
-   analyzed timestamp, and cleared error, plus permitted legacy updates.
-7. Export `markAnalysisPending` and `markAnalysisFailed`. Store only safe concise errors;
-   do not persist provider payloads, authorization data, or business-card text in
-   `ai_analysis_error`.
-8. Add a per-photo in-memory lock so simultaneous automatic/manual attempts from one
+4. Do not persist paid row-backed results from the browser. Refresh/read the saved row
+   after edge success.
+5. In explicit preview mode, return the non-durable analysis only to the existing
+   pre-insert prefill/edit flow; never label it saved.
+6. Add a per-photo in-memory lock so simultaneous automatic/manual attempts from one
    browser do not double-submit the same photo. This is concurrency protection, not a
    durable duplicate cache.
 
 **Behavior when done:** all UI and sync workflows use one typed implementation for image
-preparation, endpoint invocation, status, projection, and persistence.
+preparation, endpoint invocation, the sole conditional OCR retry, and saved-row refresh;
+the edge function owns durable row-backed persistence.
 
 **Verification gate — you'll know it worked when:**
 
 - `rg -n 'functions\\.invoke\\(\"analyze-photo\"' src` returns exactly one result, in
   `src/lib/photo-analysis.ts`.
-- Unit tests prove automatic persistence preserves non-empty user fields and fills empty
-  ones in the same update as analysis metadata.
-- Unit tests prove business cards persist full analysis/tags but do not populate product
-  columns.
-- Unit tests prove pending → complete/needs_review and pending → failed transitions.
+- Edge/service tests prove automatic persistence preserves non-empty user fields, fills
+  empty ones, and stores analysis metadata before success.
+- Edge/service tests prove business cards persist full analysis/tags but do not populate
+  product columns.
 - A simulated duplicate in-flight request for one photo issues one endpoint call.
+- A qualifying unreadable card/label issues exactly one 1600-pixel retry.
+- A worse OCR retry leaves the better first persisted result intact.
 
 ### Step 5. Integrate automatic incoming-photo analysis
 
@@ -766,16 +937,19 @@ preparation, endpoint invocation, status, projection, and persistence.
 **Change `src/lib/sync-service.ts`:**
 
 1. Remove the local `AI_METADATA_FIELDS` and raw response interpretation.
-2. Refactor `autoDetectPhoto` to call the shared service after the database row exists.
-3. Mark the inserted photo `pending`, analyze, and atomically persist the v2 result.
-4. Pass the inserted row's existing user metadata to the service so user values win.
+2. Refactor `autoDetectPhoto` to call the shared service in row-backed mode after the
+   database row exists, passing `applyLegacyMetadata: true`.
+3. Let the edge function mark pending, analyze, preserve non-empty row metadata, and
+   persist the v2 result before returning. The browser must not duplicate those writes.
+4. Refresh/read the returned saved result only as needed for local UI state.
 5. Retain:
    - image-only guard
    - best-effort error handling
    - no retry/failure of the completed upload
    - removal of the pending upload after AI finishes or records failure
-6. On AI failure, attempt to set `failed` and `ai_analysis_error`; if even that update
-   fails, log it and still finish the upload queue item.
+6. On AI failure, rely on the edge function's best-effort failed-status update. Log the
+   safe client error and still finish the upload queue item; do not make a second
+   browser-side status write race the server.
 7. Do not analyze videos or already-duplicate uploads rejected by existing hash logic.
 8. Ensure every upload entry point still converges through `syncOne`; do not add parallel
    page-specific automatic analysis paths.
@@ -812,21 +986,25 @@ attempt, while a provider outage cannot lose or strand the image.
 Required behavior:
 
 1. Replace direct function invocation with `src/lib/photo-analysis.ts`.
-2. Bulk eligibility is based on v2 status:
+2. Use row-backed mode for every existing photo ID. Use explicit preview mode only for
+   a genuine pre-insert selected file, surface that it is a preview internally, and
+   preserve the existing user-confirmed save/prefill semantics.
+3. Bulk eligibility is based on v2 status:
    - include rows with null/failed analysis status
    - allow an explicit future “reanalyze” action for complete rows, but do not reanalyze
      complete rows by default
-3. Keep sequential/concurrency-limited bulk requests. Use a maximum concurrency of 2 to
+4. Keep sequential/concurrency-limited bulk requests. Use a maximum concurrency of 2 to
    avoid browser, edge-function, and OpenRouter bursts. Show completed/total progress.
-4. Continue processing other rows after an individual failure; summarize successes,
+5. Continue processing other rows after an individual failure; summarize successes,
    needs-review, and failures at the end.
-5. For a grouped card, analyze each physical image and persist each image's own result.
+6. For a grouped card, analyze each physical image and persist each image's own result.
    Do **not** synthesize one result by taking first non-null fields. The lead card may
    display the lead image's analysis; extra images retain their own tags/results.
-6. A manual analysis must not write unsaved detected product fields behind the user's
-   back. Preserve the existing edit/prefill behavior where applicable, while analysis
-   provenance/tags may be stored when the user explicitly initiated analysis.
-7. Refresh local page state after persistence so chips/status appear without reload.
+7. A manual row-backed analysis persists AI provenance/tags inside the edge request but
+   passes `applyLegacyMetadata: false`; detected legacy fields remain prefill suggestions
+   until the user saves through the existing edit flow. Automatic upload analysis alone
+   passes `applyLegacyMetadata: true`.
+8. Refresh local page state after edge persistence so chips/status appear without reload.
 
 **Behavior when done:** all manual and bulk paths produce the same stored contract as
 automatic uploads; grouped images can no longer contaminate one another's metadata.
@@ -966,16 +1144,14 @@ Add named cases for:
 
 Mock Supabase function/database calls and test:
 
-1. `invokes analyze-photo with resized image through one service`
+1. `invokes row-backed analyze-photo with target and resized image through one service`
 2. `rejects wrong schema version or model`
-3. `persists full analysis and indexed summary atomically`
-4. `automatic persistence fills empty legacy values only`
-5. `automatic persistence preserves non-empty user values`
-6. `persists business-card analysis without product metadata`
-7. `records pending complete needs-review and failed transitions`
-8. `deduplicates simultaneous in-flight analysis for one photo`
-9. `performs one higher-resolution retry only for unreadable card or label`
-10. `keeps first result when retry text confidence does not improve`
+3. `treats row-backed success as durable and refreshes saved state`
+4. `marks preview analysis as non-durable`
+5. `deduplicates simultaneous in-flight analysis for one photo`
+6. `performs one higher-resolution retry only for unreadable card or label`
+7. `sends replace-only-if-improved on the OCR retry`
+8. `does not retry ordinary products or provider failures`
 
 ### Sync-service tests
 
@@ -1012,13 +1188,37 @@ Mock OpenRouter and Supabase dependencies or test extracted request/response hel
 
 - authentication required
 - locked model enforced
+- row-backed target is authorized before inference
+- unauthorized or missing target incurs no OpenRouter request
 - categories loaded server-side
 - client categories cannot override server taxonomy
 - structured-output request contains JSON schema, temperature 0, and
   `require_parameters: true`
 - malformed provider JSON/contract returns non-2xx
+- row-backed result persists before HTTP 200
+- automatic persistence fills only empty legacy values
+- manual row-backed persistence leaves legacy values as user-confirmed prefill
+- business-card analysis persists without product metadata
+- persistence failure never returns false success
+- pending, complete, needs-review, and failed transitions are correct
+- worse OCR retry cannot replace a better stored first result
+- preview mode returns `durable: false` and writes no row
 - provider 402/429 mappings remain intact
 - no sensitive request/image payload appears in logs
+
+### Mandatory Step 0 live compatibility spike
+
+Before the database migration or UI implementation, record in the Step 0 STATUS evidence:
+
+- the exact safe test date and selected model
+- direct-import versus generated-type boundary result
+- Deno check, Vitest, lint, and Vite build result
+- OpenRouter HTTP result and schema-conformance result
+- resolved provider/request ID only if safe
+- prompt/completion token counts, request cost, and latency
+
+This is a one-request synthetic compatibility test, not a model benchmark or production
+data analysis. It must pass before Step 1 begins.
 
 ### Existing suite and manual gates
 
@@ -1073,11 +1273,22 @@ copied into the repository or test logs.
 - Do not hard-code the category list. Query `categories`.
 - The locked model slug may be a constant; credentials, URLs that already have config,
   categories, and user data may not be hard-coded.
+- The admin UI must not offer a model choice that the edge function rejects.
+- Row-backed inference success means server-persisted success. The browser must not be
+  the sole owner of paid-result persistence.
+- Preview mode is the only non-durable path and must be explicit in request/response/UI
+  handling.
 - Preserve the offline-first queue. Analysis is subordinate to durable photo capture.
 - Preserve file-hash duplicate detection. It is upload integrity, even though caching is
   outside scope.
 - Keep normal image analysis at 1024 pixels. Higher-resolution OCR is conditional and
   capped at one 1600-pixel retry.
+- `src/lib/photo-analysis.ts` is the sole OCR retry owner. The edge function performs
+  exactly one inference per request and conditionally replaces persisted analysis only
+  when retry text confidence improves.
+- The canonical contract stays under `supabase/functions/_shared` because that directory
+  is inside the deployed edge mount. Use only the Step 0-proven frontend import/generation
+  path.
 - Avoid `any` in the new contract/service. Existing `any` is not permission to spread it.
 - Invalid model output is an explicit failure, never silent `{}`.
 - Tags describe the merchandise and useful attributes, not incidental people,
@@ -1170,14 +1381,20 @@ functions with an assumed `supabase functions deploy`. Follow `docs/deployment.m
 
 The work is complete only when every item is true:
 
-- [ ] All eight STATUS steps are marked complete with dates and evidence.
+- [ ] All nine STATUS steps (Step 0 through Step 8) are marked complete with dates and
+      evidence.
+- [ ] Step 0 recorded a successful synthetic live Qwen strict-JSON-Schema request and a
+      proven Deno/Vite/Vitest shared-contract boundary before migration/UI work.
 - [ ] Both photo tables contain the locked additive v2 columns, constraints, and GIN
       indexes; no historical backfill occurred.
 - [ ] `PhotoAnalysisV2` is the single source of truth with schema version 2.
 - [ ] Qwen3-VL-32B-Instruct is enforced and OpenRouter structured output is used.
+- [ ] The admin panel presents Qwen as locked and cannot save a conflicting model.
 - [ ] Categories are loaded server-side and exact-taxonomy normalization works.
 - [ ] Every successful analysis stores full JSON, tags, type, status, confidence, model,
       schema version, and timestamp.
+- [ ] Every row-backed HTTP 200 is returned only after authenticated server-side
+      persistence; only explicit preview mode is non-durable.
 - [ ] Automatic AI fills only empty legacy metadata and never compromises upload
       durability.
 - [ ] Business-card/screenshot/display results are retained without being forced into
@@ -1199,8 +1416,8 @@ The work is complete only when every item is true:
 ### Principal risks and mitigations
 
 1. **Qwen/provider structured-output incompatibility**
-   Mitigation: `require_parameters: true`, contract tests, explicit non-2xx validation
-   failures, and no silent fallback to another provider/model.
+   Mitigation: mandatory Step 0 live spike, `require_parameters: true`, contract tests,
+   explicit non-2xx validation failures, and no silent fallback to another provider/model.
 
 2. **Migration/code ordering outage**
    Mitigation: additive nullable migration first, verify it, then deploy code. Old code
@@ -1229,6 +1446,14 @@ The work is complete only when every item is true:
 8. **Plan staleness during multi-session implementation**
    Mitigation: STATUS/current-state updates are part of every implementation commit and
    fresh-session cut points require a downstream drift reread.
+
+9. **Paid result lost after browser interruption**
+   Mitigation: row-backed authorization, inference, validation, and persistence occur
+   inside one edge request before HTTP 200. Preview mode is explicitly non-durable.
+
+10. **Shared module works in one runtime but not the other**
+    Mitigation: Step 0 proves Deno plus Vite/Vitest imports before implementation; a
+    deterministic generated frontend type artifact is the locked fallback.
 
 ### Rollback
 
@@ -1298,19 +1523,23 @@ questions, with predetermined criteria:
    anything?**
    **Yes.** Sections 1-4 define the business goal, application, trigger, and boundaries;
    §§5-8 capture the exact current implementation, investigation, rejected approaches,
-   locked contract/database decisions, and bounded judgment calls; §9 names ordered
+   locked contract/database decisions, and bounded judgment calls; §9 begins with a
+   mandatory shared-runtime/live-provider stop/go gate and then names ordered
    files/functions and verification gates; §§10-12 specify tests, operating constraints,
    access, secrets handling, and local commands; §13 defines landing, rollback, and
-   predetermined criteria for remaining measured questions. No owner choice is left
-   unresolved.
+   predetermined criteria for remaining measured questions. Shared-module failure and
+   strict-schema failure both have explicit stop/fallback rules, so no owner choice is
+   silently deferred.
 
 2. **Does the plan carry every piece of background, nuance, and reasoning currently
    known, including what was ruled out and why?**
    **Yes.** §§3, 5, and 6 preserve the production sample/count findings and exact code
    evidence; §7 records why flat-only, JSON-only, client-taxonomy, arbitrary parsing,
-   full-resolution, caching, alternate-model, historical-backfill, and upload-failing
-   approaches were rejected; §8 records the chosen contract, persistence, normalization,
-   status, provenance, and compatibility semantics.
+   full-resolution, caching, alternate-model, historical-backfill, upload-failing,
+   browser-only persistence, unproven root-shared-package, and misleading model-picker
+   approaches were rejected; §8 records the chosen contract, canonical module boundary,
+   server-side row persistence, preview exception, OCR-retry owner, locked admin UI,
+   normalization, status, provenance, and compatibility semantics.
 
 3. **Is the ultimate goal clear enough for the implementer to make a correct judgment
    call if a step proves wrong?**
