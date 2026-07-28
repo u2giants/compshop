@@ -66,6 +66,7 @@ Critical for use in China where latency is 200–500ms per round-trip. The app:
 | [docs/configuration.md](docs/configuration.md) | Environment variables, config reference |
 | [docs/deployment.md](docs/deployment.md) | Deploy workflow, Coolify, releases |
 | [docs/1password.md](docs/1password.md) | 1Password access — MCP server and `op` CLI for secrets |
+| [fix_redesign_analysis_schema.md](fix_redesign_analysis_schema.md) | Active implementation plan for versioned AI photo analysis and tagging; read its STATUS table first |
 | [selfhost/](selfhost/) | Docker Compose stack, Dockerfiles, migration scripts |
 
 Start with `AGENTS.md` for task-based guidance on which docs to load. Most tasks do not
