@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Calendar, MapPin, Store, Plus, Users, Filter, X, Upload, Loader2, Trash2, CheckSquare, FileText, Download } from "lucide-react";
 import { format } from "date-fns";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -477,10 +478,17 @@ export default function Trips() {
               {!isStoreReadOnly && (
                 <>
                   <input ref={smartUploadRef} type="file" accept="image/*" multiple className="hidden" onChange={handleSmartUpload} />
-                  <Button variant="outline" onClick={() => smartUploadRef.current?.click()} disabled={smartUploading} className="gap-2">
-                    {smartUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                    {smartUploading ? `${smartProgress}%` : "Smart Upload"}
-                  </Button>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button variant="outline" onClick={() => smartUploadRef.current?.click()} disabled={smartUploading} className="gap-2">
+                        {smartUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                        {smartUploading ? `${smartProgress}%` : "Smart Upload"}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      Upload many photos and automatically sort them into Store Shopping trips using their date and location.
+                    </TooltipContent>
+                  </Tooltip>
                   <Button onClick={() => navigate("/trips/new")} className="gap-2">
                     <Plus className="h-4 w-4" />
                     <span className="hidden sm:inline">New Trip</span>

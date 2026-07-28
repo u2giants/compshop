@@ -177,6 +177,12 @@ with the pending upload id. Repeated transient failures move the item to
 `failed_needs_attention`; the app must not delete pending uploads merely because retry
 count is high.
 
+After each image row is inserted, the shared sync pipeline automatically runs AI
+detection and fills any empty product metadata fields. This covers single, bulk, Smart
+Upload, imported, and offline-queued images. Detection is best-effort: AI provider
+failures are logged but do not fail or retry an otherwise successful upload, and
+user-entered metadata is never overwritten. Videos are not sent for image detection.
+
 ## Coolify
 
 Coolify itself runs as a Docker Compose stack (`coolify`, `coolify-db`, `coolify-redis`,

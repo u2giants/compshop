@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { uploadPhoto, uploadVideo, hashFile, checkDuplicatePhoto, buildStoragePath, buildThumbnailPath } from "@/lib/supabase-helpers";
+import { resizeToBase64 } from "@/lib/image-utils";
 import {
   getPendingUploads,
   updatePendingUploadStatus,
@@ -21,6 +22,57 @@ let currentStatus: SyncStatus = "idle";
 let syncInterval: ReturnType<typeof setInterval> | null = null;
 let syncing = false;
 const MAX_AUTOMATIC_RETRIES = 5;
+
+const AI_METADATA_FIELDS = [
+  "product_name",
+  "category",
+  "price",
+  "dimensions",
+  "country_of_origin",
+  "material",
+  "brand",
+] as const;
+
+/**
+ * AI detection is deliberately best-effort: a provider outage must never keep
+ * an otherwise successful photo upload in the retry queue. User-entered values
+ * win over detected values.
+ */
+async function autoDetectPhoto(upload: PendingUpload, file: File, table: "photos" | "china_photos") {
+  if (!file.type.startsWith("image/")) return;
+
+  try {
+    const { base64, mimeType } = await resizeToBase64(file);
+    const { data, error } = await supabase.functions.invoke("analyze-photo", {
+      body: { imageBase64: base64, mimeType },
+    });
+    if (error) throw error;
+    if (!data || data.is_business_card) return;
+
+    const updates: Record<string, string | number> = {};
+    for (const field of AI_METADATA_FIELDS) {
+      const existingValue = upload.metadata[field];
+      const detectedValue = data[field];
+      if (
+        (existingValue == null || existingValue === "")
+        && detectedValue != null
+        && detectedValue !== ""
+      ) {
+        updates[field] = detectedValue;
+      }
+    }
+
+    if (Object.keys(updates).length > 0) {
+      const { error: updateError } = await supabase
+        .from(table)
+        .update(updates)
+        .eq("id", upload.id);
+      if (updateError) throw updateError;
+    }
+  } catch (err) {
+    console.warn("[Sync] Automatic AI detection failed", upload.id, err);
+  }
+}
 
 function setStatus(s: SyncStatus) {
   currentStatus = s;
@@ -87,12 +139,13 @@ async function syncOne(upload: PendingUpload): Promise<boolean> {
       ...upload.metadata,
       ...(upload.extra ?? {}),
     };
-    const table = upload.table ?? "photos";
+    const table: "photos" | "china_photos" = upload.table ?? "photos";
     const insertRow = upload.table === "china_photos" ? { ...row, media_type: mediaType } : row;
     const { error } = await supabase.from(table).insert(insertRow as never);
 
     if (error && !error.message.includes("duplicate key")) throw error;
 
+    await autoDetectPhoto(upload, file, table);
     await removePendingUpload(upload.id);
     return true;
   } catch (err) {

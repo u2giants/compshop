@@ -43,6 +43,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Camera, Calendar, MapPin, Store, Users, CloudOff, Sparkles, Loader2, Download, Images, ArrowRightLeft, PenLine, Trash2, Upload, LayoutGrid, Layers, Undo2 } from "lucide-react";
 import { format } from "date-fns";
@@ -864,9 +865,16 @@ export default function TripDetail() {
             <Button onClick={() => fileInputRef.current?.click()} className="gap-2">
               <Camera className="h-4 w-4" /> Add Photo
             </Button>
-            <Button variant="outline" onClick={() => fileInputRef.current?.click()} className="gap-2">
-              <Images className="h-4 w-4" /> Bulk Upload
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="outline" onClick={() => fileInputRef.current?.click()} className="gap-2">
+                  <Images className="h-4 w-4" /> Bulk Upload
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs">
+                Upload many photos to this trip at once. Each photo creates its own product card.
+              </TooltipContent>
+            </Tooltip>
           </>
         ))}
         {photos.length > 0 && (
