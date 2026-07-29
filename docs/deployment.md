@@ -147,8 +147,15 @@ Confirm the cause from the auth container log using the `error_id` from the resp
 docker logs supabase-auth-lc7f483hklyq89eej67idpbx 2>&1 | grep -A5 '<error_id>'
 ```
 
-Expect an internal error naming `flow_state` — a missing column, a not-null violation on
-`auth_code`, or `permission denied`. Then inspect the table:
+Do not assume the internal error names `flow_state`. During the 2026-07-29 incident the
+same public response hid a missing database host:
+
+```text
+lookup supabase-db on 127.0.0.11:53: no such host
+```
+
+If the log names missing columns, a not-null violation, or `permission denied`, inspect
+the table:
 
 ```bash
 docker exec -it supabase-db-lc7f483hklyq89eej67idpbx psql -U postgres -d postgres -c \
@@ -156,7 +163,8 @@ docker exec -it supabase-db-lc7f483hklyq89eej67idpbx psql -U postgres -d postgre
    WHERE table_schema='auth' AND table_name='flow_state' ORDER BY ordinal_position;"
 ```
 
-Fix by applying `supabase/migrations/20260729000000_repair_auth_flow_state.sql`, which
+Only for confirmed table-shape or ownership drift, apply
+`supabase/migrations/20260729000000_repair_auth_flow_state.sql`, which
 re-applies the upstream shape idempotently and re-asserts `supabase_auth_admin` ownership
 and grants. It ends with a probe insert as `supabase_auth_admin`, so it fails loudly if
 the table still cannot accept an OAuth row. Restart auth afterwards so GoTrue drops its
@@ -166,10 +174,11 @@ cached prepared statements:
 docker restart supabase-auth-lc7f483hklyq89eej67idpbx
 ```
 
-This class of drift is expected after any restore of the `auth` schema from an older
+Do not apply this migration for a DNS, missing-container, connection, or disk error.
+Repair that infrastructure cause first. Table drift can occur after a restore of the `auth` schema from an older
 stack: `auth.schema_migrations` comes back marked as applied, so GoTrue skips the
 migrations on boot and the table stays behind the running image. After restoring `auth`
-from a dump, always re-run this repair.
+from a dump, verify the table and run this repair if the drift is present.
 
 ## Supabase Studio "unhealthy" status
 
