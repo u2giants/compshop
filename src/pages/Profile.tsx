@@ -119,7 +119,6 @@ export default function Profile() {
         {/* Storage quota settings */}
         <StorageQuotaManager />
         <BulkCacheManager />
-
       </div>
 
       {/* Admin panels */}
