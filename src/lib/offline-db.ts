@@ -447,3 +447,55 @@ export async function removePendingChinaTrip(id: string) {
   const db = await getDB();
   await db.delete("pending_china_trips", id);
 }
+
+export interface LocalRecoverySnapshot {
+  trips: CachedTrip[];
+  chinaTrips: CachedChinaTrip[];
+  photos: CachedPhoto[];
+  chinaPhotos: CachedChinaPhoto[];
+  pendingTrips: PendingTrip[];
+  pendingChinaTrips: PendingChinaTrip[];
+  pendingUploads: PendingUpload[];
+  imageBlobs: { file_path: string; blob: Blob; cached_at: number }[];
+}
+
+/**
+ * Read every durable local record without changing IndexedDB.
+ *
+ * This is intentionally separate from normal sync. It lets incident recovery
+ * make a remote backup before any stale user ids or missing server rows are
+ * repaired.
+ */
+export async function getLocalRecoverySnapshot(): Promise<LocalRecoverySnapshot> {
+  const db = await getDB();
+  const [
+    trips,
+    chinaTrips,
+    photos,
+    chinaPhotos,
+    pendingTrips,
+    pendingChinaTrips,
+    pendingUploads,
+    imageBlobs,
+  ] = await Promise.all([
+    db.getAll("trips"),
+    db.getAll("china_trips"),
+    db.getAll("photos"),
+    db.getAll("china_photos"),
+    db.getAll("pending_trips"),
+    db.getAll("pending_china_trips"),
+    db.getAll("pending_uploads"),
+    db.getAll("image_blobs"),
+  ]);
+
+  return {
+    trips,
+    chinaTrips,
+    photos,
+    chinaPhotos,
+    pendingTrips,
+    pendingChinaTrips,
+    pendingUploads,
+    imageBlobs,
+  };
+}
