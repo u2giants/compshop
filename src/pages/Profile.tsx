@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { LogOut, Shield, FileDown, HardDriveUpload } from "lucide-react";
+import { LogOut, Shield, FileDown } from "lucide-react";
 import InviteManager from "@/components/admin/InviteManager";
 import RetailerManager from "@/components/admin/RetailerManager";
 import CountryManager from "@/components/admin/CountryManager";
@@ -120,21 +120,6 @@ export default function Profile() {
         <StorageQuotaManager />
         <BulkCacheManager />
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 font-sans text-lg">
-              <HardDriveUpload className="h-5 w-5" /> Local Data Recovery
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="mb-3 text-sm text-muted-foreground">
-              Back up cards and photos stored only on this device.
-            </p>
-            <Button variant="outline" className="w-full" onClick={() => navigate("/recovery")}>
-              Open Recovery
-            </Button>
-          </CardContent>
-        </Card>
       </div>
 
       {/* Admin panels */}

@@ -25,7 +25,6 @@ const FactoryWeekStream = lazy(() => import("@/pages/FactoryWeekStream"));
 const Profile = lazy(() => import("@/pages/Profile"));
 const ImportKeep = lazy(() => import("@/pages/ImportKeep"));
 const ImportTeams = lazy(() => import("@/pages/ImportTeams"));
-const LocalRecovery = lazy(() => import("@/pages/LocalRecovery"));
 const ResetPassword = lazy(() => import("@/pages/ResetPassword"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
 
@@ -87,7 +86,6 @@ const App = () => (
                   <Route path="/profile" element={<Profile />} />
                   <Route path="/import/keep" element={<ImportKeep />} />
                   <Route path="/import/teams" element={<ImportTeams />} />
-                  <Route path="/recovery" element={<LocalRecovery />} />
                 </Route>
                 <Route path="*" element={<NotFound />} />
               </Routes>
