@@ -123,6 +123,54 @@ docker exec coolify-db psql -U coolify -d coolify \
       FROM application_settings;"
 ```
 
+## OAuth sign-in fails with `Error creating flow state`
+
+Symptom: clicking **Continue with Microsoft** (or Google) leaves the app and renders raw
+JSON on `api.comp.designflow.app`:
+
+```json
+{"code":500,"error_code":"unexpected_failure","msg":"Error creating flow state","error_id":"..."}
+```
+
+Email/password sign-in still works, because only OAuth touches `auth.flow_state`.
+
+GoTrue v2.186.0 inserts a row into `auth.flow_state` for **every** OAuth sign-in — PKCE
+and implicit alike — and uses that row's id as the OAuth `state` parameter. The insert
+writes the columns added by GoTrue migration `20260115000000` and writes NULL into
+`auth_code` / `code_challenge` / `code_challenge_method` for implicit-flow logins, which
+the same migration made nullable. A `auth.flow_state` still on the older shape, or owned
+by `postgres` instead of `supabase_auth_admin`, rejects that insert and GoTrue answers 500.
+
+Confirm the cause from the auth container log using the `error_id` from the response:
+
+```bash
+docker logs supabase-auth-lc7f483hklyq89eej67idpbx 2>&1 | grep -A5 '<error_id>'
+```
+
+Expect an internal error naming `flow_state` — a missing column, a not-null violation on
+`auth_code`, or `permission denied`. Then inspect the table:
+
+```bash
+docker exec -it supabase-db-lc7f483hklyq89eej67idpbx psql -U postgres -d postgres -c \
+  "SELECT column_name, is_nullable FROM information_schema.columns
+   WHERE table_schema='auth' AND table_name='flow_state' ORDER BY ordinal_position;"
+```
+
+Fix by applying `supabase/migrations/20260729000000_repair_auth_flow_state.sql`, which
+re-applies the upstream shape idempotently and re-asserts `supabase_auth_admin` ownership
+and grants. It ends with a probe insert as `supabase_auth_admin`, so it fails loudly if
+the table still cannot accept an OAuth row. Restart auth afterwards so GoTrue drops its
+cached prepared statements:
+
+```bash
+docker restart supabase-auth-lc7f483hklyq89eej67idpbx
+```
+
+This class of drift is expected after any restore of the `auth` schema from an older
+stack: `auth.schema_migrations` comes back marked as applied, so GoTrue skips the
+migrations on boot and the table stays behind the running image. After restoring `auth`
+from a dump, always re-run this repair.
+
 ## Supabase Studio "unhealthy" status
 
 Studio (db.comp.designflow.app) consistently shows `unhealthy` in `docker ps` due to

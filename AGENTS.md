@@ -572,6 +572,23 @@ Older local timestamped dump files were pruned, `supabase-db-lc7f483hklyq89eej67
 Rule added to prevent recurrence:
 Do not leave Backrest hook changes as host-only state. Update `selfhost/backrest/pre-backup.sh` and `docs/deployment.md`, then sync the production copy if this is an emergency repair. Verify with `docker exec backrest /scripts/pre-backup.sh`, `df -h /`, and a database-backed API probe.
 
+### 2026-07-29 Microsoft/Google OAuth sign-in 500 `Error creating flow state`
+
+What happened:
+Clicking "Continue with Microsoft" left the app and rendered raw JSON from GoTrue: `{"code":500,"error_code":"unexpected_failure","msg":"Error creating flow state","error_id":"2b6e0a26-5e79-4bcf-8e4a-e7d1744b31f7"}`. Email/password sign-in was unaffected.
+
+Impact:
+All OAuth sign-in was blocked — Microsoft and Google alike, since both share the same GoTrue `/auth/v1/authorize` code path. Users had no in-app error to act on because the failure happens after a full-page navigation to the API domain.
+
+Root cause:
+GoTrue v2.186.0 creates an `auth.flow_state` row for every OAuth sign-in, PKCE and implicit alike, and uses that row's id as the OAuth `state` parameter. The insert needs the columns from GoTrue migration `20260115000000` (`invite_token`, `referrer`, `oauth_client_state_id`, `linking_target_id`, `email_optional`) and needs `auth_code`, `code_challenge` and `code_challenge_method` to be nullable, because the implicit flow the app uses writes NULL into all three. A production `auth.flow_state` left on the older shape — or owned by `postgres` rather than `supabase_auth_admin` — rejects that insert.
+
+Recovery:
+`supabase/migrations/20260729000000_repair_auth_flow_state.sql` re-applies the upstream `auth.flow_state` and `auth.oauth_client_states` shape idempotently, re-asserts `supabase_auth_admin` ownership and grants, and ends with a probe insert as `supabase_auth_admin` so it fails loudly if the table still cannot accept an OAuth row. It was verified against a local Postgres by reproducing the stale schema, confirming the insert failure, applying the repair, and re-running it. Apply it to production and restart the auth container.
+
+Rule added to prevent recurrence:
+Restoring the `auth` schema from an older stack brings back `auth.schema_migrations` marked as applied, so GoTrue silently skips its own migrations on boot and the tables stay behind the running image. After any `auth` schema restore, re-run the repair migration and sign in with Microsoft once before calling the restore complete. GoTrue auth failures with an `error_id` are diagnosable from `docker logs supabase-auth-lc7f483hklyq89eej67idpbx` — read the internal error before changing app code.
+
 ## Pending work
 
 | Status | Item | Owner/next action |
