@@ -26,6 +26,7 @@ const Profile = lazy(() => import("@/pages/Profile"));
 const ImportKeep = lazy(() => import("@/pages/ImportKeep"));
 const ImportTeams = lazy(() => import("@/pages/ImportTeams"));
 const ResetPassword = lazy(() => import("@/pages/ResetPassword"));
+const WeChatCallback = lazy(() => import("@/pages/WeChatCallback"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
 
 const queryClient = new QueryClient();
@@ -62,6 +63,7 @@ const App = () => (
             <Suspense fallback={<PageLoader />}>
               <Routes>
                 <Route path="/auth" element={<Auth />} />
+                <Route path="/auth/wechat/callback" element={<WeChatCallback />} />
                 <Route path="/reset-password" element={<ResetPassword />} />
                 <Route
                   element={
