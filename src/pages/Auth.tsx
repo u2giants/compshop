@@ -45,7 +45,7 @@ export default function Auth() {
     const appId = "wx15bb6cd1fa50ff83";
     // WeChat only accepts designflow.app as the authorized callback domain.
     // That host bounces the code into CompShop's /auth/wechat/callback route.
-    const redirectUri = encodeURIComponent("https://designflow.app/wx/callback");
+    const redirectUri = encodeURIComponent("https://designflow.app/wx/callback/");
     const state = crypto.randomUUID();
     sessionStorage.setItem("wechat_oauth_state", state);
     const authorizeUrl =
