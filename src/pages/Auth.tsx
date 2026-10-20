@@ -41,6 +41,19 @@ export default function Auth() {
     }
   };
 
+  const handleWeChatSignIn = () => {
+    const appId = "wx15bb6cd1fa50ff83";
+    // WeChat only accepts designflow.app as the authorized callback domain.
+    // That host bounces the code into CompShop's /auth/wechat/callback route.
+    const redirectUri = encodeURIComponent("https://designflow.app/wx/callback");
+    const state = crypto.randomUUID();
+    sessionStorage.setItem("wechat_oauth_state", state);
+    const authorizeUrl =
+      `https://open.weixin.qq.com/connect/qrconnect?appid=${appId}` +
+      `&redirect_uri=${redirectUri}&response_type=code&scope=snsapi_login&state=${state}#wechat_redirect`;
+    window.location.assign(authorizeUrl);
+  };
+
   const handleMicrosoftSignIn = async () => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "azure",
@@ -166,6 +179,22 @@ export default function Auth() {
             </>
           ) : (
             <>
+              {/* WeChat SSO */}
+              <button
+                type="button"
+                onClick={handleWeChatSignIn}
+                className="mb-2 flex w-full items-center gap-0 overflow-hidden rounded border border-[#1AAD19] bg-[#1AAD19] text-white transition-colors hover:bg-[#159c16] focus:outline-none focus:ring-2 focus:ring-[#1AAD19] focus:ring-offset-2"
+              >
+                <span className="flex h-11 w-12 shrink-0 items-center justify-center bg-white">
+                  <svg width="21" height="21" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                    <path fill="#1AAD19" d="M9.5 4C5.36 4 2 6.91 2 10.5c0 2.04 1.12 3.87 2.88 5.07l-.72 2.16 2.5-1.25c.88.26 1.82.41 2.84.41.27 0 .53-.01.79-.04A5.2 5.2 0 0 1 9.5 15c-3.59 0-6.5-2.46-6.5-5.5S5.91 4 9.5 4zm-2.2 3.2c-.5 0-.9.4-.9.9s.4.9.9.9.9-.4.9-.9-.4-.9-.9-.9zm4.4 0c-.5 0-.9.4-.9.9s.4.9.9.9.9-.4.9-.9-.4-.9-.9-.9zM14.5 9c-3.04 0-5.5 2.02-5.5 4.5S11.46 18 14.5 18c.9 0 1.75-.16 2.52-.45l2.23 1.12-.63-1.9C20.1 15.83 21 14.5 21 13.5 21 11.02 18.54 9 14.5 9zm-1.7 2.8c.4 0 .72.32.72.72s-.32.72-.72.72-.72-.32-.72-.72.32-.72.72-.72zm3.4 0c.4 0 .72.32.72.72s-.32.72-.72.72-.72-.32-.72-.72.32-.72.72-.72z" />
+                  </svg>
+                </span>
+                <span className="flex-1 py-3 text-center text-sm font-semibold tracking-wide">
+                  Continue with WeChat
+                </span>
+              </button>
+
               {/* Microsoft SSO */}
               <button
                 type="button"
