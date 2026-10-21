@@ -17,6 +17,7 @@ interface ProfileRow {
   id: string;
   email: string | null;
   display_name: string | null;
+  intro_note: string | null;
   approval_status: ApprovalStatus | null;
   approval_reason: string | null;
   auth_provider: string | null;
@@ -41,6 +42,7 @@ interface UserRow {
   id: string;
   email: string | null;
   display_name: string | null;
+  intro_note: string | null;
   approval_status: ApprovalStatus;
   approval_reason: string | null;
   auth_provider: string | null;
@@ -65,7 +67,7 @@ export default function UserPermissionsManager() {
     const [{ data: profiles }, { data: roleRows }] = await Promise.all([
       (supabase as unknown as AccessSupabaseClient)
         .from("profiles")
-        .select("id, email, display_name, approval_status, approval_reason, auth_provider, auth_tenant_id")
+        .select("id, email, display_name, intro_note, approval_status, approval_reason, auth_provider, auth_tenant_id")
         .order("display_name"),
       supabase.from("user_roles").select("user_id, role"),
     ]);
@@ -79,6 +81,7 @@ export default function UserPermissionsManager() {
       id: p.id,
       email: p.email,
       display_name: p.display_name,
+      intro_note: p.intro_note,
       approval_status: p.approval_status ?? "approved",
       approval_reason: p.approval_reason,
       auth_provider: p.auth_provider,
@@ -162,6 +165,9 @@ export default function UserPermissionsManager() {
                     </p>
                     {u.email && u.display_name && (
                       <p className="truncate text-xs text-muted-foreground">{u.email}</p>
+                    )}
+                    {u.intro_note && (
+                      <p className="truncate text-xs text-muted-foreground italic">“{u.intro_note}”</p>
                     )}
                     <p className="truncate text-xs text-muted-foreground">
                       {u.auth_provider || "email"}
