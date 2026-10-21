@@ -128,6 +128,7 @@ Purpose: prevent AI agents from scattering project logic into unrelated framewor
 | Task | Files to touch | Files not to touch |
 |---|---|---|
 | Change login screen or OAuth button behavior | `src/pages/Auth.tsx`, `src/contexts/AuthContext.tsx`, `docs/configuration.md` if providers/env change | `selfhost/compose.supabase.yml` unless GoTrue provider config changes |
+| Change WeChat SSO / `wechat-auth` bridge | `supabase/functions/wechat-auth/index.ts`, `src/pages/WeChatCallback.tsx`, `src/pages/Auth.tsx`, `docs/wechat-sso-postmortem.md`, `docs/wechat-sso-playbook.md` | Do not use `signInWithOAuth` against WeChat; do not import remote JS in the edge function |
 | Change app routing or shell navigation | `src/App.tsx`, `src/components/layout/AppShell.tsx`, `src/components/ModeRedirect.tsx` | `supabase/migrations/` |
 | Change domestic trip list/detail behavior | `src/pages/Trips.tsx`, `src/pages/TripDetail.tsx`, `src/components/trip/*`, `src/lib/photo-utils.ts` | `selfhost/` unless runtime/deploy changes |
 | Change China/Asia trip behavior | `src/pages/ChinaTrips.tsx`, `src/pages/ChinaTripDetail.tsx`, `src/pages/FairTripStream.tsx`, `src/components/trip/ChinaTripCard.tsx`, `src/components/trip/CantonFairGroupCard.tsx` | Old Lovable migration docs |

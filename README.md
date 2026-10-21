@@ -66,6 +66,9 @@ Critical for use in China where latency is 200–500ms per round-trip. The app:
 | [docs/configuration.md](docs/configuration.md) | Environment variables, config reference |
 | [docs/deployment.md](docs/deployment.md) | Deploy workflow, Coolify, releases |
 | [docs/1password.md](docs/1password.md) | 1Password access — MCP server and `op` CLI for secrets |
+| [docs/wechat-sso-playbook.md](docs/wechat-sso-playbook.md) | How to add WeChat login (and how CompShop did) |
+| [docs/wechat-sso-postmortem.md](docs/wechat-sso-postmortem.md) | What broke behind “Edge Function returned a non-2xx status code” and the fix |
+| [docs/wechat-sso-investigation.md](docs/wechat-sso-investigation.md) | WeChat Open Platform findings and design decisions |
 | [fix_redesign_analysis_schema.md](fix_redesign_analysis_schema.md) | Active implementation plan for versioned AI photo analysis and tagging; read its STATUS table first |
 | [selfhost/](selfhost/) | Docker Compose stack, Dockerfiles, migration scripts |
 
